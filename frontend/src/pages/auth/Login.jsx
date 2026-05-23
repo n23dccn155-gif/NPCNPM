@@ -14,15 +14,9 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      const user = await login(form);
-      // Điều hướng theo vai trò
-      const roleRoutes = {
-        admin: '/admin/users',
-        manager: '/manager/routes',
-        dispatcher: '/dispatcher/schedule',
-        driver: '/driver/schedule',
-      };
-      navigate(roleRoutes[user.role] || '/');
+      await login(form);
+      // Điều hướng đến trang tổng quan sau khi đăng nhập
+      navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Đăng nhập thất bại. Vui lòng thử lại.');
     } finally {

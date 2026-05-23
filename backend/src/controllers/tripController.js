@@ -2,10 +2,18 @@
 const pool = require('../config/database');
 const { success, error } = require('../utils/responseHelper');
 
+function timeToMinutes(timeStr) {
+  if (!timeStr) return 0;
+  const parts = timeStr.split(':');
+  const h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  return h * 60 + m;
+}
+
 const tripController = {
   getAll: async (req, res, next) => {
     try {
-      const { route_code, trip_date_from, trip_date_to } = req.query;
+      const { route_code, trip_date_from, trip_date_to, trip_date } = req.query;
       let query = `
         SELECT t.*, r.route_name,
           ta.bus_id, ta.driver_code, ta.status AS assignment_status
@@ -16,6 +24,7 @@ const tripController = {
       `;
       const params = [];
       if (route_code) { params.push(route_code); query += ` AND t.route_code = $${params.length}`; }
+      if (trip_date) { params.push(trip_date); query += ` AND t.trip_date = $${params.length}`; }
       if (trip_date_from) { params.push(trip_date_from); query += ` AND t.trip_date >= $${params.length}`; }
       if (trip_date_to) { params.push(trip_date_to); query += ` AND t.trip_date <= $${params.length}`; }
       query += ' ORDER BY t.trip_date, t.scheduled_departure';
@@ -37,9 +46,14 @@ const tripController = {
 
   create: async (req, res, next) => {
     try {
-      const { trip_code, route_code, trip_date, scheduled_departure } = req.body;
-      if (!trip_code || !route_code || !trip_date || !scheduled_departure)
+      const { trip_code, route_code, trip_date, direction, scheduled_departure, scheduled_arrival } = req.body;
+      if (!trip_code || !route_code || !trip_date || !scheduled_departure || !scheduled_arrival)
         return error(res, 'Thiếu thông tin bắt buộc', 400);
+
+      // Kiểm tra scheduled_arrival > scheduled_departure
+      if (timeToMinutes(scheduled_arrival) <= timeToMinutes(scheduled_departure)) {
+        return error(res, 'Giờ kết thúc dự kiến phải lớn hơn giờ xuất bến dự kiến', 400);
+      }
 
       // Kiểm tra tuyến đang hoạt động
       const routeCheck = await pool.query('SELECT status FROM routes WHERE route_code = $1', [route_code]);
@@ -47,8 +61,9 @@ const tripController = {
       if (routeCheck.rows[0].status !== 'active') return error(res, 'Không thể lập chuyến từ tuyến đã ngưng hoạt động', 400);
 
       const result = await pool.query(
-        'INSERT INTO trips (trip_code, route_code, trip_date, scheduled_departure) VALUES ($1, $2, $3, $4) RETURNING *',
-        [trip_code, route_code, trip_date, scheduled_departure]
+        `INSERT INTO trips (trip_code, route_code, trip_date, direction, scheduled_departure, scheduled_arrival, status) 
+         VALUES ($1, $2, $3, $4, $5, $6, 'unassigned') RETURNING *`,
+        [trip_code, route_code, trip_date, direction || 'outbound', scheduled_departure, scheduled_arrival]
       );
       return success(res, result.rows[0], 'Lập chuyến xe thành công', 201);
     } catch (err) {

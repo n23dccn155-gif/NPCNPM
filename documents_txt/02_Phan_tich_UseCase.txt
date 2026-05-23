@@ -1,0 +1,1128 @@
+PHẦN 4. MÔ HÌNH HÓA YÊU CẦU
+4.1. Xác định các tác nhân của hệ thống
+Dựa trên kết quả khảo sát hiện trạng và xác định yêu cầu, hệ thống Phân công chuyến xe buýt ở Thành phố Hồ Chí Minh có bốn tác nhân chính.
+STT
+Tác nhân
+Mô tả
+1
+Quản trị viên hệ thống
+Người phụ trách quản lý tài khoản, phân quyền người dùng và cấu hình tham số hệ thống
+2
+Quản lý
+Người quản lý đầy đủ các danh mục tuyến xe, xe buýt, tài xế; duyệt yêu cầu nghỉ và xem báo cáo
+3
+Nhân viên điều phối
+Người trực tiếp lập chuyến, phân công xe và tài xế, điều chỉnh phân công, xử lý phát sinh và theo dõi thực hiện chuyến
+4
+Tài xế
+Người xem lịch làm việc cá nhân, gửi yêu cầu xin nghỉ, xem trạng thái nghỉ và báo sự cố
+Trong đó, Nhân viên điều phối là tác nhân trung tâm của nghiệp vụ vận hành vì trực tiếp thực hiện việc lập chuyến, phân công chuyến và điều chỉnh phân công khi có phát sinh. Quản lý chịu trách nhiệm duy trì dữ liệu danh mục dùng chung và giám sát hoạt động thông qua báo cáo. Quản trị viên hệ thống là tác nhân kỹ thuật, không trực tiếp tham gia nghiệp vụ phân công chuyến.
+4.2. Danh sách Use Case của hệ thống
+Để tránh lặp lại use case đăng nhập cho từng tác nhân, hệ thống sử dụng một use case chung là UC_CH01 – Đăng nhập hệ thống. Cả bốn tác nhân đều tham gia use case này trước khi sử dụng các chức năng được phân quyền.
+4.2.1. Use Case chung
+Mã Use Case
+Tên Use Case
+Tác nhân
+Mô tả ngắn
+UC_CH01
+Đăng nhập hệ thống
+Quản trị viên hệ thống, Quản lý, Nhân viên điều phối, Tài xế
+Người dùng đăng nhập bằng tài khoản được cấp để truy cập các chức năng theo vai trò
+UC_CH02
+Xem thông tin cá nhân
+Tất cả người dùng
+Xem thông tin tài khoản cá nhân và đổi mật khẩu
+4.2.2. Use Case của Quản trị viên hệ thống
+Mã Use Case
+Tên Use Case
+Mô tả ngắn
+Mức độ
+UC_AD01
+Quản lý tài khoản người dùng
+Tạo, cập nhật, khóa hoặc mở khóa tài khoản
+Bắt buộc
+UC_AD02
+Phân quyền người dùng
+Gán vai trò sử dụng hệ thống cho tài khoản
+Bắt buộc
+UC_AD03
+Cấu hình tham số hệ thống
+Cấu hình thời gian lái liên tục tối đa và thời gian nghỉ tối thiểu
+Bắt buộc
+UC_AD04
+Xem nhật ký hệ thống
+Xem lịch sử các thao tác quan trọng nếu chức năng được cài đặt
+Mở rộng
+4.2.3. Use Case của Quản lý
+Mã Use Case
+Tên Use Case
+Mô tả ngắn
+Mức độ
+UC_QL01
+Quản lý tuyến xe
+Thêm, sửa, ngưng hoạt động và tra cứu thông tin tuyến xe
+Bắt buộc
+UC_QL02
+Quản lý xe buýt
+Thêm, sửa, ngưng sử dụng, tra cứu và cập nhật trạng thái xe
+Bắt buộc
+UC_QL03
+Quản lý tài xế
+Thêm, sửa, ngưng làm việc, tra cứu và cập nhật trạng thái tài xế
+Bắt buộc
+UC_QL04
+Xem yêu cầu xin nghỉ
+Xem danh sách yêu cầu nghỉ do tài xế gửi
+Bắt buộc
+UC_QL05
+Duyệt hoặc từ chối yêu cầu nghỉ
+Cập nhật kết quả xử lý yêu cầu nghỉ của tài xế
+Bắt buộc
+UC_QL06
+Xem báo cáo hiệu suất tuyến
+Xem số chuyến kế hoạch, thực hiện, đúng giờ, trễ và hủy theo tuyến
+Bắt buộc
+UC_QL07
+Xem báo cáo tình hình sử dụng xe
+Xem số chuyến đã chạy và trạng thái hiện tại của xe
+Bắt buộc
+UC_QL08
+Xem báo cáo năng suất tài xế
+Xem số chuyến, tổng giờ lái, số lần trễ và số ngày nghỉ của tài xế
+Bắt buộc
+UC_QL09
+Xuất báo cáo
+Xuất báo cáo ra Excel hoặc PDF nếu được cài đặt
+Mở rộng
+Ghi chú
+Đối với các danh mục tuyến xe, xe buýt và tài xế đã phát sinh dữ liệu vận hành, chức năng “xóa” được xử lý theo hướng chuyển trạng thái thay vì xóa hoàn toàn khỏi hệ thống nhằm bảo toàn lịch sử chuyến và phiếu phân công.
+4.2.4. Use Case của Nhân viên điều phối
+Mã Use Case
+Tên Use Case
+Mô tả ngắn
+Mức độ
+UC_DH01
+Xem lịch phân công tổng quan
+Xem lịch phân công theo ngày, tuyến, xe, tài xế và trạng thái
+Bắt buộc
+UC_DH02
+Lập chuyến xe
+Tạo chuyến xe theo tuyến, ngày chạy, hướng tuyến và thời gian dự kiến
+Bắt buộc
+UC_DH03
+Lập phiếu phân công chuyến
+Gán xe và tài xế cho chuyến chưa được phân công
+Bắt buộc
+UC_DH04
+Kiểm tra điều kiện phân công
+Kiểm tra trạng thái xe, tài xế, trùng lịch, nghỉ đã duyệt và thời gian lái liên tục
+Bắt buộc
+UC_DH05
+Điều chỉnh phân công chuyến
+Đổi xe hoặc đổi tài xế cho chuyến đã được phân công
+Bắt buộc
+UC_DH06
+Xử lý xe hỏng
+Xác định chuyến bị ảnh hưởng do xe hỏng và chọn xe thay thế
+Bắt buộc
+UC_DH07
+Xử lý tài xế nghỉ
+Xác định chuyến bị ảnh hưởng do tài xế nghỉ và chọn tài xế thay thế
+Bắt buộc
+UC_DH08
+Ghi nhận thực hiện chuyến
+Cập nhật giờ thực tế, trạng thái chuyến và số phút trễ
+Bắt buộc
+UC_DH09
+Tra cứu lịch sử phân công
+Tra cứu phân công theo ngày, tuyến, xe, tài xế và trạng thái
+Bắt buộc
+UC_DH10
+Xem danh sách sự cố
+Xem và tiếp nhận các sự cố do tài xế gửi
+Bắt buộc
+4.2.5. Use Case của Tài xế
+Mã Use Case
+Tên Use Case
+Mô tả ngắn
+Mức độ
+UC_TX01
+Xem lịch làm việc cá nhân
+Xem các chuyến đã được phân công cho bản thân
+Bắt buộc
+UC_TX02
+Gửi yêu cầu xin nghỉ
+Gửi ngày nghỉ, ca nghỉ và lý do xin nghỉ
+Bắt buộc
+UC_TX03
+Xem trạng thái yêu cầu nghỉ
+Xem yêu cầu đang chờ duyệt, đã duyệt hoặc bị từ chối
+Bắt buộc
+UC_TX04
+Báo xe hỏng hoặc sự cố chuyến
+Gửi thông tin sự cố liên quan đến xe hoặc chuyến
+Bắt buộc
+UC_TX05
+Xem thông báo điều phối
+Xem thông báo thay đổi lịch hoặc phân công mới nếu được cài đặt
+Mở rộng
+4.3. Lược đồ Use Case tổng quát
+4.3.1. Mô tả lược đồ tổng quát dạng văn bản
+                        +--------------------------------------------------+
+                         | PHẦN MỀM PHÂN CÔNG CHUYẾN XE BUÝT TP.HCM        |
+                         |                                                  |
+Tất cả người dùng ------>| Đăng nhập hệ thống                              |
+                         | Xem thông tin cá nhân                           |
+                         |                                                  |
+Quản trị viên hệ thống ->| Quản lý tài khoản người dùng                    |
+                         | Phân quyền người dùng                           |
+                         | Cấu hình tham số hệ thống                       |
+                         | Xem nhật ký hệ thống (mở rộng)                  |
+                         |                                                  |
+Quản lý ---------------->| Quản lý tuyến xe                                |
+                         | Quản lý xe buýt                                 |
+                         | Quản lý tài xế                                  |
+                         | Xem yêu cầu xin nghỉ                            |
+                         | Duyệt hoặc từ chối yêu cầu nghỉ                 |
+                         | Xem báo cáo hiệu suất tuyến                     |
+                         | Xem báo cáo tình hình sử dụng xe                |
+                         | Xem báo cáo năng suất tài xế                    |
+                         | Xuất báo cáo (mở rộng)                          |
+                         |                                                  |
+Nhân viên điều phối ---->| Xem lịch phân công tổng quan                    |
+                         | Lập chuyến xe                                   |
+                         | Lập phiếu phân công chuyến                      |
+                         | Kiểm tra điều kiện phân công                    |
+                         | Điều chỉnh phân công chuyến                     |
+                         | Xử lý xe hỏng                                   |
+                         | Xử lý tài xế nghỉ                               |
+                         | Ghi nhận thực hiện chuyến                       |
+                         | Tra cứu lịch sử phân công                       |
+                         | Xem danh sách sự cố                             |
+                         |                                                  |
+Tài xế ----------------->| Xem lịch làm việc cá nhân                       |
+                         | Gửi yêu cầu xin nghỉ                            |
+                         | Xem trạng thái yêu cầu nghỉ                     |
+                         | Báo xe hỏng hoặc sự cố chuyến                   |
+                         | Xem thông báo điều phối (mở rộng)              |
+                         +--------------------------------------------------+
+4.3.2. Hướng dẫn vẽ sơ đồ Use Case
+Khi vẽ bằng Draw.io, StarUML hoặc Visual Paradigm, sơ đồ cần thể hiện:
+Thành phần
+Cách biểu diễn
+Actor
+Hình người bên ngoài biên hệ thống
+Hệ thống
+Hình chữ nhật lớn có tên phần mềm
+Use Case
+Hình oval bên trong biên hệ thống
+Quan hệ actor – use case
+Đường thẳng nối actor với use case
+Quan hệ <<include>>
+Mũi tên nét đứt từ use case chính đến use case luôn được gọi
+Quan hệ <<extend>>
+Mũi tên nét đứt từ use case phát sinh đến use case cơ sở
+Để sơ đồ không bị rối, nên chia thành các cụm chức năng theo tác nhân hoặc vẽ một sơ đồ tổng quát và một sơ đồ riêng cho nghiệp vụ phân công chuyến.
+4.4. Quan hệ giữa các Use Case
+4.4.1. Quan hệ <<include>>
+Quan hệ <<include>> được sử dụng khi một use case luôn phải thực hiện một use case khác để hoàn thành nghiệp vụ.
+Use Case chính
+Use Case được include
+Ý nghĩa
+UC_DH03 – Lập phiếu phân công chuyến
+UC_DH04 – Kiểm tra điều kiện phân công
+Khi lập phân công, hệ thống luôn phải kiểm tra xe, tài xế và các ràng buộc liên quan trước khi lưu
+UC_DH05 – Điều chỉnh phân công chuyến
+UC_DH04 – Kiểm tra điều kiện phân công
+Khi đổi xe hoặc đổi tài xế, hệ thống luôn phải kiểm tra lại tính hợp lệ của phân công mới
+UC_QL05 – Duyệt hoặc từ chối yêu cầu nghỉ
+UC_QL04 – Xem yêu cầu xin nghỉ
+Quản lý phải xem yêu cầu trước khi đưa ra quyết định xử lý
+UC_DH08 – Ghi nhận thực hiện chuyến
+Tính số phút trễ
+Khi ghi nhận thời gian thực tế, hệ thống luôn xác định chuyến có trễ hay không
+Ghi chú
+Đối với việc tính số phút trễ, nếu khi vẽ sơ đồ tổng quát thấy quá chi tiết, có thể không vẽ thành một use case riêng mà chỉ mô tả trong luồng xử lý của UC_DH08.
+4.4.2. Quan hệ <<extend>>
+Quan hệ <<extend>> được sử dụng khi một chức năng chỉ phát sinh trong điều kiện nhất định.
+Use Case cơ sở
+Use Case mở rộng
+Điều kiện phát sinh
+UC_QL05 – Duyệt hoặc từ chối yêu cầu nghỉ
+UC_DH07 – Xử lý tài xế nghỉ
+Yêu cầu nghỉ được duyệt và tài xế đã có chuyến chưa thực hiện trong thời gian nghỉ
+UC_TX04 – Báo xe hỏng hoặc sự cố chuyến
+UC_DH06 – Xử lý xe hỏng
+Sự cố được xác định là xe hỏng, làm ảnh hưởng đến chuyến chưa thực hiện
+UC_DH06 – Xử lý xe hỏng
+UC_DH05 – Điều chỉnh phân công chuyến
+Có chuyến bị ảnh hưởng và cần thay xe
+UC_DH07 – Xử lý tài xế nghỉ
+UC_DH05 – Điều chỉnh phân công chuyến
+Có chuyến bị ảnh hưởng và cần thay tài xế
+UC_DH03 – Lập phiếu phân công chuyến
+UC_DH05 – Điều chỉnh phân công chuyến
+Chuyến đã có phiếu phân công hiện hành và nhân viên điều phối muốn thay đổi xe hoặc tài xế
+Ghi chú
+Các tình huống như xe trùng lịch, tài xế trùng lịch, xe đang hỏng hoặc tài xế đang nghỉ không nhất thiết phải vẽ thành các use case riêng trong sơ đồ tổng quát. Đây là các kết quả kiểm tra hoặc luồng ngoại lệ của UC_DH04 – Kiểm tra điều kiện phân công, được mô tả chi tiết trong phần đặc tả use case.
+4.5. Mô tả chi tiết các Use Case quan trọng
+4.5.1. Use Case UC_CH01 — Đăng nhập hệ thống
+Thành phần
+Nội dung
+Mã Use Case
+UC_CH01
+Tên Use Case
+Đăng nhập hệ thống
+Tác nhân chính
+Quản trị viên hệ thống, Quản lý, Nhân viên điều phối, Tài xế
+Mục tiêu
+Xác thực người dùng và cho phép truy cập hệ thống theo vai trò
+Tiền điều kiện
+Người dùng đã được cấp tài khoản
+Hậu điều kiện
+Người dùng đăng nhập thành công và được chuyển đến trang tổng quan tương ứng với vai trò
+Luồng xử lý chính
+STT
+Tác nhân/Hệ thống
+Hành động
+1
+Người dùng
+Truy cập màn hình đăng nhập
+2
+Hệ thống
+Hiển thị biểu mẫu đăng nhập
+3
+Người dùng
+Nhập tên đăng nhập và mật khẩu
+4
+Người dùng
+Nhấn nút “Đăng nhập”
+5
+Hệ thống
+Kiểm tra tài khoản, mật khẩu và trạng thái tài khoản
+6
+Hệ thống
+Xác định vai trò của người dùng
+7
+Hệ thống
+Chuyển người dùng đến trang tổng quan theo vai trò
+Luồng ngoại lệ
+Trường hợp
+Xử lý
+Tên đăng nhập hoặc mật khẩu không đúng
+Hệ thống hiển thị thông báo lỗi và không cho đăng nhập
+Tài khoản bị khóa hoặc ngưng hoạt động
+Hệ thống thông báo tài khoản không được phép sử dụng
+Người dùng chưa nhập đủ thông tin
+Hệ thống yêu cầu nhập đầy đủ tên đăng nhập và mật khẩu
+4.5.2. Use Case UC_QL01 — Quản lý tuyến xe
+Thành phần
+Nội dung
+Mã Use Case
+UC_QL01
+Tên Use Case
+Quản lý tuyến xe
+Tác nhân chính
+Quản lý
+Mục tiêu
+Quản lý danh mục tuyến xe phục vụ việc lập chuyến
+Tiền điều kiện
+Quản lý đã đăng nhập hệ thống
+Hậu điều kiện
+Thông tin tuyến xe được thêm mới, cập nhật hoặc chuyển trạng thái ngưng hoạt động
+Luồng xử lý chính
+STT
+Tác nhân/Hệ thống
+Hành động
+1
+Quản lý
+Chọn chức năng “Quản lý tuyến xe”
+2
+Hệ thống
+Hiển thị danh sách tuyến xe
+3
+Quản lý
+Chọn thêm mới hoặc chỉnh sửa tuyến xe
+4
+Hệ thống
+Hiển thị biểu mẫu thông tin tuyến
+5
+Quản lý
+Nhập mã tuyến, tên tuyến, điểm đầu, điểm cuối, thời gian dự kiến và trạng thái
+6
+Quản lý
+Nhấn “Lưu”
+7
+Hệ thống
+Kiểm tra dữ liệu hợp lệ và lưu thông tin tuyến
+8
+Hệ thống
+Hiển thị danh sách tuyến đã cập nhật
+Luồng thay thế và ngoại lệ
+Trường hợp
+Xử lý
+Mã tuyến đã tồn tại khi thêm mới
+Hệ thống thông báo mã tuyến không được trùng
+Thiếu thông tin bắt buộc
+Hệ thống yêu cầu nhập đầy đủ dữ liệu
+Quản lý chọn ngưng hoạt động tuyến
+Hệ thống cập nhật trạng thái tuyến thành “Ngưng hoạt động”
+Tuyến đã phát sinh chuyến xe
+Hệ thống không xóa vật lý; chỉ cho phép chuyển trạng thái ngưng hoạt động
+4.5.3. Use Case UC_QL02 — Quản lý xe buýt
+Thành phần
+Nội dung
+Mã Use Case
+UC_QL02
+Tên Use Case
+Quản lý xe buýt
+Tác nhân chính
+Quản lý
+Mục tiêu
+Quản lý danh mục xe buýt và trạng thái khả dụng của xe
+Tiền điều kiện
+Quản lý đã đăng nhập hệ thống
+Hậu điều kiện
+Thông tin xe được thêm mới, cập nhật hoặc chuyển trạng thái phù hợp
+Luồng xử lý chính
+STT
+Tác nhân/Hệ thống
+Hành động
+1
+Quản lý
+Chọn chức năng “Quản lý xe buýt”
+2
+Hệ thống
+Hiển thị danh sách xe buýt
+3
+Quản lý
+Chọn thêm mới hoặc chỉnh sửa xe
+4
+Hệ thống
+Hiển thị biểu mẫu xe buýt
+5
+Quản lý
+Nhập biển số, số chỗ và trạng thái xe
+6
+Quản lý
+Nhấn “Lưu”
+7
+Hệ thống
+Kiểm tra dữ liệu và lưu thông tin xe
+8
+Hệ thống
+Hiển thị danh sách xe đã cập nhật
+Luồng thay thế và ngoại lệ
+Trường hợp
+Xử lý
+Biển số xe đã tồn tại
+Hệ thống thông báo biển số không được trùng
+Quản lý cập nhật trạng thái xe thành “Hỏng”
+Xe không được chọn trong các phân công mới; các chuyến chưa thực hiện có sử dụng xe được cảnh báo cho điều phối
+Quản lý chọn ngưng sử dụng xe
+Hệ thống cập nhật trạng thái thành “Ngưng sử dụng”
+Xe đã có dữ liệu phân công trong lịch sử
+Hệ thống không xóa vật lý; chỉ cho phép cập nhật trạng thái
+4.5.4. Use Case UC_QL03 — Quản lý tài xế
+Thành phần
+Nội dung
+Mã Use Case
+UC_QL03
+Tên Use Case
+Quản lý tài xế
+Tác nhân chính
+Quản lý
+Mục tiêu
+Quản lý hồ sơ tài xế và trạng thái làm việc phục vụ phân công chuyến
+Tiền điều kiện
+Quản lý đã đăng nhập hệ thống
+Hậu điều kiện
+Hồ sơ tài xế được thêm mới, cập nhật hoặc chuyển trạng thái
+Luồng xử lý chính
+STT
+Tác nhân/Hệ thống
+Hành động
+1
+Quản lý
+Chọn chức năng “Quản lý tài xế”
+2
+Hệ thống
+Hiển thị danh sách tài xế
+3
+Quản lý
+Chọn thêm mới hoặc chỉnh sửa tài xế
+4
+Hệ thống
+Hiển thị biểu mẫu thông tin tài xế
+5
+Quản lý
+Nhập mã tài xế, họ tên, số điện thoại, loại bằng lái và trạng thái
+6
+Quản lý
+Nhấn “Lưu”
+7
+Hệ thống
+Kiểm tra dữ liệu và lưu hồ sơ tài xế
+8
+Hệ thống
+Hiển thị danh sách tài xế đã cập nhật
+Luồng thay thế và ngoại lệ
+Trường hợp
+Xử lý
+Mã tài xế đã tồn tại
+Hệ thống thông báo mã tài xế không được trùng
+Tài xế chuyển trạng thái Nghỉ phép, Tạm nghỉ hoặc Ngưng làm việc
+Tài xế không được lựa chọn trong phân công mới
+Tài xế đã có dữ liệu phân công trong lịch sử
+Hệ thống không xóa vật lý; chỉ cho phép chuyển trạng thái ngưng làm việc
+4.5.5. Use Case UC_DH02 — Lập chuyến xe
+Thành phần
+Nội dung
+Mã Use Case
+UC_DH02
+Tên Use Case
+Lập chuyến xe
+Tác nhân chính
+Nhân viên điều phối
+Mục tiêu
+Tạo chuyến xe cụ thể theo tuyến, ngày chạy, hướng tuyến và thời gian dự kiến
+Tiền điều kiện
+Nhân viên điều phối đã đăng nhập; tuyến xe tồn tại và đang hoạt động
+Hậu điều kiện
+Chuyến xe được tạo với trạng thái “Chưa phân công”
+Luồng xử lý chính
+STT
+Tác nhân/Hệ thống
+Hành động
+1
+Nhân viên điều phối
+Chọn chức năng “Lập chuyến xe”
+2
+Hệ thống
+Hiển thị biểu mẫu lập chuyến
+3
+Nhân viên điều phối
+Chọn tuyến xe, ngày chạy, hướng tuyến, giờ xuất bến dự kiến và giờ kết thúc dự kiến
+4
+Nhân viên điều phối
+Nhấn nút “Lưu chuyến”
+5
+Hệ thống
+Kiểm tra dữ liệu bắt buộc và tính hợp lệ của thời gian
+6
+Hệ thống
+Sinh mã chuyến mới và lưu dữ liệu chuyến
+7
+Hệ thống
+Gán trạng thái chuyến là “Chưa phân công”
+8
+Hệ thống
+Hiển thị thông báo tạo chuyến thành công
+Luồng ngoại lệ
+Trường hợp
+Xử lý
+Thiếu thông tin bắt buộc
+Hệ thống thông báo trường dữ liệu còn thiếu
+Giờ kết thúc dự kiến nhỏ hơn hoặc bằng giờ xuất bến dự kiến
+Hệ thống thông báo thời gian không hợp lệ
+Tuyến xe đang ngưng hoạt động
+Hệ thống không cho phép tạo chuyến
+4.5.6. Use Case UC_DH03 — Lập phiếu phân công chuyến
+Thành phần
+Nội dung
+Mã Use Case
+UC_DH03
+Tên Use Case
+Lập phiếu phân công chuyến
+Tác nhân chính
+Nhân viên điều phối
+Mục tiêu
+Gán xe và tài xế phù hợp cho một chuyến chưa được phân công
+Tiền điều kiện
+Nhân viên điều phối đã đăng nhập; chuyến xe đã được tạo và chưa có phiếu phân công hiện hành
+Hậu điều kiện
+Phiếu phân công được lưu với trạng thái active; chuyến xe chuyển sang trạng thái “Đã phân công”
+Quan hệ
+<<include>> UC_DH04 – Kiểm tra điều kiện phân công
+Luồng xử lý chính
+STT
+Tác nhân/Hệ thống
+Hành động
+1
+Nhân viên điều phối
+Chọn chuyến xe cần phân công
+2
+Hệ thống
+Hiển thị thông tin chuyến gồm tuyến, ngày chạy, giờ xuất bến dự kiến và giờ kết thúc dự kiến
+3
+Nhân viên điều phối
+Chọn xe buýt
+4
+Nhân viên điều phối
+Chọn tài xế
+5
+Nhân viên điều phối
+Nhấn “Kiểm tra phân công”
+6
+Hệ thống
+Thực hiện UC_DH04 – Kiểm tra điều kiện phân công
+7
+Hệ thống
+Hiển thị kết quả “Phân công hợp lệ” nếu không có xung đột
+8
+Nhân viên điều phối
+Nhấn “Lưu phân công”
+9
+Hệ thống
+Sinh mã phiếu phân công và lưu phiếu với trạng thái active
+10
+Hệ thống
+Cập nhật trạng thái chuyến thành “Đã phân công”
+11
+Hệ thống
+Hiển thị thông báo phân công thành công
+Luồng ngoại lệ
+Trường hợp
+Xử lý
+Chuyến đã có phiếu phân công active
+Hệ thống không tạo phiếu mới; gợi ý chuyển sang UC_DH05 – Điều chỉnh phân công chuyến
+Xe đang hỏng hoặc ngưng sử dụng
+Hệ thống cảnh báo và không cho lưu phân công
+Tài xế đang nghỉ, tạm nghỉ hoặc ngưng làm việc
+Hệ thống cảnh báo và không cho lưu phân công
+Xe bị trùng lịch
+Hệ thống hiển thị chuyến bị trùng và yêu cầu chọn xe khác
+Tài xế bị trùng lịch
+Hệ thống hiển thị chuyến bị trùng và yêu cầu chọn tài xế khác
+Tài xế có yêu cầu nghỉ đã duyệt trong thời gian chuyến
+Hệ thống cảnh báo và yêu cầu chọn tài xế khác
+Tài xế vượt thời gian lái liên tục
+Hệ thống cảnh báo và không cho lưu phân công
+4.5.7. Use Case UC_DH04 — Kiểm tra điều kiện phân công
+Thành phần
+Nội dung
+Mã Use Case
+UC_DH04
+Tên Use Case
+Kiểm tra điều kiện phân công
+Tác nhân chính
+Hệ thống
+Tác nhân khởi tạo
+Nhân viên điều phối thông qua lập mới hoặc điều chỉnh phân công
+Mục tiêu
+Kiểm tra phiếu phân công có đáp ứng các ràng buộc nghiệp vụ hay không
+Tiền điều kiện
+Nhân viên điều phối đã chọn chuyến, xe và tài xế
+Hậu điều kiện
+Hệ thống trả về kết quả hợp lệ hoặc danh sách cảnh báo
+Các điều kiện cần kiểm tra
+STT
+Điều kiện
+Mô tả
+1
+Trạng thái xe
+Xe phải có trạng thái “Hoạt động”
+2
+Trạng thái tài xế
+Tài xế phải có trạng thái “Đang làm việc”
+3
+Trùng lịch xe
+Xe không được có chuyến khác chồng chéo thời gian
+4
+Trùng lịch tài xế
+Tài xế không được có chuyến khác chồng chéo thời gian
+5
+Yêu cầu nghỉ đã duyệt
+Tài xế không được có yêu cầu nghỉ đã duyệt trong thời gian chuyến
+6
+Thời gian lái liên tục
+Việc phân công không được làm phát sinh chuỗi lái liên tục vượt quá 240 phút
+Luồng xử lý chính
+STT
+Tác nhân/Hệ thống
+Hành động
+1
+Hệ thống
+Lấy thông tin chuyến cần phân công
+2
+Hệ thống
+Kiểm tra trạng thái xe được chọn
+3
+Hệ thống
+Kiểm tra trạng thái tài xế được chọn
+4
+Hệ thống
+Kiểm tra yêu cầu nghỉ đã duyệt của tài xế
+5
+Hệ thống
+Kiểm tra lịch xe trong cùng ngày
+6
+Hệ thống
+Kiểm tra lịch tài xế trong cùng ngày
+7
+Hệ thống
+Kiểm tra chuỗi thời gian lái liên tục của tài xế
+8
+Hệ thống
+Trả về kết quả kiểm tra
+Kết quả kiểm tra
+Trường hợp
+Kết quả
+Tất cả điều kiện hợp lệ
+Hiển thị thông báo màu xanh “Phân công hợp lệ”
+Có ít nhất một điều kiện không hợp lệ
+Hiển thị danh sách lỗi, khóa chức năng lưu phân công
+4.5.8. Use Case UC_DH05 — Điều chỉnh phân công chuyến
+Thành phần
+Nội dung
+Mã Use Case
+UC_DH05
+Tên Use Case
+Điều chỉnh phân công chuyến
+Tác nhân chính
+Nhân viên điều phối
+Mục tiêu
+Đổi xe hoặc đổi tài xế cho một chuyến đã được phân công
+Tiền điều kiện
+Chuyến đã có phiếu phân công active
+Hậu điều kiện
+Phiếu phân công cũ chuyển sang replaced; phiếu phân công mới được tạo với trạng thái active
+Quan hệ
+<<include>> UC_DH04 – Kiểm tra điều kiện phân công
+Các trường hợp thực hiện
+Trường hợp
+Mô tả
+Điều phối chủ động điều chỉnh
+Nhân viên điều phối muốn đổi xe hoặc tài xế trước khi chuyến thực hiện
+Xe bị hỏng
+Chuyến cần thay xe do xe hiện tại không còn khả dụng
+Tài xế nghỉ đã duyệt
+Chuyến cần thay tài xế do tài xế hiện tại không thể thực hiện
+Luồng xử lý chính
+STT
+Tác nhân/Hệ thống
+Hành động
+1
+Nhân viên điều phối
+Chọn chuyến đã được phân công cần điều chỉnh
+2
+Hệ thống
+Hiển thị phiếu phân công hiện hành
+3
+Nhân viên điều phối
+Chọn xe mới hoặc tài xế mới
+4
+Nhân viên điều phối
+Nhấn “Kiểm tra lại phân công”
+5
+Hệ thống
+Thực hiện UC_DH04 – Kiểm tra điều kiện phân công
+6
+Hệ thống
+Hiển thị kết quả hợp lệ nếu không có xung đột
+7
+Nhân viên điều phối
+Nhấn “Lưu điều chỉnh”
+8
+Hệ thống
+Chuyển phiếu phân công cũ sang trạng thái replaced
+9
+Hệ thống
+Tạo phiếu phân công mới với trạng thái active
+10
+Hệ thống
+Thông báo điều chỉnh phân công thành công
+Luồng ngoại lệ
+Trường hợp
+Xử lý
+Chuyến chưa có phân công hiện hành
+Hệ thống yêu cầu chuyển sang chức năng lập phiếu phân công mới
+Xe hoặc tài xế mới không khả dụng
+Hệ thống cảnh báo và không cho lưu
+Xe hoặc tài xế mới trùng lịch
+Hệ thống cảnh báo và yêu cầu chọn phương án khác
+Tài xế mới vượt thời gian lái liên tục
+Hệ thống cảnh báo và không cho lưu điều chỉnh
+4.5.9. Use Case UC_QL05 — Duyệt hoặc từ chối yêu cầu nghỉ
+Thành phần
+Nội dung
+Mã Use Case
+UC_QL05
+Tên Use Case
+Duyệt hoặc từ chối yêu cầu nghỉ
+Tác nhân chính
+Quản lý
+Tác nhân liên quan
+Tài xế, Nhân viên điều phối
+Mục tiêu
+Quản lý xem xét và xử lý yêu cầu nghỉ của tài xế
+Tiền điều kiện
+Quản lý đã đăng nhập; tài xế đã gửi yêu cầu nghỉ ở trạng thái “Chờ duyệt”
+Hậu điều kiện
+Yêu cầu nghỉ được cập nhật thành “Đã duyệt” hoặc “Từ chối”
+Luồng xử lý chính
+STT
+Tác nhân/Hệ thống
+Hành động
+1
+Quản lý
+Chọn chức năng “Yêu cầu xin nghỉ”
+2
+Hệ thống
+Hiển thị danh sách yêu cầu nghỉ
+3
+Quản lý
+Chọn một yêu cầu đang chờ duyệt
+4
+Hệ thống
+Hiển thị thông tin tài xế, ngày nghỉ, ca nghỉ và lý do
+5
+Quản lý
+Chọn “Duyệt” hoặc “Từ chối”
+6
+Hệ thống
+Cập nhật trạng thái yêu cầu và lưu thời điểm xử lý
+7
+Hệ thống
+Nếu yêu cầu được duyệt, kiểm tra các chuyến chưa thực hiện của tài xế trong thời gian nghỉ
+8
+Hệ thống
+Nếu có chuyến bị ảnh hưởng, thông báo cho Nhân viên điều phối xử lý
+Luồng ngoại lệ
+Trường hợp
+Xử lý
+Yêu cầu nghỉ đã được xử lý trước đó
+Hệ thống không cho phép xử lý lại
+Quản lý từ chối yêu cầu
+Hệ thống lưu trạng thái “Từ chối”; lịch phân công hiện tại không bị ảnh hưởng
+Yêu cầu được duyệt và có chuyến liên quan
+Hệ thống ghi nhận danh sách chuyến bị ảnh hưởng để điều phối xử lý
+4.5.10. Use Case UC_DH07 — Xử lý tài xế nghỉ
+Thành phần
+Nội dung
+Mã Use Case
+UC_DH07
+Tên Use Case
+Xử lý tài xế nghỉ
+Tác nhân chính
+Nhân viên điều phối
+Mục tiêu
+Điều chỉnh các chuyến bị ảnh hưởng khi tài xế được duyệt nghỉ
+Tiền điều kiện
+Có yêu cầu nghỉ đã được Quản lý duyệt và có chuyến chưa thực hiện bị ảnh hưởng
+Hậu điều kiện
+Các chuyến bị ảnh hưởng được thay tài xế hoặc ghi nhận đang chờ xử lý
+Luồng xử lý chính
+STT
+Tác nhân/Hệ thống
+Hành động
+1
+Nhân viên điều phối
+Chọn chức năng “Chuyến bị ảnh hưởng” hoặc “Xử lý tài xế nghỉ”
+2
+Hệ thống
+Hiển thị danh sách yêu cầu nghỉ đã duyệt có chuyến bị ảnh hưởng
+3
+Nhân viên điều phối
+Chọn yêu cầu nghỉ cần xử lý
+4
+Hệ thống
+Hiển thị các chuyến đã phân công cho tài xế trong thời gian nghỉ
+5
+Hệ thống
+Gợi ý danh sách tài xế đang làm việc, không nghỉ, không trùng lịch và không vượt thời gian lái liên tục
+6
+Nhân viên điều phối
+Chọn tài xế thay thế cho chuyến
+7
+Hệ thống
+Thực hiện điều chỉnh phân công cho chuyến
+8
+Hệ thống
+Thông báo xử lý thành công
+Luồng ngoại lệ
+Trường hợp
+Xử lý
+Không có chuyến bị ảnh hưởng
+Hệ thống thông báo không cần điều chỉnh phân công
+Không có tài xế thay thế phù hợp
+Hệ thống giữ chuyến ở trạng thái chờ xử lý và thông báo cho điều phối
+Tài xế được chọn không còn khả dụng tại thời điểm lưu
+Hệ thống kiểm tra lại và không cho lưu
+4.5.11. Use Case UC_DH06 — Xử lý xe hỏng
+Thành phần
+Nội dung
+Mã Use Case
+UC_DH06
+Tên Use Case
+Xử lý xe hỏng
+Tác nhân chính
+Nhân viên điều phối
+Tác nhân liên quan
+Tài xế
+Mục tiêu
+Ghi nhận xe hỏng và điều chỉnh các chuyến bị ảnh hưởng
+Tiền điều kiện
+Có báo cáo xe hỏng hoặc Quản lý/Điều phối ghi nhận xe không còn khả dụng
+Hậu điều kiện
+Xe được cập nhật trạng thái “Hỏng”; các chuyến bị ảnh hưởng được thay xe hoặc ghi nhận chờ xử lý
+Luồng xử lý chính
+STT
+Tác nhân/Hệ thống
+Hành động
+1
+Nhân viên điều phối
+Mở danh sách sự cố hoặc chọn xe được báo hỏng
+2
+Hệ thống
+Hiển thị thông tin sự cố và xe liên quan
+3
+Nhân viên điều phối
+Xác nhận xe bị hỏng
+4
+Hệ thống
+Cập nhật trạng thái xe thành “Hỏng”
+5
+Hệ thống
+Tìm các chuyến chưa thực hiện có phiếu phân công sử dụng xe đó
+6
+Hệ thống
+Hiển thị danh sách chuyến bị ảnh hưởng và gợi ý các xe đang hoạt động, không trùng lịch
+7
+Nhân viên điều phối
+Chọn xe thay thế cho chuyến
+8
+Hệ thống
+Thực hiện điều chỉnh phân công cho chuyến
+9
+Hệ thống
+Cập nhật trạng thái xử lý sự cố và thông báo thành công
+Luồng ngoại lệ
+Trường hợp
+Xử lý
+Xe hỏng nhưng chưa được phân công cho chuyến chưa thực hiện nào
+Hệ thống chỉ cập nhật trạng thái xe, không cần điều chỉnh phân công
+Không có xe thay thế phù hợp
+Hệ thống giữ chuyến ở trạng thái chờ xử lý
+Xe thay thế bị trùng lịch tại thời điểm lưu
+Hệ thống cảnh báo và không cho lưu điều chỉnh
+4.5.12. Use Case UC_DH08 — Ghi nhận thực hiện chuyến
+Thành phần
+Nội dung
+Mã Use Case
+UC_DH08
+Tên Use Case
+Ghi nhận thực hiện chuyến
+Tác nhân chính
+Nhân viên điều phối
+Mục tiêu
+Cập nhật kết quả thực tế của chuyến xe
+Tiền điều kiện
+Chuyến xe đã được phân công
+Hậu điều kiện
+Nhật ký thực hiện chuyến và trạng thái chuyến được cập nhật
+Luồng xử lý chính
+STT
+Tác nhân/Hệ thống
+Hành động
+1
+Nhân viên điều phối
+Chọn chuyến cần cập nhật
+2
+Hệ thống
+Hiển thị thông tin chuyến và phiếu phân công hiện hành
+3
+Nhân viên điều phối
+Nhập giờ xuất bến thực tế và giờ kết thúc thực tế
+4
+Nhân viên điều phối
+Chọn trạng thái chuyến và nhập ghi chú nếu có
+5
+Hệ thống
+Kiểm tra tính hợp lệ của thời gian thực tế
+6
+Hệ thống
+Tính số phút trễ nếu giờ xuất bến thực tế muộn hơn giờ xuất bến dự kiến
+7
+Hệ thống
+Tạo mới hoặc cập nhật bản ghi theo dõi thực hiện chuyến
+8
+Hệ thống
+Cập nhật trạng thái chuyến
+9
+Hệ thống
+Hiển thị thông báo cập nhật thành công
+Luồng ngoại lệ
+Trường hợp
+Xử lý
+Chuyến chưa được phân công
+Hệ thống không cho ghi nhận thực hiện
+Giờ kết thúc thực tế nhỏ hơn giờ xuất bến thực tế
+Hệ thống thông báo dữ liệu không hợp lệ
+Chuyến bị hủy
+Hệ thống cho phép cập nhật trạng thái “Hủy” và nhập ghi chú
+Chuyến đã có bản ghi thực hiện
+Hệ thống cập nhật bản ghi hiện có nếu người dùng có quyền sửa
+4.5.13. Use Case UC_TX02 — Gửi yêu cầu xin nghỉ
+Thành phần
+Nội dung
+Mã Use Case
+UC_TX02
+Tên Use Case
+Gửi yêu cầu xin nghỉ
+Tác nhân chính
+Tài xế
+Mục tiêu
+Cho phép tài xế gửi yêu cầu xin nghỉ theo ngày và ca làm việc
+Tiền điều kiện
+Tài xế đã đăng nhập hệ thống
+Hậu điều kiện
+Yêu cầu nghỉ được lưu với trạng thái “Chờ duyệt”
+Luồng xử lý chính
+STT
+Tác nhân/Hệ thống
+Hành động
+1
+Tài xế
+Chọn chức năng “Gửi yêu cầu xin nghỉ”
+2
+Hệ thống
+Hiển thị biểu mẫu xin nghỉ
+3
+Tài xế
+Nhập ngày nghỉ, ca nghỉ và lý do
+4
+Tài xế
+Nhấn “Gửi yêu cầu”
+5
+Hệ thống
+Kiểm tra dữ liệu bắt buộc
+6
+Hệ thống
+Lưu yêu cầu nghỉ với trạng thái “Chờ duyệt”
+7
+Hệ thống
+Hiển thị thông báo gửi yêu cầu thành công
+Luồng ngoại lệ
+Trường hợp
+Xử lý
+Thiếu ngày nghỉ hoặc ca nghỉ
+Hệ thống yêu cầu nhập đủ thông tin
+Ngày nghỉ không hợp lệ
+Hệ thống thông báo lỗi và không lưu yêu cầu
+4.5.14. Use Case UC_TX04 — Báo xe hỏng hoặc sự cố chuyến
+Thành phần
+Nội dung
+Mã Use Case
+UC_TX04
+Tên Use Case
+Báo xe hỏng hoặc sự cố chuyến
+Tác nhân chính
+Tài xế
+Mục tiêu
+Cho phép tài xế gửi thông tin sự cố liên quan đến xe hoặc chuyến
+Tiền điều kiện
+Tài xế đã đăng nhập hệ thống
+Hậu điều kiện
+Sự cố được ghi nhận ở trạng thái “Chờ xử lý” để Nhân viên điều phối tiếp nhận
+Luồng xử lý chính
+STT
+Tác nhân/Hệ thống
+Hành động
+1
+Tài xế
+Chọn chức năng “Báo sự cố”
+2
+Hệ thống
+Hiển thị biểu mẫu báo sự cố và danh sách chuyến của tài xế nếu có
+3
+Tài xế
+Chọn chuyến liên quan hoặc để trống nếu sự cố xe được phát hiện ngoài chuyến
+4
+Tài xế
+Chọn xe liên quan, loại sự cố và nhập mô tả
+5
+Tài xế
+Nhấn “Gửi báo cáo”
+6
+Hệ thống
+Kiểm tra dữ liệu bắt buộc và lưu sự cố
+7
+Hệ thống
+Gán trạng thái sự cố là “Chờ xử lý”
+8
+Hệ thống
+Hiển thị thông báo gửi báo cáo thành công
+Luồng ngoại lệ
+Trường hợp
+Xử lý
+Chưa chọn xe hoặc loại sự cố
+Hệ thống yêu cầu nhập đủ thông tin
+Sự cố được xác định là xe hỏng
+Nhân viên điều phối thực hiện UC_DH06 – Xử lý xe hỏng
+Sự cố không liên quan đến chuyến cụ thể
+Hệ thống vẫn lưu báo cáo với trường chuyến liên quan để trống
+4.6. Use Case trọng tâm của hệ thống
+Use Case quan trọng nhất trong hệ thống là:
+UC_DH03 – Lập phiếu phân công chuyến
+Lý do lựa chọn
+STT
+Lý do
+1
+Đây là nghiệp vụ trung tâm của đề tài phân công chuyến xe buýt
+2
+Use case liên quan trực tiếp đến chuyến xe, xe buýt, tài xế và phiếu phân công
+3
+Use case bắt buộc gọi kiểm tra điều kiện phân công trước khi lưu
+4
+Use case thể hiện các ràng buộc đặc thù như trùng lịch và thời gian lái liên tục
+5
+Kết quả phân công ảnh hưởng đến lịch làm việc của tài xế, theo dõi thực hiện chuyến và báo cáo
+6
+Các tình huống xe hỏng, tài xế nghỉ hoặc đổi phân công đều phát sinh từ dữ liệu phân công ban đầu
+Ngoài ra, UC_DH05 – Điều chỉnh phân công chuyến cũng là use case quan trọng vì giúp hệ thống xử lý đúng các tình huống phát sinh và bảo toàn lịch sử phân công bằng cách giữ phiếu cũ ở trạng thái replaced.
+4.7. Gợi ý cách vẽ sơ đồ Use Case trong Draw.io
+4.7.1. Sơ đồ tổng quát
+Trong sơ đồ tổng quát, nên thể hiện các use case chính theo từng actor, không đưa quá nhiều cảnh báo nhỏ thành oval riêng.
+Cụm
+Actor
+Các Use Case chính
+Cụm 1
+Quản trị viên hệ thống
+Đăng nhập, quản lý tài khoản, phân quyền, cấu hình tham số
+Cụm 2
+Quản lý
+Đăng nhập, quản lý tuyến, quản lý xe, quản lý tài xế, duyệt nghỉ, xem báo cáo
+Cụm 3
+Nhân viên điều phối
+Đăng nhập, xem lịch, lập chuyến, lập phân công, kiểm tra điều kiện, điều chỉnh phân công, xử lý xe hỏng, xử lý tài xế nghỉ, ghi nhận chuyến
+Cụm 4
+Tài xế
+Đăng nhập, xem lịch cá nhân, gửi yêu cầu nghỉ, xem trạng thái nghỉ, báo sự cố
+4.7.2. Sơ đồ riêng cho nghiệp vụ phân công
+Do nghiệp vụ phân công là trọng tâm của đề tài, nên vẽ thêm một sơ đồ nhỏ riêng gồm:
+Nhân viên điều phối
+        |
+        v
+Lập phiếu phân công chuyến
+        |
+        | <<include>>
+        v
+Kiểm tra điều kiện phân công
+Điều chỉnh phân công chuyến
+        |
+        | <<include>>
+        v
+Kiểm tra điều kiện phân công
+Xử lý xe hỏng --------<<extend>>-------> Điều chỉnh phân công chuyến
+Xử lý tài xế nghỉ -----<<extend>>-------> Điều chỉnh phân công chuyến
+Khi vẽ UML, cần chú ý mũi tên <<extend>> đi từ use case mở rộng đến use case cơ sở. Vì vậy, khi đưa vào sơ đồ thực tế, nên đặt quan hệ theo ý nghĩa: xử lý phát sinh có thể dẫn đến việc thực hiện điều chỉnh phân công khi có chuyến bị ảnh hưởng.
+4.8. Kết luận phần mô hình hóa yêu cầu
+Phần mô hình hóa yêu cầu đã xác định bốn tác nhân chính của hệ thống gồm Quản trị viên hệ thống, Quản lý, Nhân viên điều phối và Tài xế. Mỗi tác nhân được gắn với các use case phù hợp với nhiệm vụ và quyền hạn đã xác định trong phần khảo sát hiện trạng.
+So với hướng phân tích ban đầu, phần use case đã được điều chỉnh để thể hiện rõ:
+Quản lý thực hiện đầy đủ việc quản lý danh mục tuyến xe, xe buýt và tài xế.
+Nhân viên điều phối chịu trách nhiệm lập chuyến, lập phân công và điều chỉnh phân công.
+Điều chỉnh phân công là một nghiệp vụ độc lập, dùng khi chủ động đổi xe/tài xế hoặc khi xử lý xe hỏng, tài xế nghỉ.
+Việc kiểm tra điều kiện phân công là bước bắt buộc trước khi lưu phân công mới hoặc phân công thay thế.
+Các chức năng nhật ký hệ thống, thông báo nội bộ và xuất báo cáo được xác định ở mức mở rộng.
+Kết quả mô hình hóa Use Case là cơ sở để kiểm tra tính đầy đủ và nhất quán của các phần thiết kế cơ sở dữ liệu, thiết kế giao diện web, thiết kế xử lý và kế hoạch cài đặt của hệ thống.

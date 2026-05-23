@@ -22,6 +22,7 @@ router.put('/users/:userId', auth, role(['admin']), userController.update);
 router.patch('/users/:userId/status', auth, role(['admin']), userController.updateStatus);
 router.patch('/users/:userId/role', auth, role(['admin']), userController.updateRole);
 router.put('/profile/password', auth, userController.changePassword);
+router.put('/profile', auth, userController.updateProfile);
 
 // Configurations
 router.get('/configurations', auth, configurationController.getAll);

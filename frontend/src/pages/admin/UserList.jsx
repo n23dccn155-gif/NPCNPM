@@ -10,9 +10,11 @@ const roleLabel = { admin: 'Quản trị viên', manager: 'Quản lý', dispatch
 export default function UserList() {
   const [users, setUsers] = useState([]);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ username: '', password: '', role_id: 4 });
+  const [form, setForm] = useState({ username: '', password: '', role_id: 4, full_name: '', phone: '' });
   const [formError, setFormError] = useState('');
   const [confirm, setConfirm] = useState({ open: false, user: null, newStatus: '' });
+  const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
 
   const load = () => getUsers().then(res => setUsers(res.data.data));
   useEffect(() => { load(); }, []);
@@ -28,33 +30,64 @@ export default function UserList() {
     catch (err) { alert(err.response?.data?.message || 'Lỗi'); }
   };
 
+  const filtered = users.filter(u => {
+    const matchSearch = !search ||
+      u.username.toLowerCase().includes(search.toLowerCase()) ||
+      (u.full_name && u.full_name.toLowerCase().includes(search.toLowerCase()));
+    const matchStatus = !filterStatus || u.status === filterStatus;
+    return matchSearch && matchStatus;
+  });
+
   return (
     <Layout>
-      <PageHeader title="Quản lý tài khoản" subtitle={`${users.length} tài khoản`}
-        action={<button onClick={() => { setForm({ username: '', password: '', role_id: 4 }); setFormError(''); setShowModal(true); }}
+      <PageHeader title="Quản lý tài khoản" subtitle={`${filtered.length} / ${users.length} tài khoản`}
+        action={<button onClick={() => { setForm({ username: '', password: '', role_id: 4, full_name: '', phone: '' }); setFormError(''); setShowModal(true); }}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium">+ Tạo tài khoản</button>} />
+      {/* Tìm kiếm và lọc */}
+      <div className="flex gap-3 mb-4">
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Tìm theo tên đăng nhập hoặc họ tên..."
+          className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+          className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="">Tất cả trạng thái</option>
+          <option value="active">Đang hoạt động</option>
+          <option value="inactive">Ngưng hoạt động</option>
+          <option value="locked">Bị khóa</option>
+        </select>
+      </div>
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              {['#', 'Tên đăng nhập', 'Vai trò', 'Trạng thái', 'Ngày tạo', 'Thao tác'].map(h => (
+              {['#', 'Tên đăng nhập', 'Họ tên', 'Số điện thoại', 'Vai trò', 'Trạng thái', 'Ngày tạo', 'Thao tác'].map(h => (
                 <th key={h} className={`px-6 py-3 text-xs font-medium text-gray-500 uppercase ${h === 'Thao tác' ? 'text-right' : 'text-left'}`}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {users.map(u => (
+            {filtered.map(u => (
               <tr key={u.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4 text-gray-500 text-sm">{u.id}</td>
                 <td className="px-6 py-4 font-medium text-gray-900">{u.username}</td>
+                <td className="px-6 py-4 text-sm text-gray-700">{u.full_name || '—'}</td>
+                <td className="px-6 py-4 text-sm text-gray-600">{u.phone || '—'}</td>
                 <td className="px-6 py-4 text-sm text-gray-600">{roleLabel[u.role_name] || u.role_name}</td>
                 <td className="px-6 py-4"><StatusBadge status={u.status} /></td>
-                <td className="px-6 py-4 text-sm text-gray-500">{new Date(u.created_at).toLocaleDateString('vi-VN')}</td>
-                <td className="px-6 py-4 text-right">
-                  <button onClick={() => setConfirm({ open: true, user: u, newStatus: u.status === 'active' ? 'inactive' : 'active' })}
-                    className={`text-sm ${u.status === 'active' ? 'text-red-500 hover:text-red-700' : 'text-green-600 hover:text-green-800'}`}>
-                    {u.status === 'active' ? 'Khóa' : 'Mở khóa'}
-                  </button>
+                <td className="px-6 py-4 text-sm text-gray-500">{u.created_at ? new Date(u.created_at).toLocaleDateString('vi-VN') : '—'}</td>
+                <td className="px-6 py-4 text-right space-x-2">
+                  {u.status === 'active' && (
+                    <button onClick={() => setConfirm({ open: true, user: u, newStatus: 'locked' })}
+                      className="text-orange-500 hover:text-orange-700 text-sm">Khóa</button>
+                  )}
+                  {u.status === 'active' && (
+                    <button onClick={() => setConfirm({ open: true, user: u, newStatus: 'inactive' })}
+                      className="text-red-500 hover:text-red-700 text-sm">Ngưng</button>
+                  )}
+                  {(u.status === 'locked' || u.status === 'inactive') && (
+                    <button onClick={() => setConfirm({ open: true, user: u, newStatus: 'active' })}
+                      className="text-green-600 hover:text-green-800 text-sm">Mở khóa</button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -67,6 +100,16 @@ export default function UserList() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Tên đăng nhập *</label>
             <input value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} required
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Họ tên *</label>
+            <input value={form.full_name} onChange={e => setForm({ ...form, full_name: e.target.value })} required
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Số điện thoại</label>
+            <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
               className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
@@ -87,9 +130,10 @@ export default function UserList() {
           </div>
         </form>
       </Modal>
-      <ConfirmDialog isOpen={confirm.open} title="Thay đổi trạng thái tài khoản"
-        message={`Bạn có chắc muốn ${confirm.newStatus === 'inactive' ? 'khóa' : 'mở khóa'} tài khoản "${confirm.user?.username}"?`}
-        onConfirm={handleStatusChange} onCancel={() => setConfirm({ open: false, user: null, newStatus: '' })} danger={confirm.newStatus === 'inactive'} />
+      <ConfirmDialog isOpen={confirm.open}
+        title={confirm.newStatus === 'inactive' ? 'Ngưng hoạt động tài khoản?' : confirm.newStatus === 'locked' ? 'Khóa tài khoản?' : 'Mở khóa tài khoản?'}
+        message={`Bạn có chắc muốn ${confirm.newStatus === 'inactive' ? 'ngưng hoạt động' : confirm.newStatus === 'locked' ? 'khóa' : 'mở khóa'} tài khoản "${confirm.user?.username}"?`}
+        onConfirm={handleStatusChange} onCancel={() => setConfirm({ open: false, user: null, newStatus: '' })} danger={confirm.newStatus !== 'active'} />
     </Layout>
   );
 }

@@ -11,6 +11,8 @@ export default function BusList() {
   const [form, setForm] = useState({ bus_id: '', license_plate: '', capacity: '' });
   const [confirm, setConfirm] = useState({ open: false, bus: null, newStatus: '' });
   const [formError, setFormError] = useState('');
+  const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
 
   const load = async () => { try { const res = await getBuses(); setBuses(res.data.data); } finally { setLoading(false); } };
   useEffect(() => { load(); }, []);
@@ -38,10 +40,29 @@ export default function BusList() {
 
   if (loading) return <Layout><div className="flex justify-center py-12 text-gray-500">Đang tải...</div></Layout>;
 
+  const filtered = buses.filter(b => {
+    const matchSearch = !search || b.bus_id.toLowerCase().includes(search.toLowerCase()) || b.license_plate.toLowerCase().includes(search.toLowerCase());
+    const matchStatus = !filterStatus || b.status === filterStatus;
+    return matchSearch && matchStatus;
+  });
+
   return (
     <Layout>
-      <PageHeader title="Quản lý xe buýt" subtitle={`${buses.length} xe`}
+      <PageHeader title="Quản lý xe buýt" subtitle={`${filtered.length} / ${buses.length} xe`}
         action={<button onClick={openAdd} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition">+ Thêm xe</button>} />
+      {/* Tìm kiếm và lọc */}
+      <div className="flex gap-3 mb-4">
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Tìm theo mã xe hoặc biển số..."
+          className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+          className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="">Tất cả trạng thái</option>
+          <option value="active">Đang hoạt động</option>
+          <option value="broken">Hỏng</option>
+          <option value="inactive">Ngưng sử dụng</option>
+        </select>
+      </div>
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50 border-b border-gray-100">
@@ -52,7 +73,7 @@ export default function BusList() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {buses.map((b) => (
+            {filtered.map((b) => (
               <tr key={b.bus_id} className="hover:bg-gray-50 transition">
                 <td className="px-6 py-4">
                   <div className="font-medium text-gray-900">{b.bus_id}</div>
@@ -62,16 +83,26 @@ export default function BusList() {
                 <td className="px-6 py-4"><StatusBadge status={b.status} /></td>
                 <td className="px-6 py-4 text-right space-x-2">
                   <button onClick={() => openEdit(b)} className="text-blue-600 hover:text-blue-800 text-sm">Sửa</button>
-                  <button onClick={() => setConfirm({ open: true, bus: b, newStatus: nextStatus[b.status] })}
-                    className={`text-sm ${b.status === 'active' ? 'text-red-500 hover:text-red-700' : 'text-green-600 hover:text-green-800'}`}>
-                    {statusLabel[b.status]}
-                  </button>
+                  {b.status === 'active' && (<>
+                    <button onClick={() => setConfirm({ open: true, bus: b, newStatus: 'broken' })}
+                      className="text-orange-500 hover:text-orange-700 text-sm">Đánh dấu hỏng</button>
+                    <button onClick={() => setConfirm({ open: true, bus: b, newStatus: 'inactive' })}
+                      className="text-red-500 hover:text-red-700 text-sm">Ngưng sử dụng</button>
+                  </>)}
+                  {b.status === 'broken' && (
+                    <button onClick={() => setConfirm({ open: true, bus: b, newStatus: 'active' })}
+                      className="text-green-600 hover:text-green-800 text-sm">Kích hoạt lại</button>
+                  )}
+                  {b.status === 'inactive' && (
+                    <button onClick={() => setConfirm({ open: true, bus: b, newStatus: 'active' })}
+                      className="text-green-600 hover:text-green-800 text-sm">Kích hoạt lại</button>
+                  )}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        {buses.length === 0 && <div className="text-center py-12 text-gray-400">Chưa có xe nào</div>}
+        {filtered.length === 0 && <div className="text-center py-12 text-gray-400">Không tìm thấy xe nào</div>}
       </div>
       <Modal isOpen={showModal} title={editing ? 'Sửa xe buýt' : 'Thêm xe buýt'} onClose={() => setShowModal(false)}>
         <form onSubmit={handleSave} className="space-y-4">

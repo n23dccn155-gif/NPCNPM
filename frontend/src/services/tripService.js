@@ -4,6 +4,7 @@ export const getTrip = (code) => api.get(`/trips/${code}`);
 export const createTrip = (data) => api.post('/trips', data);
 
 export const getSchedule = (params) => api.get('/assignments/schedule', { params });
+export const getMySchedule = (params) => api.get('/assignments/my-schedule', { params });
 export const checkAssignment = (data) => api.post('/assignments/check', data);
 export const createAssignment = (data) => api.post('/assignments', data);
 export const replaceAssignment = (tripCode, data) => api.post(`/assignments/${tripCode}/replace`, data);

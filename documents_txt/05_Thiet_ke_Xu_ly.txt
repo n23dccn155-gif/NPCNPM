@@ -1,0 +1,1662 @@
+THIẾT KẾ XỬ LÝ
+1. Mục tiêu thiết kế xử lý
+Phần thiết kế xử lý mô tả cách hệ thống thực hiện các nghiệp vụ chính của phần mềm Phân công chuyến xe buýt ở Thành phố Hồ Chí Minh. Các xử lý được xây dựng dựa trên kết quả khảo sát hiện trạng, xác định yêu cầu, mô hình Use Case, thiết kế cơ sở dữ liệu và thiết kế giao diện web.
+Mục tiêu của phần thiết kế xử lý là:
+STT
+Mục tiêu
+Mô tả
+1
+Mô tả luồng xử lý nghiệp vụ
+Trình bày cách hệ thống phản hồi khi người dùng thực hiện chức năng
+2
+Làm rõ dữ liệu đầu vào và đầu ra
+Xác định dữ liệu được nhập, bảng dữ liệu sử dụng và kết quả xử lý
+3
+Thể hiện các ràng buộc nghiệp vụ
+Kiểm tra trạng thái tuyến, xe, tài xế, trùng lịch, nghỉ đã duyệt và thời gian lái liên tục
+4
+Đồng bộ với giao diện và cơ sở dữ liệu
+Bảo đảm mỗi chức năng trên giao diện có xử lý và dữ liệu tương ứng
+5
+Làm cơ sở cho cài đặt và kiểm thử
+Giúp nhóm lập trình triển khai chức năng đúng phạm vi đề tài
+Trong hệ thống, nghiệp vụ trung tâm là lập phiếu phân công chuyến và điều chỉnh phân công chuyến. Khi phân công xe và tài xế cho một chuyến, hệ thống phải kiểm tra:
+Chuyến có tồn tại và đang phù hợp để phân công hay không.
+Xe có đang hoạt động hay không.
+Tài xế có đang làm việc hay không.
+Tài xế có yêu cầu nghỉ đã được duyệt trùng thời gian chuyến hay không.
+Xe hoặc tài xế có bị trùng lịch với chuyến khác hay không.
+Việc phân công có làm tài xế lái liên tục quá 240 phút hay không.
+Ngoài các xử lý vận hành chuyến, hệ thống còn hỗ trợ quản lý danh mục tuyến xe, xe buýt, tài xế; duyệt yêu cầu nghỉ; ghi nhận sự cố; theo dõi thực hiện chuyến và lập báo cáo thống kê.
+2. Danh sách các xử lý chính
+Để đồng bộ với đầy đủ tính năng mới, danh sách xử lý được chuẩn hóa lại như sau:
+STT
+Mã xử lý
+Tên xử lý
+Tác nhân chính
+Mức độ
+1
+XL01
+Đăng nhập hệ thống
+Tất cả người dùng
+Bắt buộc
+2
+XL02
+Quản lý tài khoản và phân quyền
+Quản trị viên hệ thống
+Bắt buộc
+3
+XL03
+Cấu hình tham số hệ thống
+Quản trị viên hệ thống
+Bắt buộc
+4
+XL04
+Quản lý danh mục tuyến xe
+Quản lý
+Bắt buộc
+5
+XL05
+Quản lý danh mục xe buýt
+Quản lý
+Bắt buộc
+6
+XL06
+Quản lý danh mục tài xế
+Quản lý
+Bắt buộc
+7
+XL07
+Lập chuyến xe
+Nhân viên điều phối
+Bắt buộc
+8
+XL08
+Lập phiếu phân công chuyến
+Nhân viên điều phối
+Rất quan trọng
+9
+XL09
+Kiểm tra điều kiện phân công
+Hệ thống
+Rất quan trọng
+10
+XL10
+Điều chỉnh phân công chuyến
+Nhân viên điều phối
+Rất quan trọng
+11
+XL11
+Gửi yêu cầu xin nghỉ
+Tài xế
+Bắt buộc
+12
+XL12
+Duyệt hoặc từ chối yêu cầu nghỉ
+Quản lý
+Bắt buộc
+13
+XL13
+Xử lý chuyến bị ảnh hưởng do tài xế nghỉ
+Nhân viên điều phối
+Bắt buộc
+14
+XL14
+Báo sự cố xe hoặc chuyến
+Tài xế
+Bắt buộc
+15
+XL15
+Xử lý xe hỏng và chuyến bị ảnh hưởng
+Nhân viên điều phối
+Bắt buộc
+16
+XL16
+Ghi nhận thực hiện chuyến
+Nhân viên điều phối
+Bắt buộc
+17
+XL17
+Lập báo cáo thống kê
+Quản lý
+Bắt buộc
+18
+XL18
+Xem thông tin cá nhân và đổi mật khẩu
+Tất cả người dùng
+Bắt buộc
+19
+XL19
+Xem nhật ký hệ thống
+Quản trị viên hệ thống
+Mở rộng
+20
+XL20
+Thông báo nội bộ
+Hệ thống, người nhận
+Mở rộng
+3. Mô tả chi tiết các xử lý
+3.1. XL01 — Đăng nhập hệ thống
+Thành phần
+Nội dung
+Mã xử lý
+XL01
+Tên xử lý
+Đăng nhập hệ thống
+Tác nhân
+Quản trị viên hệ thống, Quản lý, Nhân viên điều phối, Tài xế
+Màn hình liên quan
+MH_LOGIN, MH_DASHBOARD
+Mục đích
+Xác thực người dùng và chuyển đến giao diện phù hợp với vai trò
+Dữ liệu đầu vào
+username, password
+Dữ liệu sử dụng
+users, roles
+Dữ liệu đầu ra
+Thông tin phiên đăng nhập, vai trò người dùng, trang tổng quan tương ứng
+Các bước xử lý
+STT
+Mô tả
+1
+Người dùng nhập tên đăng nhập và mật khẩu
+2
+Hệ thống kiểm tra các trường bắt buộc
+3
+Hệ thống tìm tài khoản theo username trong bảng users
+4
+Hệ thống kiểm tra mật khẩu nhập vào với password_hash
+5
+Hệ thống kiểm tra trạng thái tài khoản
+6
+Nếu tài khoản có trạng thái inactive hoặc locked, hệ thống từ chối đăng nhập
+7
+Nếu hợp lệ, hệ thống lấy vai trò từ bảng roles
+8
+Hệ thống tạo phiên đăng nhập
+9
+Hệ thống chuyển người dùng đến MH_DASHBOARD theo vai trò
+Điều kiện hợp lệ
+Điều kiện
+Mô tả
+Tài khoản tồn tại
+username có trong bảng users
+Mật khẩu đúng
+Mật khẩu nhập vào khớp với password_hash
+Tài khoản hoạt động
+users.status = 'active'
+Vai trò hợp lệ
+Người dùng có role_id tham chiếu đến bảng roles
+Giả mã xử lý
+Input: username, password
+Tìm user theo username.
+Nếu không tìm thấy user:
+Thông báo “Tên đăng nhập hoặc mật khẩu không đúng”.
+Kết thúc xử lý.
+Nếu mật khẩu không khớp với password_hash:
+Thông báo “Tên đăng nhập hoặc mật khẩu không đúng”.
+Kết thúc xử lý.
+Nếu user.status khác active:
+Thông báo “Tài khoản không được phép đăng nhập”.
+Kết thúc xử lý.
+Lấy vai trò của user.Tạo phiên đăng nhập.Chuyển đến Dashboard tương ứng với vai trò.
+Kết quả
+Trường hợp
+Kết quả
+Đăng nhập thành công
+Người dùng truy cập được hệ thống
+Sai tài khoản hoặc mật khẩu
+Hiển thị thông báo lỗi
+Tài khoản bị khóa hoặc ngưng sử dụng
+Không cho đăng nhập
+3.2. XL02 — Quản lý tài khoản và phân quyền
+Thành phần
+Nội dung
+Mã xử lý
+XL02
+Tên xử lý
+Quản lý tài khoản và phân quyền
+Tác nhân
+Quản trị viên hệ thống
+Màn hình liên quan
+MH_USER_LIST, MH_USER_FORM, MH_ROLE_ASSIGN
+Mục đích
+Tạo, cập nhật, khóa/mở khóa tài khoản và gán vai trò sử dụng hệ thống
+Dữ liệu đầu vào
+username, password, full_name, phone, role_id, status
+Dữ liệu sử dụng
+users, roles, drivers
+Dữ liệu đầu ra
+Danh sách tài khoản đã được cập nhật
+Các bước xử lý
+STT
+Mô tả
+1
+Quản trị viên mở màn hình quản lý tài khoản
+2
+Hệ thống hiển thị danh sách tài khoản hiện có
+3
+Quản trị viên chọn thêm mới hoặc chỉnh sửa tài khoản
+4
+Hệ thống kiểm tra tên đăng nhập có bị trùng không
+5
+Hệ thống kiểm tra vai trò được chọn có hợp lệ không
+6
+Nếu tạo tài khoản mới, hệ thống mã hóa mật khẩu trước khi lưu
+7
+Nếu cập nhật trạng thái, hệ thống lưu trạng thái active, inactive hoặc locked
+8
+Nếu tài khoản được gán vai trò Tài xế, hệ thống yêu cầu tạo hoặc liên kết hồ sơ tài xế tương ứng
+9
+Hệ thống thông báo thao tác thành công
+Giả mã xử lý
+Input: thông tin tài khoản, thao tác thêm mới hoặc cập nhật.
+Nếu username bị trùng khi thêm mới:
+Thông báo “Tên đăng nhập đã tồn tại”.
+Kết thúc xử lý.
+Nếu role_id không tồn tại:
+Thông báo “Vai trò không hợp lệ”.
+Kết thúc xử lý.
+Nếu thêm mới:
+Mã hóa mật khẩu.
+Tạo bản ghi trong users.
+Nếu cập nhật:
+Cập nhật họ tên, số điện thoại, vai trò hoặc trạng thái.
+Nếu vai trò được chọn là DRIVER:
+Kiểm tra tài khoản có hồ sơ trong drivers chưa.
+Nếu chưa có, yêu cầu tạo hồ sơ tài xế.
+Thông báo “Cập nhật tài khoản thành công”.
+Kết quả
+Trường hợp
+Kết quả
+Thêm tài khoản hợp lệ
+Tài khoản mới được tạo
+Username bị trùng
+Không cho lưu
+Khóa tài khoản
+Người dùng không thể đăng nhập
+Gán vai trò tài xế
+Có thể liên kết với hồ sơ tài xế
+3.3. XL03 — Cấu hình tham số hệ thống
+Thành phần
+Nội dung
+Mã xử lý
+XL03
+Tên xử lý
+Cấu hình tham số hệ thống
+Tác nhân
+Quản trị viên hệ thống
+Màn hình liên quan
+MH_CONFIG
+Mục đích
+Quản lý các tham số dùng trong kiểm tra phân công và phiên đăng nhập
+Dữ liệu đầu vào
+config_key, config_value
+Dữ liệu sử dụng
+configurations
+Dữ liệu đầu ra
+Giá trị cấu hình mới được cập nhật
+Các tham số chính
+Tham số
+Giá trị mặc định
+Ý nghĩa
+min_break_time_minutes
+15
+Thời gian nghỉ tối thiểu giữa hai chuyến
+max_continuous_driving_minutes
+240
+Thời gian lái xe liên tục tối đa
+session_timeout_minutes
+30
+Thời gian tự động đăng xuất khi không thao tác
+Các bước xử lý
+STT
+Mô tả
+1
+Quản trị viên mở màn hình cấu hình
+2
+Hệ thống hiển thị danh sách tham số hiện tại
+3
+Quản trị viên chọn tham số cần sửa
+4
+Quản trị viên nhập giá trị mới
+5
+Hệ thống kiểm tra kiểu dữ liệu theo config_data_type
+6
+Hệ thống kiểm tra giá trị có hợp lệ hay không
+7
+Nếu hợp lệ, hệ thống cập nhật cấu hình
+8
+Hệ thống thông báo cập nhật thành công
+Giả mã xử lý
+Input: config_key, new_value
+Tìm cấu hình theo config_key.
+Nếu cấu hình không tồn tại:
+Thông báo “Tham số cấu hình không tồn tại”.
+Kết thúc xử lý.
+Kiểm tra new_value theo config_data_type.
+Nếu giá trị không hợp lệ:
+Thông báo “Giá trị cấu hình không hợp lệ”.
+Kết thúc xử lý.
+Cập nhật config_value.Thông báo “Cập nhật cấu hình thành công”.
+3.4. XL04 — Quản lý danh mục tuyến xe
+Thành phần
+Nội dung
+Mã xử lý
+XL04
+Tên xử lý
+Quản lý danh mục tuyến xe
+Tác nhân
+Quản lý
+Màn hình liên quan
+MH_ROUTE_LIST, MH_ROUTE_FORM
+Mục đích
+Thêm, sửa, tra cứu và ngưng hoạt động tuyến xe
+Dữ liệu đầu vào
+route_code, route_name, start_point, end_point, estimated_minutes, status
+Dữ liệu sử dụng
+routes, trips
+Dữ liệu đầu ra
+Danh sách tuyến xe đã cập nhật
+Các bước xử lý
+STT
+Mô tả
+1
+Quản lý mở danh sách tuyến xe
+2
+Hệ thống hiển thị dữ liệu tuyến hiện có
+3
+Quản lý chọn thêm mới, sửa hoặc ngưng hoạt động tuyến
+4
+Hệ thống kiểm tra dữ liệu bắt buộc
+5
+Khi thêm mới, hệ thống kiểm tra route_code có bị trùng không
+6
+Hệ thống kiểm tra estimated_minutes > 0
+7
+Nếu ngưng hoạt động tuyến, hệ thống cập nhật status = 'inactive'
+8
+Tuyến đã có chuyến lịch sử không bị xóa vật lý
+9
+Hệ thống thông báo xử lý thành công
+Giả mã xử lý
+Input: thao tác, thông tin tuyến.
+Nếu thao tác = thêm mới:
+Nếu route_code đã tồn tại, thông báo lỗi và kết thúc.
+Nếu estimated_minutes không hợp lệ, thông báo lỗi và kết thúc.
+Tạo tuyến mới với trạng thái active.
+Nếu thao tác = cập nhật:
+Tìm tuyến theo route_code.
+Nếu không tồn tại, thông báo lỗi.
+Cập nhật thông tin tuyến.
+Nếu thao tác = ngưng hoạt động:
+Cập nhật routes.status = 'inactive'.
+Không xóa dữ liệu tuyến khỏi hệ thống.
+Thông báo kết quả xử lý.
+Kết quả
+Trường hợp
+Kết quả
+Thêm tuyến hợp lệ
+Tuyến mới được tạo
+Mã tuyến bị trùng
+Không cho lưu
+Ngưng hoạt động tuyến
+Tuyến không được dùng để lập chuyến mới
+Tuyến đã có chuyến lịch sử
+Không xóa vật lý
+3.5. XL05 — Quản lý danh mục xe buýt
+Thành phần
+Nội dung
+Mã xử lý
+XL05
+Tên xử lý
+Quản lý danh mục xe buýt
+Tác nhân
+Quản lý
+Màn hình liên quan
+MH_BUS_LIST, MH_BUS_FORM
+Mục đích
+Thêm, sửa, tra cứu, cập nhật trạng thái và ngưng sử dụng xe buýt
+Dữ liệu đầu vào
+license_plate, capacity, status
+Dữ liệu sử dụng
+buses, trip_assignments
+Dữ liệu đầu ra
+Danh sách xe buýt đã cập nhật
+Trạng thái xe
+Giá trị
+Ý nghĩa
+Có được phân công không?
+active
+Xe đang hoạt động
+Có
+broken
+Xe bị hỏng
+Không
+inactive
+Xe ngưng sử dụng
+Không
+Các bước xử lý
+STT
+Mô tả
+1
+Quản lý mở danh sách xe buýt
+2
+Hệ thống hiển thị thông tin xe hiện có
+3
+Quản lý chọn thêm mới, sửa, cập nhật trạng thái hoặc ngưng sử dụng xe
+4
+Hệ thống kiểm tra biển số không được trùng
+5
+Hệ thống kiểm tra số chỗ phải lớn hơn 0
+6
+Nếu cập nhật trạng thái thành broken, xe không được chọn cho phân công mới
+7
+Nếu cập nhật trạng thái thành inactive, xe không còn được sử dụng trong vận hành mới
+8
+Xe đã có lịch sử phân công không bị xóa vật lý
+9
+Hệ thống thông báo kết quả xử lý
+Giả mã xử lý
+Input: thao tác, thông tin xe.
+Nếu thao tác = thêm mới:
+Kiểm tra license_plate có bị trùng không.
+Kiểm tra capacity > 0.
+Tạo xe mới với status = active.
+Nếu thao tác = cập nhật:
+Cập nhật thông tin biển số, số chỗ hoặc trạng thái.
+Nếu thao tác = đánh dấu hỏng:
+Cập nhật buses.status = 'broken'.
+Xe không được phân công mới.
+Nếu thao tác = ngưng sử dụng:
+Cập nhật buses.status = 'inactive'.
+Không xóa xe khỏi hệ thống.
+Thông báo kết quả xử lý.
+Ghi chú
+Quản lý là người phụ trách danh mục xe buýt. Trong trường hợp tài xế báo xe hỏng và Nhân viên điều phối xác nhận sự cố cần xử lý khẩn cấp, hệ thống có thể đánh dấu xe ở trạng thái broken để ngăn phân công mới; Quản lý vẫn có quyền xem và cập nhật lại trạng thái xe trong danh mục.
+3.6. XL06 — Quản lý danh mục tài xế
+Thành phần
+Nội dung
+Mã xử lý
+XL06
+Tên xử lý
+Quản lý danh mục tài xế
+Tác nhân
+Quản lý
+Màn hình liên quan
+MH_DRIVER_LIST, MH_DRIVER_FORM
+Mục đích
+Thêm, sửa, tra cứu, cập nhật trạng thái và ngưng làm việc tài xế
+Dữ liệu đầu vào
+driver_code, user_id, license_type, status
+Dữ liệu sử dụng
+drivers, users, trip_assignments, leave_requests
+Dữ liệu đầu ra
+Danh sách tài xế đã cập nhật
+Trạng thái tài xế
+Giá trị
+Ý nghĩa
+Có được phân công không?
+active
+Đang làm việc
+Có, nếu không có nghỉ đã duyệt trùng chuyến
+suspended
+Tạm nghỉ/Tạm ngưng công tác
+Không
+inactive
+Ngưng làm việc
+Không
+Các bước xử lý
+STT
+Mô tả
+1
+Quản lý mở danh sách tài xế
+2
+Hệ thống hiển thị danh sách tài xế
+3
+Quản lý chọn thêm mới, sửa hoặc cập nhật trạng thái
+4
+Hệ thống kiểm tra driver_code có bị trùng không
+5
+Hệ thống kiểm tra tài khoản liên kết tồn tại và có vai trò phù hợp
+6
+Hệ thống kiểm tra một tài khoản chỉ liên kết với tối đa một tài xế
+7
+Nếu trạng thái là suspended hoặc inactive, tài xế không được phân công mới
+8
+Tài xế đã có lịch sử phân công không bị xóa vật lý
+9
+Hệ thống thông báo kết quả xử lý
+Giả mã xử lý
+Input: thao tác, thông tin tài xế.
+Nếu thao tác = thêm mới:
+Kiểm tra driver_code không trùng.
+Kiểm tra user_id tồn tại và chưa liên kết tài xế khác.
+Tạo hồ sơ tài xế với status = active.
+Nếu thao tác = cập nhật:
+Cập nhật loại bằng lái hoặc trạng thái.
+Nếu thao tác = tạm nghỉ:
+Cập nhật drivers.status = 'suspended'.
+Nếu thao tác = ngưng làm việc:
+Cập nhật drivers.status = 'inactive'.
+Không xóa hồ sơ tài xế.
+Thông báo kết quả xử lý.
+Ghi chú
+Nghỉ phép theo ngày hoặc theo ca không được lưu cố định trong drivers.status. Hệ thống xác định tài xế đang nghỉ bằng cách kiểm tra yêu cầu nghỉ có trạng thái approved trong bảng leave_requests.
+3.7. XL07 — Lập chuyến xe
+Thành phần
+Nội dung
+Mã xử lý
+XL07
+Tên xử lý
+Lập chuyến xe
+Tác nhân
+Nhân viên điều phối
+Màn hình liên quan
+MH_TRIP_LIST, MH_TRIP_FORM
+Mục đích
+Tạo chuyến xe cụ thể từ một tuyến đang hoạt động
+Dữ liệu đầu vào
+route_code, trip_date, direction, scheduled_departure, scheduled_arrival
+Dữ liệu sử dụng
+routes, trips
+Dữ liệu đầu ra
+Chuyến xe mới có trạng thái unassigned
+Các bước xử lý
+STT
+Mô tả
+1
+Nhân viên điều phối chọn chức năng lập chuyến
+2
+Hệ thống hiển thị form lập chuyến
+3
+Nhân viên điều phối chọn tuyến, ngày chạy, hướng tuyến và thời gian dự kiến
+4
+Hệ thống kiểm tra dữ liệu bắt buộc
+5
+Hệ thống kiểm tra tuyến có tồn tại không
+6
+Hệ thống kiểm tra tuyến có trạng thái active không
+7
+Hệ thống kiểm tra giờ kết thúc dự kiến lớn hơn giờ xuất bến dự kiến
+8
+Nếu hợp lệ, hệ thống sinh trip_code
+9
+Hệ thống lưu chuyến mới với trạng thái unassigned
+10
+Hệ thống thông báo lập chuyến thành công
+Điều kiện hợp lệ
+Điều kiện
+Mô tả
+Tuyến tồn tại
+route_code có trong bảng routes
+Tuyến hoạt động
+routes.status = 'active'
+Thời gian hợp lệ
+scheduled_arrival > scheduled_departure
+Cùng ngày vận hành
+Chuyến được giả định bắt đầu và kết thúc trong cùng ngày
+Giả mã xử lý
+Input: route_code, trip_date, direction, scheduled_departure, scheduled_arrival
+Nếu thiếu dữ liệu bắt buộc:
+Thông báo lỗi.
+Kết thúc xử lý.
+Tìm tuyến theo route_code.
+Nếu tuyến không tồn tại:
+Thông báo “Tuyến không tồn tại”.
+Kết thúc xử lý.
+Nếu tuyến.status khác active:
+Thông báo “Tuyến đang ngưng hoạt động”.
+Kết thúc xử lý.
+Nếu scheduled_arrival nhỏ hơn hoặc bằng scheduled_departure:
+Thông báo “Giờ kết thúc dự kiến phải lớn hơn giờ xuất bến dự kiến”.
+Kết thúc xử lý.
+Sinh trip_code mới.Lưu chuyến với status = unassigned.Thông báo “Lập chuyến thành công”.
+3.8. XL08 — Lập phiếu phân công chuyến
+Thành phần
+Nội dung
+Mã xử lý
+XL08
+Tên xử lý
+Lập phiếu phân công chuyến
+Tác nhân
+Nhân viên điều phối
+Màn hình liên quan
+MH_ASSIGNMENT_FORM, MH_CONFLICT_RESULT
+Mục đích
+Gán xe và tài xế cho một chuyến chưa được phân công
+Dữ liệu đầu vào
+trip_code, bus_id, driver_code, dispatcher_id
+Dữ liệu sử dụng
+trips, buses, drivers, trip_assignments, leave_requests, configurations
+Dữ liệu đầu ra
+Phiếu phân công mới có trạng thái active
+Các bước xử lý
+STT
+Mô tả
+1
+Nhân viên điều phối chọn chuyến cần phân công
+2
+Hệ thống hiển thị thông tin chuyến
+3
+Nhân viên điều phối chọn xe và tài xế
+4
+Nhân viên điều phối nhấn nút “Kiểm tra phân công”
+5
+Hệ thống kiểm tra chuyến có tồn tại không
+6
+Hệ thống kiểm tra chuyến đã có phiếu phân công active chưa
+7
+Nếu chuyến đã có phiếu active, hệ thống không cho lập mới và gợi ý chuyển sang điều chỉnh phân công
+8
+Hệ thống thực hiện XL09 — Kiểm tra điều kiện phân công
+9
+Nếu có lỗi, hệ thống hiển thị danh sách cảnh báo và khóa nút lưu
+10
+Nếu hợp lệ, nhân viên điều phối chọn lưu phân công
+11
+Hệ thống sinh assignment_code
+12
+Hệ thống tạo phiếu phân công trạng thái active
+13
+Hệ thống cập nhật trips.status = 'assigned'
+14
+Hệ thống thông báo phân công thành công
+Điều kiện hợp lệ
+Điều kiện
+Mô tả
+Chuyến tồn tại
+trip_code tồn tại trong trips
+Chuyến chưa có phiếu hiện hành
+Không có trip_assignments.status = 'active' của chuyến
+Xe khả dụng
+buses.status = 'active'
+Tài xế khả dụng
+drivers.status = 'active'
+Tài xế không nghỉ
+Không có yêu cầu nghỉ approved trùng thời gian chuyến
+Không trùng lịch xe
+Xe không có phiếu active chồng chéo thời gian
+Không trùng lịch tài xế
+Tài xế không có phiếu active chồng chéo thời gian
+Không vượt thời gian lái liên tục
+Chuỗi lái liên tục không vượt cấu hình mặc định 240 phút
+Giả mã xử lý
+Input: trip_code, bus_id, driver_code, dispatcher_id
+Lấy chuyến theo trip_code.
+Nếu chuyến không tồn tại:
+Thông báo “Chuyến không tồn tại”.
+Kết thúc xử lý.
+Nếu chuyến đã có phiếu phân công active:
+Thông báo “Chuyến đã được phân công”.
+Gợi ý chuyển sang chức năng Điều chỉnh phân công chuyến.
+Kết thúc xử lý lập mới.
+Gọi XL09 để kiểm tra điều kiện phân công.
+Nếu XL09 trả về danh sách lỗi:
+Hiển thị lỗi.
+Không cho lưu phiếu phân công.
+Nếu kết quả hợp lệ:
+Sinh assignment_code.
+Lưu phiếu vào trip_assignments với status = active.
+Cập nhật trips.status = 'assigned'.
+Thông báo “Phân công thành công”.
+Kết quả
+Trường hợp
+Kết quả
+Phân công hợp lệ
+Tạo phiếu phân công mới
+Chuyến đã có phiếu active
+Chuyển hướng sang điều chỉnh phân công
+Xe hoặc tài xế không khả dụng
+Không cho lưu
+Có xung đột thời gian
+Hiển thị cảnh báo
+Vượt thời gian lái liên tục
+Không cho lưu
+3.9. XL09 — Kiểm tra điều kiện phân công
+Thành phần
+Nội dung
+Mã xử lý
+XL09
+Tên xử lý
+Kiểm tra điều kiện phân công
+Tác nhân
+Hệ thống
+Màn hình liên quan
+MH_ASSIGNMENT_FORM, MH_ASSIGNMENT_ADJUST, MH_CONFLICT_RESULT
+Mục đích
+Kiểm tra tính hợp lệ của xe và tài xế trước khi lưu phân công
+Dữ liệu đầu vào
+current_trip, bus_id, driver_code, phiếu phân công cần loại trừ nếu đang điều chỉnh
+Dữ liệu sử dụng
+trips, buses, drivers, trip_assignments, leave_requests, configurations
+Dữ liệu đầu ra
+Kết quả hợp lệ hoặc danh sách cảnh báo
+Các điều kiện kiểm tra
+STT
+Điều kiện
+Nội dung kiểm tra
+1
+Trạng thái xe
+Xe phải có status = 'active'
+2
+Trạng thái tài xế
+Tài xế phải có status = 'active'
+3
+Yêu cầu nghỉ đã duyệt
+Tài xế không có nghỉ approved trùng thời gian chuyến
+4
+Trùng lịch xe
+Xe không có chuyến active khác chồng chéo thời gian
+5
+Trùng lịch tài xế
+Tài xế không có chuyến active khác chồng chéo thời gian
+6
+Thời gian lái liên tục
+Tài xế không bị phân công lái liên tục quá giới hạn cấu hình
+Công thức kiểm tra chồng chéo thời gian
+Hai chuyến A và B được xem là chồng chéo thời gian nếu:
+A.scheduled_departure < B.scheduled_arrival
+và
+B.scheduled_departure < A.scheduled_arrival
+Công thức này được áp dụng để kiểm tra cả xe và tài xế.
+Công thức kiểm tra thời gian lái liên tục
+Thời gian nghỉ giữa hai chuyến liên tiếp, tính theo phút:
+Thời gian nghỉ =
+Giờ xuất bến dự kiến của chuyến sau
+-
+Giờ kết thúc dự kiến của chuyến trước
+Nếu:
+Thời gian nghỉ < min_break_time_minutes
+thì hai chuyến thuộc cùng một chuỗi lái liên tục.
+Thời gian lái liên tục của chuỗi:
+Thời gian lái liên tục =
+Giờ kết thúc dự kiến của chuyến cuối trong chuỗi
+-
+Giờ xuất bến dự kiến của chuyến đầu tiên trong chuỗi
+Nếu:
+Thời gian lái liên tục > max_continuous_driving_minutes
+thì hệ thống cảnh báo vi phạm.
+Các bước xử lý
+STT
+Mô tả
+1
+Hệ thống lấy thông tin chuyến cần kiểm tra
+2
+Hệ thống kiểm tra trạng thái xe
+3
+Hệ thống kiểm tra trạng thái tài xế
+4
+Hệ thống kiểm tra yêu cầu nghỉ đã duyệt của tài xế
+5
+Hệ thống tìm các phiếu phân công active của cùng xe trong cùng ngày
+6
+Hệ thống kiểm tra trùng lịch xe
+7
+Hệ thống tìm các phiếu phân công active của cùng tài xế trong cùng ngày
+8
+Hệ thống kiểm tra trùng lịch tài xế
+9
+Hệ thống lấy tham số thời gian nghỉ và thời gian lái liên tục từ configurations
+10
+Hệ thống kiểm tra chuỗi lái liên tục của tài xế
+11
+Nếu có vi phạm, hệ thống trả về danh sách cảnh báo
+12
+Nếu không có vi phạm, hệ thống trả về kết quả hợp lệ
+Giả mã xử lý
+Input: current_trip, bus_id, driver_code, excluded_assignment_code nếu có
+errors = danh sách rỗng.
+Lấy xe theo bus_id.Nếu xe không tồn tại hoặc xe.status khác active:
+Thêm lỗi “Xe không khả dụng”.
+Lấy tài xế theo driver_code.Nếu tài xế không tồn tại hoặc tài xế.status khác active:
+Thêm lỗi “Tài xế không khả dụng”.
+Nếu tài xế có yêu cầu nghỉ approved trùng ngày/ca của current_trip:
+Thêm lỗi “Tài xế có yêu cầu nghỉ đã được duyệt”.
+Lấy các chuyến active khác của cùng xe trong cùng ngày, không tính phiếu đang được thay thế nếu có.Nếu có chuyến chồng chéo thời gian:
+Thêm lỗi “Xe bị trùng lịch với chuyến ...”.
+Lấy các chuyến active khác của cùng tài xế trong cùng ngày, không tính phiếu đang được thay thế nếu có.Nếu có chuyến chồng chéo thời gian:
+Thêm lỗi “Tài xế bị trùng lịch với chuyến ...”.
+Lấy min_break_time_minutes và max_continuous_driving_minutes.Đưa current_trip vào lịch dự kiến của tài xế và kiểm tra chuỗi lái liên tục.Nếu vượt giới hạn:
+Thêm lỗi “Tài xế lái liên tục quá thời gian cho phép”.
+Nếu errors không rỗng:
+Trả về danh sách lỗi.
+Ngược lại:
+Trả về kết quả hợp lệ.
+Ghi chú
+Khi XL09 được gọi từ chức năng điều chỉnh phân công, hệ thống phải loại trừ phiếu phân công active cũ của chính chuyến đang được thay thế khỏi quá trình kiểm tra trùng lịch. Nếu không loại trừ, hệ thống sẽ nhận nhầm chuyến đang điều chỉnh là xung đột với chính nó.
+3.10. XL10 — Điều chỉnh phân công chuyến
+Thành phần
+Nội dung
+Mã xử lý
+XL10
+Tên xử lý
+Điều chỉnh phân công chuyến
+Tác nhân
+Nhân viên điều phối
+Màn hình liên quan
+MH_ASSIGNMENT_ADJUST, MH_AFFECTED_TRIPS
+Mục đích
+Đổi xe hoặc đổi tài xế cho một chuyến đã được phân công
+Dữ liệu đầu vào
+trip_code, new_bus_id, new_driver_code, dispatcher_id
+Dữ liệu sử dụng
+trips, buses, drivers, trip_assignments, leave_requests, configurations
+Dữ liệu đầu ra
+Phiếu cũ chuyển sang replaced, phiếu mới có trạng thái active
+Các trường hợp sử dụng
+Trường hợp
+Mô tả
+Điều phối chủ động đổi xe hoặc tài xế
+Muốn điều chỉnh phân công trước khi chuyến thực hiện
+Tài xế nghỉ đã được duyệt
+Chuyến cần thay tài xế
+Xe bị hỏng
+Chuyến cần thay xe
+Các bước xử lý
+STT
+Mô tả
+1
+Nhân viên điều phối chọn chuyến cần điều chỉnh
+2
+Hệ thống lấy phiếu phân công active hiện tại
+3
+Hệ thống hiển thị xe và tài xế đang được phân công
+4
+Nhân viên điều phối chọn xe mới hoặc tài xế mới
+5
+Hệ thống gọi XL09 để kiểm tra phân công mới
+6
+Khi kiểm tra, hệ thống loại trừ phiếu active cũ của chính chuyến đang điều chỉnh
+7
+Nếu có xung đột, hệ thống cảnh báo và không cho lưu
+8
+Nếu hợp lệ, hệ thống cập nhật phiếu cũ thành replaced
+9
+Hệ thống sinh mã phiếu mới
+10
+Hệ thống tạo phiếu phân công mới với trạng thái active
+11
+Hệ thống thông báo điều chỉnh thành công
+Giả mã xử lý
+Input: trip_code, new_bus_id, new_driver_code, dispatcher_id
+Lấy chuyến theo trip_code.
+Nếu chuyến không tồn tại:
+Thông báo “Chuyến không tồn tại”.
+Kết thúc xử lý.
+Lấy phiếu phân công active hiện tại của chuyến.
+Nếu không có phiếu active:
+Thông báo “Chuyến chưa có phân công, hãy lập phiếu phân công mới”.
+Kết thúc xử lý.
+Gọi XL09 với dữ liệu xe mới, tài xế mới và excluded_assignment_code = phiếu active hiện tại.
+Nếu XL09 trả về lỗi:
+Hiển thị lỗi.
+Không cho lưu điều chỉnh.
+Nếu hợp lệ:
+Cập nhật phiếu cũ: status = replaced.
+Sinh assignment_code mới.
+Tạo phiếu mới với new_bus_id, new_driver_code, dispatcher_id, status = active.
+Thông báo “Điều chỉnh phân công thành công”.
+Kết quả
+Trường hợp
+Kết quả
+Dữ liệu hợp lệ
+Phiếu cũ chuyển replaced, phiếu mới được tạo
+Chuyến chưa có phân công
+Yêu cầu lập phân công mới
+Xe hoặc tài xế mới không khả dụng
+Không cho lưu
+Trùng lịch hoặc vượt thời gian lái liên tục
+Hiển thị cảnh báo
+3.11. XL11 — Gửi yêu cầu xin nghỉ
+Thành phần
+Nội dung
+Mã xử lý
+XL11
+Tên xử lý
+Gửi yêu cầu xin nghỉ
+Tác nhân
+Tài xế
+Màn hình liên quan
+MH_LEAVE_REQUEST
+Mục đích
+Cho phép tài xế gửi yêu cầu nghỉ theo ngày và ca làm việc
+Dữ liệu đầu vào
+driver_code, leave_date, shift_type, reason
+Dữ liệu sử dụng
+drivers, leave_requests
+Dữ liệu đầu ra
+Yêu cầu nghỉ mới trạng thái pending
+Các bước xử lý
+STT
+Mô tả
+1
+Tài xế mở màn hình gửi yêu cầu nghỉ
+2
+Hệ thống xác định tài xế đang đăng nhập
+3
+Tài xế chọn ngày nghỉ, ca nghỉ và nhập lý do
+4
+Hệ thống kiểm tra dữ liệu bắt buộc
+5
+Hệ thống kiểm tra ngày nghỉ hợp lệ
+6
+Nếu hợp lệ, hệ thống tạo yêu cầu nghỉ với trạng thái pending
+7
+Hệ thống thông báo gửi yêu cầu thành công
+Giả mã xử lý
+Input: driver_code, leave_date, shift_type, reason
+Nếu thiếu leave_date hoặc shift_type:
+Thông báo “Vui lòng nhập đầy đủ thông tin nghỉ”.
+Kết thúc xử lý.
+Nếu ngày nghỉ không hợp lệ:
+Thông báo lỗi.
+Kết thúc xử lý.
+Tạo bản ghi trong leave_requests:
+driver_code = tài xế đang đăng nhập.
+requested_at = thời điểm hiện tại.
+leave_date = ngày xin nghỉ.
+shift_type = ca nghỉ.
+reason = lý do.
+status = pending.
+Thông báo “Gửi yêu cầu nghỉ thành công”.
+3.12. XL12 — Duyệt hoặc từ chối yêu cầu nghỉ
+Thành phần
+Nội dung
+Mã xử lý
+XL12
+Tên xử lý
+Duyệt hoặc từ chối yêu cầu nghỉ
+Tác nhân
+Quản lý
+Màn hình liên quan
+MH_LEAVE_APPROVAL
+Mục đích
+Xử lý yêu cầu nghỉ do tài xế gửi
+Dữ liệu đầu vào
+request_id, quyết định duyệt/từ chối, manager_id
+Dữ liệu sử dụng
+leave_requests, drivers, trips, trip_assignments
+Dữ liệu đầu ra
+Trạng thái yêu cầu nghỉ được cập nhật; danh sách chuyến bị ảnh hưởng nếu có
+Các bước xử lý
+STT
+Mô tả
+1
+Quản lý mở danh sách yêu cầu nghỉ
+2
+Hệ thống hiển thị các yêu cầu theo trạng thái
+3
+Quản lý chọn một yêu cầu đang chờ duyệt
+4
+Hệ thống hiển thị thông tin tài xế, ngày nghỉ, ca nghỉ và lý do
+5
+Quản lý chọn duyệt hoặc từ chối
+6
+Hệ thống kiểm tra yêu cầu còn ở trạng thái pending hay không
+7
+Nếu từ chối, hệ thống cập nhật trạng thái rejected
+8
+Nếu duyệt, hệ thống cập nhật trạng thái approved
+9
+Hệ thống lưu reviewed_by và reviewed_at
+10
+Nếu duyệt, hệ thống kiểm tra các chuyến chưa thực hiện của tài xế trong thời gian nghỉ
+11
+Nếu có chuyến bị ảnh hưởng, hệ thống đưa chuyến vào danh sách để Nhân viên điều phối xử lý
+Giả mã xử lý
+Input: request_id, decision, manager_id
+Lấy yêu cầu nghỉ theo request_id.
+Nếu yêu cầu không tồn tại:
+Thông báo “Yêu cầu nghỉ không tồn tại”.
+Kết thúc xử lý.
+Nếu request.status khác pending:
+Thông báo “Yêu cầu đã được xử lý”.
+Kết thúc xử lý.
+Nếu decision = từ chối:
+Cập nhật status = rejected.
+Cập nhật reviewed_by = manager_id.
+Cập nhật reviewed_at = thời điểm hiện tại.
+Thông báo “Đã từ chối yêu cầu nghỉ”.
+Kết thúc xử lý.
+Nếu decision = duyệt:
+Cập nhật status = approved.
+Cập nhật reviewed_by = manager_id.
+Cập nhật reviewed_at = thời điểm hiện tại.
+Tìm các chuyến chưa thực hiện có phiếu active của tài xế trong ngày/ca nghỉ.
+Nếu có chuyến bị ảnh hưởng, hiển thị cảnh báo cho Nhân viên điều phối.
+Thông báo “Đã duyệt yêu cầu nghỉ”.
+Ghi chú
+Hệ thống không cập nhật drivers.status = 'on_leave'. Việc tài xế nghỉ được kiểm tra trực tiếp từ bảng leave_requests theo ngày và ca nghỉ đã được duyệt.
+3.13. XL13 — Xử lý chuyến bị ảnh hưởng do tài xế nghỉ
+Thành phần
+Nội dung
+Mã xử lý
+XL13
+Tên xử lý
+Xử lý chuyến bị ảnh hưởng do tài xế nghỉ
+Tác nhân
+Nhân viên điều phối
+Màn hình liên quan
+MH_AFFECTED_TRIPS, MH_ASSIGNMENT_ADJUST
+Mục đích
+Thay tài xế cho các chuyến bị ảnh hưởng khi tài xế được duyệt nghỉ
+Dữ liệu đầu vào
+request_id, trip_code, new_driver_code, dispatcher_id
+Dữ liệu sử dụng
+leave_requests, trips, trip_assignments, drivers, configurations
+Dữ liệu đầu ra
+Phiếu phân công mới sau khi thay tài xế
+Các bước xử lý
+STT
+Mô tả
+1
+Nhân viên điều phối mở danh sách chuyến bị ảnh hưởng
+2
+Hệ thống hiển thị các chuyến liên quan đến yêu cầu nghỉ đã duyệt
+3
+Nhân viên điều phối chọn chuyến cần xử lý
+4
+Hệ thống lấy phiếu phân công active hiện tại
+5
+Hệ thống gợi ý tài xế thay thế có trạng thái active
+6
+Hệ thống loại bỏ tài xế có nghỉ đã duyệt trùng thời gian chuyến
+7
+Hệ thống loại bỏ tài xế bị trùng lịch hoặc vượt thời gian lái liên tục
+8
+Nhân viên điều phối chọn tài xế thay thế
+9
+Hệ thống gọi XL10 để thực hiện điều chỉnh phân công
+10
+Hệ thống thông báo xử lý thành công
+Giả mã xử lý
+Input: affected_trip, dispatcher_id
+Lấy phiếu active của affected_trip.
+Nếu không có phiếu active:
+Thông báo “Không có phân công cần điều chỉnh”.
+Kết thúc xử lý.
+Lấy danh sách tài xế có status = active.
+Với mỗi tài xế:
+Loại bỏ nếu có yêu cầu nghỉ approved trùng thời gian chuyến.
+Loại bỏ nếu bị trùng lịch.
+Loại bỏ nếu phân công sẽ vượt thời gian lái liên tục.
+Hiển thị danh sách tài xế gợi ý.
+Nhân viên điều phối chọn tài xế mới.Gọi XL10 với xe hiện tại và tài xế mới.Thông báo kết quả.
+Ghi chú
+Hệ thống chỉ hỗ trợ lọc và gợi ý tài xế khả dụng. Quyết định chọn tài xế thay thế vẫn do Nhân viên điều phối thực hiện.
+3.14. XL14 — Báo sự cố xe hoặc chuyến
+Thành phần
+Nội dung
+Mã xử lý
+XL14
+Tên xử lý
+Báo sự cố xe hoặc chuyến
+Tác nhân
+Tài xế
+Màn hình liên quan
+MH_INCIDENT_REPORT
+Mục đích
+Cho phép tài xế gửi thông tin sự cố liên quan đến xe hoặc chuyến
+Dữ liệu đầu vào
+trip_code có thể rỗng, bus_id, driver_code, incident_type, description
+Dữ liệu sử dụng
+incident_reports, trips, buses, drivers
+Dữ liệu đầu ra
+Báo cáo sự cố mới có trạng thái pending
+Các bước xử lý
+STT
+Mô tả
+1
+Tài xế mở màn hình báo sự cố
+2
+Hệ thống hiển thị các chuyến được phân công cho tài xế nếu có
+3
+Tài xế chọn chuyến liên quan hoặc để trống nếu phát hiện xe hỏng ngoài chuyến
+4
+Tài xế chọn xe liên quan
+5
+Tài xế chọn loại sự cố và nhập mô tả
+6
+Hệ thống kiểm tra dữ liệu bắt buộc
+7
+Hệ thống lưu sự cố với trạng thái pending
+8
+Nếu loại sự cố là xe hỏng, hệ thống cảnh báo cho Nhân viên điều phối xử lý
+9
+Hệ thống thông báo gửi báo cáo thành công
+Giả mã xử lý
+Input: trip_code, bus_id, driver_code, incident_type, description
+Nếu thiếu bus_id hoặc incident_type:
+Thông báo “Vui lòng nhập đầy đủ thông tin sự cố”.
+Kết thúc xử lý.
+Nếu trip_code có giá trị nhưng không thuộc lịch phân công của tài xế:
+Thông báo “Chuyến liên quan không hợp lệ”.
+Kết thúc xử lý.
+Tạo bản ghi trong incident_reports:
+trip_code = chuyến liên quan hoặc NULL.
+bus_id = xe liên quan.
+driver_code = tài xế đang đăng nhập.
+reported_at = thời điểm hiện tại.
+incident_type = loại sự cố.
+description = mô tả.
+status = pending.
+Nếu incident_type = bus_broken:
+Gửi cảnh báo xử lý đến Nhân viên điều phối.
+Thông báo “Gửi báo cáo sự cố thành công”.
+3.15. XL15 — Xử lý xe hỏng và chuyến bị ảnh hưởng
+Thành phần
+Nội dung
+Mã xử lý
+XL15
+Tên xử lý
+Xử lý xe hỏng và chuyến bị ảnh hưởng
+Tác nhân
+Nhân viên điều phối
+Màn hình liên quan
+MH_INCIDENT_MANAGE, MH_AFFECTED_TRIPS, MH_ASSIGNMENT_ADJUST
+Mục đích
+Tiếp nhận sự cố xe hỏng, ngăn xe tiếp tục được phân công và thay xe cho chuyến bị ảnh hưởng
+Dữ liệu đầu vào
+incident_id, new_bus_id, dispatcher_id
+Dữ liệu sử dụng
+incident_reports, buses, trips, trip_assignments
+Dữ liệu đầu ra
+Trạng thái xe cập nhật, sự cố được xử lý, phiếu phân công mới nếu cần
+Các bước xử lý
+STT
+Mô tả
+1
+Nhân viên điều phối mở danh sách sự cố
+2
+Hệ thống hiển thị các sự cố đang chờ xử lý
+3
+Nhân viên điều phối chọn sự cố xe hỏng
+4
+Hệ thống cập nhật sự cố sang trạng thái processing
+5
+Khi xác nhận xe hỏng, hệ thống cập nhật buses.status = 'broken' để ngăn phân công mới
+6
+Hệ thống tìm các chuyến chưa hoàn thành có phiếu active sử dụng xe hỏng
+7
+Hệ thống hiển thị danh sách chuyến bị ảnh hưởng
+8
+Hệ thống gợi ý các xe có trạng thái active và không trùng lịch
+9
+Nhân viên điều phối chọn xe thay thế
+10
+Hệ thống gọi XL10 để điều chỉnh phân công
+11
+Sau khi xử lý xong các chuyến liên quan, hệ thống cập nhật sự cố thành resolved
+12
+Hệ thống thông báo xử lý thành công
+Giả mã xử lý
+Input: incident_id, dispatcher_id
+Lấy sự cố theo incident_id.
+Nếu sự cố không tồn tại:
+Thông báo “Sự cố không tồn tại”.
+Kết thúc xử lý.
+Nếu incident_type khác bus_broken:
+Xử lý theo nội dung sự cố, không bắt buộc thay xe.
+Kết thúc hoặc cập nhật trạng thái phù hợp.
+Cập nhật incident.status = processing.Cập nhật xe liên quan: buses.status = broken.
+Tìm các chuyến chưa hoàn thành đang có phiếu active sử dụng xe hỏng.
+Với từng chuyến bị ảnh hưởng:
+Lấy danh sách xe có status = active.
+Loại bỏ xe bị trùng lịch với chuyến.
+Hiển thị danh sách xe gợi ý.
+Nhân viên điều phối chọn xe mới.
+Gọi XL10 để thay xe, giữ nguyên tài xế hiện tại.
+Khi xử lý xong:
+Cập nhật incident.status = resolved.
+Thông báo “Xử lý xe hỏng thành công”.
+Ghi chú
+Trong phạm vi đồ án, hệ thống chỉ quản lý xe ở mức trạng thái Hoạt động, Hỏng và Ngưng sử dụng. Hệ thống không quản lý bảo trì chi tiết, số km, kỹ thuật viên hoặc chi phí sửa chữa.
+3.16. XL16 — Ghi nhận thực hiện chuyến
+Thành phần
+Nội dung
+Mã xử lý
+XL16
+Tên xử lý
+Ghi nhận thực hiện chuyến
+Tác nhân
+Nhân viên điều phối
+Màn hình liên quan
+MH_TRIP_LOG
+Mục đích
+Ghi nhận quá trình và kết quả thực tế của chuyến xe
+Dữ liệu đầu vào
+trip_code, assignment_code, actual_departure, actual_arrival, execution_status, note
+Dữ liệu sử dụng
+trips, trip_assignments, trip_logs
+Dữ liệu đầu ra
+Nhật ký thực hiện chuyến; trạng thái chuyến được cập nhật
+Trạng thái thực hiện chuyến
+Giá trị
+Ý nghĩa
+in_progress
+Chuyến đã xuất bến và đang chạy
+completed
+Chuyến hoàn thành đúng giờ
+delayed
+Chuyến hoàn thành nhưng bị trễ
+cancelled
+Chuyến bị hủy
+Công thức tính số phút trễ
+Do bảng trips lưu ngày chạy và giờ xuất bến dự kiến riêng biệt, thời điểm xuất bến dự kiến được xác định như sau:
+Thời điểm xuất bến dự kiến =
+trip_date + scheduled_departure
+Số phút trễ:
+Số phút trễ =
+actual_departure - Thời điểm xuất bến dự kiến
+Quy tắc ghi nhận:
+Nếu số phút trễ > 0:
+    delay_minutes = số phút trễ
+Ngược lại:
+    delay_minutes = 0
+Các bước xử lý
+STT
+Mô tả
+1
+Nhân viên điều phối chọn chuyến cần cập nhật
+2
+Hệ thống hiển thị chuyến và phiếu phân công active
+3
+Nhân viên điều phối nhập giờ xuất bến thực tế, giờ kết thúc thực tế và trạng thái thực hiện
+4
+Hệ thống kiểm tra chuyến đã có phân công hay chưa
+5
+Hệ thống kiểm tra thời gian thực tế hợp lệ
+6
+Hệ thống tính số phút trễ
+7
+Nếu chuyến chưa có trip_logs, hệ thống tạo bản ghi mới
+8
+Nếu chuyến đã có trip_logs, hệ thống cập nhật bản ghi hiện có
+9
+Hệ thống cập nhật trạng thái tương ứng trong bảng trips
+10
+Hệ thống thông báo cập nhật thành công
+Giả mã xử lý
+Input: trip_code, actual_departure, actual_arrival, execution_status, note
+Lấy chuyến theo trip_code.Lấy phiếu phân công active của chuyến.
+Nếu không có phiếu phân công active:
+Thông báo “Chuyến chưa được phân công”.
+Kết thúc xử lý.
+Nếu execution_status khác cancelled và actual_departure bị thiếu:
+Thông báo “Vui lòng nhập giờ xuất bến thực tế”.
+Kết thúc xử lý.
+Nếu actual_arrival có giá trị và nhỏ hơn actual_departure:
+Thông báo “Giờ kết thúc thực tế không hợp lệ”.
+Kết thúc xử lý.
+Tính scheduled_datetime = trip_date + scheduled_departure.Tính delay_minutes = actual_departure - scheduled_datetime.Nếu delay_minutes < 0 thì gán delay_minutes = 0.
+Nếu chưa có log của trip_code:
+Tạo mới bản ghi trip_logs.
+Ngược lại:
+Cập nhật bản ghi trip_logs hiện có.
+Nếu execution_status = in_progress:
+Cập nhật trips.status = in_progress.
+Nếu execution_status = cancelled:
+Cập nhật trips.status = cancelled.
+Nếu execution_status = delayed hoặc delay_minutes > 0:
+Cập nhật trips.status = delayed.
+Ngược lại:
+Cập nhật trips.status = completed.
+Thông báo “Cập nhật thực hiện chuyến thành công”.
+Ghi chú
+Mỗi chuyến có tối đa một bản ghi theo dõi thực hiện chính thức trong bảng trip_logs. Nếu chuyến đã có nhật ký, hệ thống cập nhật bản ghi hiện có thay vì tạo bản ghi mới.
+3.17. XL17 — Lập báo cáo thống kê
+Thành phần
+Nội dung
+Mã xử lý
+XL17
+Tên xử lý
+Lập báo cáo thống kê
+Tác nhân
+Quản lý
+Màn hình liên quan
+MH_REPORT_ROUTE, MH_REPORT_BUS, MH_REPORT_DRIVER
+Mục đích
+Tổng hợp tình hình vận hành theo tuyến, xe và tài xế
+Dữ liệu đầu vào
+Từ ngày, đến ngày, loại báo cáo, bộ lọc
+Dữ liệu sử dụng
+routes, buses, drivers, trips, trip_assignments, trip_logs, leave_requests
+Dữ liệu đầu ra
+Báo cáo hiệu suất tuyến, sử dụng xe và năng suất tài xế
+Các loại báo cáo
+Loại báo cáo
+Nội dung
+Báo cáo hiệu suất tuyến
+Số chuyến kế hoạch, số chuyến thực hiện, số chuyến đúng giờ, số chuyến trễ, số chuyến hủy, tỷ lệ đúng giờ
+Báo cáo sử dụng xe
+Số chuyến đã chạy, tổng giờ hoạt động, số chuyến hủy liên quan đến xe, trạng thái hiện tại
+Báo cáo năng suất tài xế
+Số chuyến đã thực hiện, tổng giờ lái, số lần trễ, số ngày nghỉ được duyệt
+Công thức báo cáo hiệu suất tuyến
+Số chuyến kế hoạch =
+COUNT(trips)
+Số chuyến thực hiện =
+COUNT(trip_logs) với execution_status thuộc {completed, delayed}
+Số chuyến đúng giờ =
+COUNT(trip_logs) với execution_status = completed
+và delay_minutes = 0
+Số chuyến trễ =
+COUNT(trip_logs) với execution_status = delayed
+hoặc delay_minutes > 0
+Số chuyến hủy =
+COUNT(trip_logs) với execution_status = cancelled
+Tỷ lệ đúng giờ =
+Số chuyến đúng giờ / Số chuyến thực hiện × 100%
+Công thức báo cáo sử dụng xe
+Số chuyến đã chạy của xe =
+COUNT(trip_logs kết hợp trip_assignments)
+với execution_status thuộc {completed, delayed}
+Tổng giờ hoạt động của xe =
+Tổng thời gian giữa actual_departure và actual_arrival
+của các chuyến xe đã thực hiện
+Số chuyến hủy liên quan đến xe =
+COUNT(trip_logs kết hợp trip_assignments)
+với execution_status = cancelled
+Công thức báo cáo năng suất tài xế
+Số chuyến đã thực hiện của tài xế =
+COUNT(trip_logs kết hợp trip_assignments)
+với execution_status thuộc {completed, delayed}
+Tổng giờ lái =
+Tổng thời gian giữa actual_departure và actual_arrival
+của các chuyến tài xế đã thực hiện
+Số lần trễ =
+COUNT(trip_logs kết hợp trip_assignments)
+với execution_status = delayed hoặc delay_minutes > 0
+Số ngày nghỉ =
+COUNT(leave_requests)
+với status = approved
+Các bước xử lý
+STT
+Mô tả
+1
+Quản lý chọn loại báo cáo
+2
+Quản lý nhập khoảng thời gian từ ngày đến ngày
+3
+Quản lý chọn bộ lọc theo tuyến, xe hoặc tài xế nếu cần
+4
+Hệ thống kiểm tra khoảng thời gian hợp lệ
+5
+Hệ thống truy vấn dữ liệu tương ứng
+6
+Hệ thống tính toán các chỉ số báo cáo
+7
+Hệ thống hiển thị kết quả lên màn hình
+8
+Nếu chức năng xuất file được cài đặt, Quản lý có thể xuất Excel hoặc PDF
+Giả mã xử lý tổng quát
+Input: report_type, from_date, to_date, filter
+Nếu from_date lớn hơn to_date:
+Thông báo “Khoảng thời gian không hợp lệ”.
+Kết thúc xử lý.
+Nếu report_type = báo cáo tuyến:
+Truy vấn trips, trip_logs, routes.
+Tính số chuyến kế hoạch, thực hiện, đúng giờ, trễ, hủy và tỷ lệ đúng giờ.
+Nếu report_type = báo cáo xe:
+Truy vấn buses, trip_assignments, trip_logs.
+Tính số chuyến đã chạy, tổng giờ hoạt động, số chuyến hủy và trạng thái xe.
+Nếu report_type = báo cáo tài xế:
+Truy vấn drivers, trip_assignments, trip_logs, leave_requests.
+Tính số chuyến thực hiện, tổng giờ lái, số lần trễ và số ngày nghỉ.
+Hiển thị báo cáo.Nếu người dùng chọn xuất file và chức năng đã được cài đặt:
+Tạo file Excel hoặc PDF.
+3.18. XL18 — Xem thông tin cá nhân và đổi mật khẩu
+Thành phần
+Nội dung
+Mã xử lý
+XL18
+Tên xử lý
+Xem thông tin cá nhân và đổi mật khẩu
+Tác nhân
+Tất cả người dùng
+Màn hình liên quan
+MH_PROFILE
+Mục đích
+Cho phép người dùng xem thông tin tài khoản và đổi mật khẩu
+Dữ liệu đầu vào
+Số điện thoại, mật khẩu cũ, mật khẩu mới, xác nhận mật khẩu mới
+Dữ liệu sử dụng
+users
+Dữ liệu đầu ra
+Thông tin tài khoản đã cập nhật
+Các bước xử lý
+STT
+Mô tả
+1
+Người dùng mở màn hình thông tin cá nhân
+2
+Hệ thống hiển thị họ tên, username, vai trò và số điện thoại
+3
+Người dùng có thể cập nhật số điện thoại hoặc đổi mật khẩu
+4
+Nếu đổi mật khẩu, hệ thống kiểm tra mật khẩu cũ
+5
+Hệ thống kiểm tra mật khẩu mới và xác nhận mật khẩu mới có khớp không
+6
+Nếu hợp lệ, hệ thống mã hóa và cập nhật mật khẩu mới
+7
+Hệ thống thông báo cập nhật thành công
+4. Quan hệ giữa các xử lý
+4.1. Luồng xử lý vận hành chính
+XL01 — Đăng nhập hệ thống
+        ↓
+XL04, XL05, XL06 — Quản lý dữ liệu danh mục
+        ↓
+XL07 — Lập chuyến xe
+        ↓
+XL08 — Lập phiếu phân công chuyến
+        ↓
+XL09 — Kiểm tra điều kiện phân công
+        ↓
+XL16 — Ghi nhận thực hiện chuyến
+        ↓
+XL17 — Lập báo cáo thống kê
+Trong luồng này:
+Quản lý chuẩn bị dữ liệu nền gồm tuyến, xe và tài xế.
+Nhân viên điều phối lập chuyến và phân công.
+Hệ thống kiểm tra tính hợp lệ trước khi cho lưu phân công.
+Sau khi chuyến thực hiện, Nhân viên điều phối ghi nhận kết quả.
+Quản lý sử dụng dữ liệu đã ghi nhận để xem báo cáo.
+4.2. Luồng xử lý tài xế nghỉ
+XL11 — Tài xế gửi yêu cầu xin nghỉ
+        ↓
+XL12 — Quản lý duyệt hoặc từ chối yêu cầu nghỉ
+        ↓  nếu được duyệt và có chuyến bị ảnh hưởng
+XL13 — Điều phối xử lý chuyến bị ảnh hưởng do tài xế nghỉ
+        ↓
+XL10 — Điều chỉnh phân công chuyến
+        ↓
+XL09 — Kiểm tra điều kiện phân công mới
+4.3. Luồng xử lý xe hỏng
+XL14 — Tài xế báo sự cố xe hỏng
+        ↓
+XL15 — Điều phối tiếp nhận và xử lý xe hỏng
+        ↓
+Cập nhật xe sang trạng thái broken
+        ↓  nếu có chuyến bị ảnh hưởng
+XL10 — Điều chỉnh phân công chuyến
+        ↓
+XL09 — Kiểm tra điều kiện phân công mới
+4.4. Xử lý dùng chung
+XL09 — Kiểm tra điều kiện phân công được dùng trong hai trường hợp:
+Xử lý gọi XL09
+Mục đích
+XL08 — Lập phiếu phân công chuyến
+Kiểm tra trước khi tạo phiếu phân công lần đầu
+XL10 — Điều chỉnh phân công chuyến
+Kiểm tra trước khi thay xe hoặc thay tài xế
+XL10 — Điều chỉnh phân công chuyến được dùng trong ba trường hợp:
+Trường hợp
+Mô tả
+Điều phối chủ động điều chỉnh
+Chủ động đổi xe hoặc tài xế
+Tài xế nghỉ đã duyệt
+Thay tài xế cho chuyến bị ảnh hưởng
+Xe hỏng
+Thay xe cho chuyến bị ảnh hưởng
+5. Liên kết giữa xử lý, giao diện và dữ liệu
+Xử lý
+Màn hình chính
+Bảng dữ liệu tác động
+XL01 — Đăng nhập
+MH_LOGIN
+users, roles
+XL02 — Quản lý tài khoản
+MH_USER_LIST, MH_USER_FORM, MH_ROLE_ASSIGN
+users, roles, drivers
+XL03 — Cấu hình hệ thống
+MH_CONFIG
+configurations
+XL04 — Quản lý tuyến xe
+MH_ROUTE_LIST, MH_ROUTE_FORM
+routes, trips
+XL05 — Quản lý xe buýt
+MH_BUS_LIST, MH_BUS_FORM
+buses, trip_assignments
+XL06 — Quản lý tài xế
+MH_DRIVER_LIST, MH_DRIVER_FORM
+drivers, users, trip_assignments
+XL07 — Lập chuyến xe
+MH_TRIP_FORM
+routes, trips
+XL08 — Lập phân công
+MH_ASSIGNMENT_FORM
+trips, buses, drivers, trip_assignments
+XL09 — Kiểm tra điều kiện
+MH_CONFLICT_RESULT
+trips, buses, drivers, trip_assignments, leave_requests, configurations
+XL10 — Điều chỉnh phân công
+MH_ASSIGNMENT_ADJUST
+trip_assignments, trips, buses, drivers
+XL11 — Gửi yêu cầu nghỉ
+MH_LEAVE_REQUEST
+leave_requests, drivers
+XL12 — Duyệt nghỉ
+MH_LEAVE_APPROVAL
+leave_requests, trip_assignments, trips
+XL13 — Xử lý tài xế nghỉ
+MH_AFFECTED_TRIPS
+leave_requests, trip_assignments, drivers
+XL14 — Báo sự cố
+MH_INCIDENT_REPORT
+incident_reports, trips, buses, drivers
+XL15 — Xử lý xe hỏng
+MH_INCIDENT_MANAGE, MH_AFFECTED_TRIPS
+incident_reports, buses, trip_assignments
+XL16 — Theo dõi chuyến
+MH_TRIP_LOG
+trips, trip_assignments, trip_logs
+XL17 — Báo cáo
+MH_REPORT_ROUTE, MH_REPORT_BUS, MH_REPORT_DRIVER
+routes, buses, drivers, trips, trip_assignments, trip_logs, leave_requests
+XL18 — Thông tin cá nhân
+MH_PROFILE
+users
+6. Các xử lý ưu tiên khi cài đặt
+Do thời gian thực hiện đồ án có hạn, nhóm nên ưu tiên cài đặt theo thứ tự sau:
+Thứ tự
+Xử lý/Chức năng
+Lý do
+1
+XL01 — Đăng nhập hệ thống
+Cần thiết để kiểm soát vai trò người dùng
+2
+XL02, XL03 — Tài khoản, phân quyền và cấu hình
+Chuẩn bị nền tảng sử dụng hệ thống
+3
+XL04, XL05, XL06 — Quản lý tuyến, xe, tài xế
+Cung cấp dữ liệu nền cho vận hành
+4
+XL07 — Lập chuyến xe
+Cần có chuyến trước khi phân công
+5
+XL08 — Lập phiếu phân công chuyến
+Nghiệp vụ trung tâm của đề tài
+6
+XL09 — Kiểm tra điều kiện phân công
+Thể hiện tính đúng đắn nghiệp vụ
+7
+XL10 — Điều chỉnh phân công chuyến
+Xử lý thay xe hoặc thay tài xế
+8
+XL11, XL12, XL13 — Xin nghỉ, duyệt nghỉ và xử lý ảnh hưởng
+Tình huống phát sinh quan trọng
+9
+XL14, XL15 — Báo sự cố và xử lý xe hỏng
+Tình huống phát sinh quan trọng
+10
+XL16 — Ghi nhận thực hiện chuyến
+Cung cấp dữ liệu thực tế
+11
+XL17 — Báo cáo thống kê
+Tổng hợp kết quả vận hành
+12
+XL18 — Thông tin cá nhân
+Hoàn thiện trải nghiệm người dùng
+13
+XL19, XL20 — Nhật ký và thông báo nội bộ
+Chức năng mở rộng nếu còn thời gian
+7. Giới hạn xử lý trong phạm vi đồ án
+Trong phạm vi đồ án môn học, hệ thống tập trung vào các xử lý phục vụ việc phân công và theo dõi chuyến xe buýt. Một số xử lý nâng cao không thuộc phạm vi cài đặt bắt buộc.
+Nội dung chưa xử lý sâu
+Lý do
+Tự động tối ưu toàn bộ lịch phân công
+Phức tạp, vượt phạm vi đồ án nhập môn
+Tự động chọn xe hoặc tài xế tốt nhất
+Hệ thống chỉ lọc/gợi ý; quyết định do Nhân viên điều phối
+Quản lý bảo trì xe chi tiết
+Không thuộc nghiệp vụ trọng tâm
+Theo dõi số km và chi phí sửa chữa xe
+Không thuộc phạm vi đề tài
+Tự động thay đổi trạng thái tài xế theo ngày nghỉ
+Hệ thống kiểm tra nghỉ trực tiếp từ yêu cầu đã duyệt
+Tính lương tài xế
+Không thuộc bài toán phân công chuyến
+Tích hợp GPS thời gian thực
+Có thể mở rộng trong tương lai
+Gửi SMS hoặc email thực tế
+Không bắt buộc trong đồ án
+Nhật ký hệ thống chi tiết
+Chức năng mở rộng
+Thông báo nội bộ đầy đủ
+Chức năng mở rộng
+Xuất Excel/PDF
+Có thể triển khai nếu còn thời gian
+Đối với tài xế nghỉ phép, hệ thống không lưu trạng thái nghỉ theo thời gian trong bảng drivers. Việc xác định tài xế có được phân công hay không được thực hiện bằng cách kiểm tra các yêu cầu nghỉ có trạng thái approved trong bảng leave_requests.
+Đối với xe hỏng, hệ thống chỉ cập nhật trạng thái xe để phục vụ phân công và xử lý chuyến bị ảnh hưởng. Hệ thống không quản lý các thông tin kỹ thuật hoặc quá trình sửa chữa xe.
+8. Kết luận phần thiết kế xử lý
+Phần thiết kế xử lý đã mô tả đầy đủ các nghiệp vụ cần thiết của hệ thống Phân công chuyến xe buýt ở Thành phố Hồ Chí Minh, bao gồm:
+Đăng nhập, quản lý tài khoản, phân quyền và cấu hình hệ thống.
+Quản lý danh mục tuyến xe, xe buýt và tài xế.
+Lập chuyến xe.
+Lập phiếu phân công chuyến.
+Kiểm tra điều kiện phân công.
+Điều chỉnh phân công khi đổi xe hoặc đổi tài xế.
+Gửi, duyệt và xử lý yêu cầu nghỉ.
+Báo và xử lý sự cố xe hỏng.
+Ghi nhận thực hiện chuyến.
+Lập báo cáo thống kê.
+Trong đó, các xử lý quan trọng nhất là:
+Mã xử lý
+Tên xử lý
+Ý nghĩa
+XL08
+Lập phiếu phân công chuyến
+Nghiệp vụ trung tâm của đề tài
+XL09
+Kiểm tra điều kiện phân công
+Bảo đảm phân công hợp lệ
+XL10
+Điều chỉnh phân công chuyến
+Xử lý đổi xe, đổi tài xế và các tình huống phát sinh
+XL16
+Ghi nhận thực hiện chuyến
+Cung cấp dữ liệu thực tế cho báo cáo
+Thiết kế xử lý đã được đồng bộ với mô hình Use Case, cơ sở dữ liệu PostgreSQL và thiết kế giao diện web. Các xử lý không chỉ hỗ trợ lưu trữ dữ liệu mà còn thể hiện rõ các quy tắc nghiệp vụ quan trọng như: không phân công xe hỏng, không phân công tài xế không khả dụng hoặc đang nghỉ, không để xe hoặc tài xế bị trùng lịch, cảnh báo lái liên tục quá giới hạn và bảo toàn lịch sử khi điều chỉnh phân công.
+Đây là cơ sở để nhóm triển khai backend, kết nối giao diện web, xây dựng dữ liệu thử nghiệm và thực hiện kiểm thử hệ thống trong giai đoạn tiếp theo.

@@ -16,3 +16,6 @@ export const updateUserRole = (id, role_id) => api.patch(`/users/${id}/role`, { 
 
 export const getConfigurations = () => api.get('/configurations');
 export const updateConfiguration = (key, value) => api.put(`/configurations/${key}`, { config_value: value });
+
+export const changePassword = (data) => api.put('/profile/password', data);
+export const updateProfile = (data) => api.put('/profile', data);

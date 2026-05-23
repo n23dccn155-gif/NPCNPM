@@ -1,0 +1,1930 @@
+THIẾT KẾ GIAO DIỆN WEB
+1. Mục tiêu thiết kế giao diện
+Giao diện web của phần mềm Phân công chuyến xe buýt ở Thành phố Hồ Chí Minh được thiết kế nhằm hỗ trợ người dùng thao tác thuận tiện, rõ ràng và đúng với vai trò trong hệ thống. Các nhóm người dùng chính gồm: Quản trị viên hệ thống, Quản lý, Nhân viên điều phối và Tài xế.
+Mục tiêu của thiết kế giao diện là:
+STT
+Mục tiêu
+Mô tả
+1
+Dễ sử dụng
+Giao diện rõ ràng, bố cục đơn giản, phù hợp với phần mềm quản lý nội bộ
+2
+Phân quyền rõ ràng
+Mỗi người dùng chỉ nhìn thấy và thao tác với các chức năng phù hợp với vai trò
+3
+Hỗ trợ nghiệp vụ chính
+Tập trung vào quản lý danh mục, lập chuyến, phân công chuyến, điều chỉnh phân công, xử lý phát sinh và theo dõi chuyến
+4
+Cảnh báo kịp thời
+Hiển thị rõ các cảnh báo trùng lịch, xe hỏng, tài xế không khả dụng, tài xế nghỉ hoặc lái liên tục quá 04 giờ
+5
+Dễ mở rộng
+Có thể bổ sung thêm thông báo nội bộ, xuất báo cáo, nhật ký hệ thống trong tương lai
+6
+Hỗ trợ thiết bị di động
+Các màn hình của tài xế được thiết kế dạng danh sách đơn giản, có thể xem trên trình duyệt điện thoại
+Theo biểu mẫu đồ án, phần thiết kế giao diện cần thể hiện được: danh sách màn hình, sơ đồ chuyển màn hình, mô tả chi tiết các màn hình quan trọng, dữ liệu đầu vào, dữ liệu kết xuất, danh sách biến cố và xử lý tương ứng.
+2. Cấu trúc giao diện tổng thể
+Phần mềm sử dụng bố cục web quản trị gồm ba vùng chính: Header, Sidebar và Main Content.
++-------------------------------------------------------------+
+| Header: Tên hệ thống | Tên người dùng | Vai trò | Đăng xuất |
++-------------------------------------------------------------+
+| Sidebar menu                  | Nội dung màn hình chính      |
+| - Tổng quan                   |                              |
+| - Tài khoản                   |                              |
+| - Tuyến xe                    |                              |
+| - Xe buýt                     |                              |
+| - Tài xế                      |                              |
+| - Chuyến xe                   |                              |
+| - Phân công chuyến            |                              |
+| - Yêu cầu nghỉ                |                              |
+| - Sự cố                       |                              |
+| - Theo dõi chuyến             |                              |
+| - Báo cáo                     |                              |
+| - Cấu hình                    |                              |
++-------------------------------------------------------------+
+2.1. Header
+Thành phần
+Ý nghĩa
+Tên hệ thống
+Hiển thị tên phần mềm
+Tên người dùng
+Hiển thị họ tên người đang đăng nhập
+Vai trò
+Hiển thị vai trò của người dùng
+Nút thông tin cá nhân
+Chuyển đến màn hình thông tin cá nhân
+Nút đăng xuất
+Thoát khỏi hệ thống
+2.2. Sidebar
+Sidebar hiển thị menu chức năng theo vai trò. Người dùng chỉ thấy các chức năng được cấp quyền.
+Vai trò
+Menu chính
+Quản trị viên hệ thống
+Tổng quan, Tài khoản, Phân quyền, Cấu hình hệ thống, Thông tin cá nhân
+Quản lý
+Tổng quan, Tuyến xe, Xe buýt, Tài xế, Duyệt nghỉ, Báo cáo, Thông tin cá nhân
+Nhân viên điều phối
+Tổng quan, Lịch phân công, Chuyến xe, Phân công chuyến, Chuyến bị ảnh hưởng, Sự cố, Theo dõi chuyến, Thông tin cá nhân
+Tài xế
+Lịch làm việc, Gửi yêu cầu nghỉ, Trạng thái nghỉ, Báo sự cố, Thông tin cá nhân
+2.3. Main Content
+Khu vực nội dung chính dùng để hiển thị:
+Bảng danh sách dữ liệu.
+Form thêm/sửa dữ liệu.
+Màn hình lập chuyến.
+Màn hình lập phiếu phân công.
+Kết quả kiểm tra xung đột.
+Danh sách chuyến bị ảnh hưởng.
+Màn hình theo dõi thực hiện chuyến.
+Màn hình báo cáo thống kê.
+Các thông báo thành công, cảnh báo hoặc lỗi.
+3. Nguyên tắc hiển thị thông báo và cảnh báo
+Trong quá trình sử dụng, hệ thống cần hiển thị thông báo rõ ràng để người dùng dễ nhận biết kết quả thao tác.
+Loại thông báo
+Hình thức hiển thị
+Ý nghĩa
+Thành công
+Màu xanh lá
+Dữ liệu đã được lưu hoặc xử lý thành công
+Cảnh báo
+Màu vàng/cam
+Có vấn đề cần người dùng xem xét
+Lỗi
+Màu đỏ
+Dữ liệu không hợp lệ, không cho phép lưu
+Thông tin
+Màu xanh dương/xám
+Cung cấp thông tin bổ sung
+Đối với màn hình Lập phiếu phân công chuyến và Điều chỉnh phân công chuyến, nếu phát hiện xung đột, hệ thống hiển thị khung cảnh báo ngay bên dưới nút Kiểm tra phân công hoặc Kiểm tra lại phân công.
+Các cảnh báo có thể gồm:
+Xe đang hỏng hoặc đã ngưng sử dụng.
+Xe đã được phân công cho chuyến khác trong cùng khoảng thời gian.
+Tài xế không ở trạng thái đang làm việc.
+Tài xế có yêu cầu nghỉ đã duyệt trong thời gian chuyến.
+Tài xế đã được phân công cho chuyến khác trong cùng khoảng thời gian.
+Tài xế có nguy cơ lái liên tục quá 04 giờ.
+Nếu có lỗi nghiêm trọng, nút Lưu phân công hoặc Lưu điều chỉnh sẽ bị vô hiệu hóa cho đến khi người dùng chọn lại xe hoặc tài xế hợp lệ.
+4. Danh sách màn hình giao diện
+4.1. Nhóm màn hình chung
+STT
+Mã màn hình
+Tên màn hình
+Người sử dụng
+Ý nghĩa
+1
+MH_LOGIN
+Đăng nhập
+Tất cả
+Cho phép người dùng đăng nhập hệ thống
+2
+MH_DASHBOARD
+Trang tổng quan
+Theo vai trò
+Hiển thị thông tin tổng quan sau khi đăng nhập
+3
+MH_PROFILE
+Thông tin cá nhân
+Tất cả
+Xem thông tin tài khoản và đổi mật khẩu
+4.2. Nhóm màn hình của Quản trị viên hệ thống
+STT
+Mã màn hình
+Tên màn hình
+Ý nghĩa
+1
+MH_USER_LIST
+Quản lý tài khoản
+Xem danh sách tài khoản người dùng
+2
+MH_USER_FORM
+Thêm/Sửa tài khoản
+Tạo hoặc cập nhật tài khoản
+3
+MH_ROLE_ASSIGN
+Phân quyền người dùng
+Gán vai trò cho tài khoản
+4
+MH_CONFIG
+Cấu hình hệ thống
+Cấu hình thời gian nghỉ tối thiểu, thời gian lái liên tục tối đa và thời gian đăng xuất tự động
+5
+MH_SYSTEM_LOG
+Nhật ký hệ thống
+Xem lịch sử thao tác quan trọng nếu chức năng được cài đặt
+4.3. Nhóm màn hình của Quản lý
+STT
+Mã màn hình
+Tên màn hình
+Ý nghĩa
+1
+MH_ROUTE_LIST
+Quản lý tuyến xe
+Thêm, sửa, ngưng hoạt động và tra cứu tuyến xe
+2
+MH_ROUTE_FORM
+Thêm/Sửa tuyến xe
+Nhập hoặc cập nhật thông tin tuyến
+3
+MH_BUS_LIST
+Quản lý xe buýt
+Thêm, sửa, ngưng sử dụng, tra cứu và cập nhật trạng thái xe
+4
+MH_BUS_FORM
+Thêm/Sửa xe buýt
+Nhập hoặc cập nhật thông tin xe
+5
+MH_DRIVER_LIST
+Quản lý tài xế
+Thêm, sửa, ngưng làm việc, tra cứu và cập nhật trạng thái tài xế
+6
+MH_DRIVER_FORM
+Thêm/Sửa tài xế
+Nhập hoặc cập nhật hồ sơ tài xế
+7
+MH_LEAVE_APPROVAL
+Duyệt yêu cầu nghỉ
+Duyệt hoặc từ chối yêu cầu nghỉ của tài xế
+8
+MH_REPORT_ROUTE
+Báo cáo hiệu suất tuyến
+Thống kê số chuyến, chuyến đúng giờ, chuyến trễ, chuyến hủy theo tuyến
+9
+MH_REPORT_BUS
+Báo cáo sử dụng xe
+Thống kê tình hình sử dụng xe
+10
+MH_REPORT_DRIVER
+Báo cáo năng suất tài xế
+Thống kê số chuyến, tổng giờ lái, số lần trễ và số ngày nghỉ
+4.4. Nhóm màn hình của Nhân viên điều phối
+STT
+Mã màn hình
+Tên màn hình
+Ý nghĩa
+1
+MH_SCHEDULE_OVERVIEW
+Lịch phân công tổng quan
+Xem lịch chạy theo ngày, tuyến, xe, tài xế
+2
+MH_TRIP_LIST
+Danh sách chuyến xe
+Xem và quản lý các chuyến đã lập
+3
+MH_TRIP_FORM
+Lập chuyến xe
+Tạo chuyến xe theo tuyến, ngày, hướng tuyến và thời gian dự kiến
+4
+MH_ASSIGNMENT_FORM
+Lập phiếu phân công
+Gán xe và tài xế cho chuyến chưa được phân công
+5
+MH_ASSIGNMENT_ADJUST
+Điều chỉnh phân công
+Đổi xe hoặc đổi tài xế cho chuyến đã phân công
+6
+MH_CONFLICT_RESULT
+Kết quả kiểm tra xung đột
+Hiển thị cảnh báo nếu phân công không hợp lệ
+7
+MH_AFFECTED_TRIPS
+Chuyến bị ảnh hưởng
+Xem chuyến bị ảnh hưởng do xe hỏng hoặc tài xế nghỉ
+8
+MH_TRIP_LOG
+Theo dõi thực hiện chuyến
+Cập nhật giờ thực tế, trạng thái chuyến và số phút trễ
+9
+MH_INCIDENT_MANAGE
+Xử lý sự cố
+Xem và xử lý báo cáo sự cố từ tài xế
+4.5. Nhóm màn hình của Tài xế
+STT
+Mã màn hình
+Tên màn hình
+Ý nghĩa
+1
+MH_DRIVER_SCHEDULE
+Lịch làm việc cá nhân
+Tài xế xem các chuyến được phân công
+2
+MH_LEAVE_REQUEST
+Gửi yêu cầu xin nghỉ
+Tài xế gửi yêu cầu nghỉ
+3
+MH_LEAVE_STATUS
+Trạng thái yêu cầu nghỉ
+Tài xế xem yêu cầu đã được duyệt, từ chối hay đang chờ xử lý
+4
+MH_INCIDENT_REPORT
+Báo sự cố
+Tài xế báo xe hỏng hoặc sự cố chuyến
+Các màn hình của tài xế được thiết kế dạng danh sách đơn giản, dễ thao tác và có thể xem trên thiết bị di động qua trình duyệt web. Hệ thống không yêu cầu xây dựng ứng dụng mobile riêng.
+5. Sơ đồ chuyển màn hình
+Khi đưa vào báo cáo, các sơ đồ dưới đây nên được vẽ lại bằng Draw.io hoặc công cụ vẽ hình trong Word dưới dạng biểu đồ khối, sử dụng hình chữ nhật cho màn hình và mũi tên cho hướng chuyển màn hình.
+5.1. Sơ đồ chuyển màn hình của Quản trị viên hệ thống
+MH_LOGIN
+   |
+   v
+MH_DASHBOARD
+   |
+   +--> MH_USER_LIST
+   |       |
+   |       +--> MH_USER_FORM
+   |
+   +--> MH_ROLE_ASSIGN
+   |
+   +--> MH_CONFIG
+   |
+   +--> MH_SYSTEM_LOG
+   |
+   +--> MH_PROFILE
+5.2. Sơ đồ chuyển màn hình của Quản lý
+MH_LOGIN
+   |
+   v
+MH_DASHBOARD
+   |
+   +--> MH_ROUTE_LIST
+   |       |
+   |       +--> MH_ROUTE_FORM
+   |
+   +--> MH_BUS_LIST
+   |       |
+   |       +--> MH_BUS_FORM
+   |
+   +--> MH_DRIVER_LIST
+   |       |
+   |       +--> MH_DRIVER_FORM
+   |
+   +--> MH_LEAVE_APPROVAL
+   |
+   +--> MH_REPORT_ROUTE
+   |
+   +--> MH_REPORT_BUS
+   |
+   +--> MH_REPORT_DRIVER
+   |
+   +--> MH_PROFILE
+5.3. Sơ đồ chuyển màn hình của Nhân viên điều phối
+MH_LOGIN
+   |
+   v
+MH_DASHBOARD
+   |
+   +--> MH_SCHEDULE_OVERVIEW
+   |
+   +--> MH_TRIP_LIST
+   |       |
+   |       +--> MH_TRIP_FORM
+   |       |
+   |       +--> MH_ASSIGNMENT_FORM
+   |       |       |
+   |       |       +--> MH_CONFLICT_RESULT
+   |       |
+   |       +--> MH_ASSIGNMENT_ADJUST
+   |               |
+   |               +--> MH_CONFLICT_RESULT
+   |
+   +--> MH_AFFECTED_TRIPS
+   |       |
+   |       +--> MH_ASSIGNMENT_ADJUST
+   |
+   +--> MH_TRIP_LOG
+   |
+   +--> MH_INCIDENT_MANAGE
+   |       |
+   |       +--> MH_AFFECTED_TRIPS
+   |
+   +--> MH_PROFILE
+5.4. Sơ đồ chuyển màn hình của Tài xế
+MH_LOGIN
+   |
+   v
+MH_DASHBOARD
+   |
+   +--> MH_DRIVER_SCHEDULE
+   |
+   +--> MH_LEAVE_REQUEST
+   |
+   +--> MH_LEAVE_STATUS
+   |
+   +--> MH_INCIDENT_REPORT
+   |
+   +--> MH_PROFILE
+6. Mô tả chi tiết các màn hình quan trọng
+6.1. Màn hình MH_LOGIN — Đăng nhập hệ thống
+Thành phần
+Nội dung
+Mã màn hình
+MH_LOGIN
+Tên màn hình
+Đăng nhập hệ thống
+Người sử dụng
+Tất cả người dùng
+Mục đích
+Cho phép người dùng đăng nhập vào hệ thống
+Dữ liệu đầu vào
+Tên đăng nhập, mật khẩu
+Dữ liệu kết xuất
+Thông báo đăng nhập thành công hoặc thất bại
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Tên hệ thống
+Kết xuất
+Hiển thị tên phần mềm
+2
+Ô nhập tên đăng nhập
+Nhập liệu
+Người dùng nhập username
+3
+Ô nhập mật khẩu
+Nhập liệu
+Người dùng nhập mật khẩu
+4
+Nút Đăng nhập
+Xử lý
+Gửi thông tin đăng nhập
+5
+Thông báo lỗi
+Kết xuất
+Hiển thị khi tài khoản hoặc mật khẩu sai
+Danh sách biến cố và xử lý
+STT
+Biến cố
+Ý nghĩa
+Xử lý tương ứng
+1
+Nhập username/password
+Người dùng nhập thông tin đăng nhập
+Hệ thống ghi nhận dữ liệu
+2
+Nhấn Đăng nhập
+Gửi yêu cầu đăng nhập
+Hệ thống kiểm tra tài khoản, mật khẩu và trạng thái tài khoản
+3
+Đăng nhập thành công
+Thông tin hợp lệ
+Chuyển đến MH_DASHBOARD theo vai trò
+4
+Sai tài khoản/mật khẩu
+Dữ liệu không hợp lệ
+Hiển thị thông báo lỗi
+5
+Tài khoản bị khóa/ngưng hoạt động
+Người dùng không được phép đăng nhập
+Hiển thị thông báo tài khoản không được phép sử dụng
+6.2. Màn hình MH_DASHBOARD — Trang tổng quan
+Thành phần
+Nội dung
+Mã màn hình
+MH_DASHBOARD
+Tên màn hình
+Trang tổng quan
+Người sử dụng
+Tất cả người dùng sau khi đăng nhập
+Mục đích
+Hiển thị nhanh các thông tin tổng quan phù hợp với vai trò
+Dữ liệu đầu vào
+Vai trò người dùng
+Dữ liệu kết xuất
+Menu chức năng, số liệu tổng quan, thông báo nhanh
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Header
+Kết xuất
+Hiển thị tên hệ thống, tên người dùng, vai trò và nút đăng xuất
+2
+Sidebar menu
+Điều hướng
+Hiển thị chức năng theo vai trò
+3
+Thẻ thống kê
+Kết xuất
+Hiển thị số liệu tổng quan theo vai trò
+4
+Danh sách thông báo
+Kết xuất
+Hiển thị thông báo mới nếu có
+5
+Khu vực nội dung chính
+Kết xuất
+Hiển thị nội dung chức năng được chọn
+Danh sách biến cố và xử lý
+STT
+Biến cố
+Ý nghĩa
+Xử lý tương ứng
+1
+Đăng nhập thành công
+Người dùng vào hệ thống
+Hiển thị dashboard theo vai trò
+2
+Chọn menu chức năng
+Người dùng chuyển màn hình
+Hệ thống tải màn hình tương ứng
+3
+Nhấn Đăng xuất
+Người dùng thoát hệ thống
+Hủy phiên đăng nhập, quay về MH_LOGIN
+6.3. Màn hình MH_PROFILE — Thông tin cá nhân
+Thành phần
+Nội dung
+Mã màn hình
+MH_PROFILE
+Tên màn hình
+Thông tin cá nhân
+Người sử dụng
+Tất cả người dùng
+Mục đích
+Cho phép người dùng xem thông tin tài khoản cá nhân và đổi mật khẩu
+Dữ liệu đầu vào
+Số điện thoại, mật khẩu cũ, mật khẩu mới, xác nhận mật khẩu mới
+Dữ liệu kết xuất
+Thông tin cá nhân và thông báo kết quả cập nhật
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Họ tên
+Kết xuất
+Hiển thị họ tên người dùng
+2
+Tên đăng nhập
+Kết xuất
+Hiển thị username
+3
+Vai trò
+Kết xuất
+Hiển thị vai trò người dùng
+4
+Số điện thoại
+Kết xuất/Nhập liệu
+Hiển thị hoặc cập nhật số điện thoại
+5
+Mật khẩu cũ
+Nhập liệu
+Xác nhận mật khẩu hiện tại
+6
+Mật khẩu mới
+Nhập liệu
+Nhập mật khẩu mới
+7
+Xác nhận mật khẩu mới
+Nhập liệu
+Nhập lại mật khẩu mới
+8
+Nút Lưu thay đổi
+Xử lý
+Cập nhật thông tin hoặc đổi mật khẩu
+Danh sách biến cố và xử lý
+STT
+Biến cố
+Ý nghĩa
+Xử lý tương ứng
+1
+Mở màn hình thông tin cá nhân
+Người dùng xem thông tin tài khoản
+Hệ thống hiển thị thông tin người dùng đang đăng nhập
+2
+Nhập mật khẩu mới
+Người dùng muốn đổi mật khẩu
+Hệ thống ghi nhận dữ liệu
+3
+Nhấn Lưu thay đổi
+Cập nhật thông tin
+Hệ thống kiểm tra mật khẩu cũ và xác nhận mật khẩu mới
+4
+Mật khẩu cũ sai
+Không đủ điều kiện đổi mật khẩu
+Hiển thị thông báo lỗi
+5
+Mật khẩu mới không khớp
+Dữ liệu không hợp lệ
+Hiển thị thông báo lỗi
+6
+Dữ liệu hợp lệ
+Có thể cập nhật
+Hệ thống lưu thay đổi và hiển thị thông báo thành công
+6.4. Màn hình MH_ROUTE_LIST — Quản lý tuyến xe
+Thành phần
+Nội dung
+Mã màn hình
+MH_ROUTE_LIST
+Tên màn hình
+Quản lý tuyến xe
+Người sử dụng
+Quản lý
+Mục đích
+Quản lý danh mục tuyến xe phục vụ lập chuyến
+Dữ liệu đầu vào
+Từ khóa tìm kiếm, trạng thái tuyến
+Dữ liệu kết xuất
+Danh sách tuyến xe
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Ô tìm kiếm
+Nhập liệu
+Tìm tuyến theo mã tuyến hoặc tên tuyến
+2
+Bộ lọc trạng thái
+Chọn
+Lọc tuyến đang hoạt động hoặc ngưng hoạt động
+3
+Bảng danh sách tuyến
+Kết xuất
+Hiển thị mã tuyến, tên tuyến, điểm đầu, điểm cuối, thời gian dự kiến, trạng thái
+4
+Nút Thêm tuyến
+Điều hướng
+Chuyển sang MH_ROUTE_FORM
+5
+Nút Sửa
+Điều hướng
+Chỉnh sửa thông tin tuyến
+6
+Nút Ngưng hoạt động
+Xử lý
+Chuyển trạng thái tuyến sang inactive
+7
+Nút Xem chi tiết
+Điều hướng
+Xem thông tin chi tiết tuyến
+Danh sách biến cố và xử lý
+STT
+Biến cố
+Ý nghĩa
+Xử lý tương ứng
+1
+Mở màn hình
+Quản lý xem danh sách tuyến
+Hệ thống hiển thị danh sách tuyến
+2
+Tìm kiếm/lọc trạng thái
+Người dùng lọc dữ liệu
+Hệ thống hiển thị tuyến phù hợp
+3
+Nhấn Thêm tuyến
+Tạo tuyến mới
+Chuyển sang MH_ROUTE_FORM
+4
+Nhấn Sửa
+Cập nhật tuyến
+Chuyển sang MH_ROUTE_FORM với dữ liệu hiện có
+5
+Nhấn Ngưng hoạt động
+Tuyến không còn dùng
+Hệ thống cập nhật trạng thái tuyến thành inactive
+6
+Tuyến đã phát sinh chuyến
+Không được xóa vật lý
+Hệ thống chỉ cho phép ngưng hoạt động
+6.5. Màn hình MH_BUS_LIST — Quản lý xe buýt
+Thành phần
+Nội dung
+Mã màn hình
+MH_BUS_LIST
+Tên màn hình
+Quản lý xe buýt
+Người sử dụng
+Quản lý
+Mục đích
+Quản lý thông tin xe và trạng thái khả dụng của xe
+Dữ liệu đầu vào
+Từ khóa tìm kiếm, trạng thái xe
+Dữ liệu kết xuất
+Danh sách xe buýt
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Ô tìm kiếm
+Nhập liệu
+Tìm xe theo ID xe hoặc biển số
+2
+Bộ lọc trạng thái
+Chọn
+Lọc xe hoạt động, hỏng hoặc ngưng sử dụng
+3
+Bảng danh sách xe
+Kết xuất
+Hiển thị ID xe, biển số, số chỗ, trạng thái
+4
+Nút Thêm xe
+Điều hướng
+Chuyển sang MH_BUS_FORM
+5
+Nút Sửa
+Điều hướng
+Chỉnh sửa thông tin xe
+6
+Nút Cập nhật trạng thái
+Xử lý
+Chuyển trạng thái xe: active, broken, inactive
+7
+Nút Ngưng sử dụng
+Xử lý
+Chuyển trạng thái xe sang inactive
+8
+Nút Xem chi tiết
+Điều hướng
+Xem chi tiết xe và lịch sử phân công nếu có
+Danh sách biến cố và xử lý
+STT
+Biến cố
+Ý nghĩa
+Xử lý tương ứng
+1
+Mở màn hình
+Quản lý xem danh sách xe
+Hệ thống hiển thị danh sách xe buýt
+2
+Tìm kiếm/lọc trạng thái
+Người dùng lọc dữ liệu
+Hệ thống hiển thị xe phù hợp
+3
+Nhấn Thêm xe
+Tạo xe mới
+Chuyển sang MH_BUS_FORM
+4
+Nhấn Sửa
+Cập nhật thông tin xe
+Chuyển sang MH_BUS_FORM với dữ liệu hiện có
+5
+Cập nhật trạng thái xe thành Hỏng
+Xe không còn khả dụng
+Hệ thống không cho chọn xe này trong phân công mới
+6
+Nhấn Ngưng sử dụng
+Xe không còn sử dụng
+Hệ thống chuyển trạng thái xe thành inactive
+7
+Xe đã phát sinh phân công
+Không được xóa vật lý
+Hệ thống chỉ cho phép chuyển trạng thái
+6.6. Màn hình MH_DRIVER_LIST — Quản lý tài xế
+Thành phần
+Nội dung
+Mã màn hình
+MH_DRIVER_LIST
+Tên màn hình
+Quản lý tài xế
+Người sử dụng
+Quản lý
+Mục đích
+Quản lý hồ sơ tài xế và trạng thái làm việc
+Dữ liệu đầu vào
+Từ khóa tìm kiếm, trạng thái tài xế
+Dữ liệu kết xuất
+Danh sách tài xế
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Ô tìm kiếm
+Nhập liệu
+Tìm tài xế theo mã, họ tên hoặc số điện thoại
+2
+Bộ lọc trạng thái
+Chọn
+Lọc tài xế đang làm việc, tạm nghỉ hoặc ngưng làm việc
+3
+Bảng danh sách tài xế
+Kết xuất
+Hiển thị mã tài xế, họ tên, số điện thoại, loại bằng, trạng thái
+4
+Nút Thêm tài xế
+Điều hướng
+Chuyển sang MH_DRIVER_FORM
+5
+Nút Sửa
+Điều hướng
+Cập nhật hồ sơ tài xế
+6
+Nút Cập nhật trạng thái
+Xử lý
+Chuyển trạng thái tài xế: active, suspended, inactive
+7
+Nút Ngưng làm việc
+Xử lý
+Chuyển trạng thái tài xế sang inactive
+8
+Nút Xem chi tiết
+Điều hướng
+Xem chi tiết tài xế và lịch phân công nếu có
+Danh sách biến cố và xử lý
+STT
+Biến cố
+Ý nghĩa
+Xử lý tương ứng
+1
+Mở màn hình
+Quản lý xem danh sách tài xế
+Hệ thống hiển thị danh sách tài xế
+2
+Tìm kiếm/lọc trạng thái
+Người dùng lọc dữ liệu
+Hệ thống hiển thị tài xế phù hợp
+3
+Nhấn Thêm tài xế
+Tạo hồ sơ tài xế
+Chuyển sang MH_DRIVER_FORM
+4
+Nhấn Sửa
+Cập nhật hồ sơ tài xế
+Chuyển sang MH_DRIVER_FORM với dữ liệu hiện có
+5
+Cập nhật trạng thái tạm nghỉ/ngưng làm việc
+Tài xế không còn khả dụng
+Hệ thống không cho chọn tài xế này trong phân công mới
+6
+Tài xế đã phát sinh phân công
+Không được xóa vật lý
+Hệ thống chỉ cho phép chuyển trạng thái
+6.7. Màn hình MH_CONFIG — Cấu hình hệ thống
+Thành phần
+Nội dung
+Mã màn hình
+MH_CONFIG
+Tên màn hình
+Cấu hình hệ thống
+Người sử dụng
+Quản trị viên hệ thống
+Mục đích
+Cho phép cấu hình các tham số phục vụ kiểm tra phân công
+Dữ liệu đầu vào
+Giá trị cấu hình mới
+Dữ liệu kết xuất
+Danh sách cấu hình đã cập nhật
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Bảng danh sách cấu hình
+Kết xuất
+Hiển thị config_key, config_value, config_data_type, mô tả
+2
+Ô nhập giá trị
+Nhập liệu
+Cho phép sửa giá trị cấu hình
+3
+Nút Lưu
+Xử lý
+Lưu giá trị cấu hình mới
+4
+Thông báo kết quả
+Kết xuất
+Hiển thị lưu thành công hoặc lỗi
+Dữ liệu cấu hình mẫu
+config_key
+config_value
+config_data_type
+Ý nghĩa
+min_break_time_minutes
+15
+INT
+Thời gian nghỉ tối thiểu giữa hai chuyến
+max_continuous_driving_minutes
+240
+INT
+Thời gian lái liên tục tối đa
+session_timeout_minutes
+30
+INT
+Tự động đăng xuất sau thời gian không hoạt động
+Danh sách biến cố và xử lý
+STT
+Biến cố
+Ý nghĩa
+Xử lý tương ứng
+1
+Mở màn hình cấu hình
+Admin xem tham số hệ thống
+Hệ thống hiển thị danh sách cấu hình
+2
+Sửa giá trị cấu hình
+Người dùng thay đổi tham số
+Hệ thống ghi nhận giá trị mới
+3
+Nhấn Lưu
+Lưu cấu hình
+Hệ thống kiểm tra kiểu dữ liệu và cập nhật
+4
+Giá trị không hợp lệ
+Nhập sai kiểu dữ liệu
+Hiển thị thông báo lỗi
+6.8. Màn hình MH_TRIP_FORM — Lập chuyến xe
+Thành phần
+Nội dung
+Mã màn hình
+MH_TRIP_FORM
+Tên màn hình
+Lập chuyến xe
+Người sử dụng
+Nhân viên điều phối
+Mục đích
+Tạo chuyến xe cụ thể theo tuyến, ngày chạy và giờ dự kiến
+Dữ liệu đầu vào
+Tuyến, ngày chạy, hướng tuyến, giờ xuất bến dự kiến, giờ kết thúc dự kiến
+Dữ liệu kết xuất
+Chuyến xe được tạo với trạng thái “Chưa phân công”
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Danh sách tuyến
+Chọn
+Chọn tuyến xe đang hoạt động
+2
+Ngày chạy
+Nhập liệu
+Chọn ngày thực hiện chuyến
+3
+Hướng tuyến
+Chọn
+Chọn lượt đi hoặc lượt về
+4
+Giờ xuất bến dự kiến
+Nhập liệu
+Nhập thời gian xuất bến
+5
+Giờ kết thúc dự kiến
+Nhập liệu
+Nhập thời gian kết thúc
+6
+Nút Lưu chuyến
+Xử lý
+Tạo chuyến mới
+7
+Nút Hủy
+Xử lý
+Hủy thao tác và quay lại danh sách chuyến
+8
+Thông báo lỗi
+Kết xuất
+Hiển thị dữ liệu chưa hợp lệ
+Danh sách biến cố và xử lý
+STT
+Biến cố
+Ý nghĩa
+Xử lý tương ứng
+1
+Chọn tuyến
+Người dùng chọn tuyến xe
+Hệ thống hiển thị thông tin tuyến
+2
+Nhập ngày/giờ
+Người dùng nhập thời gian chạy
+Hệ thống ghi nhận dữ liệu
+3
+Nhấn Lưu chuyến
+Người dùng tạo chuyến
+Hệ thống kiểm tra dữ liệu bắt buộc
+4
+Thiếu thông tin
+Dữ liệu chưa đầy đủ
+Hiển thị thông báo lỗi
+5
+Giờ kết thúc không hợp lệ
+Giờ kết thúc nhỏ hơn hoặc bằng giờ xuất bến
+Hiển thị thông báo lỗi
+6
+Tuyến ngưng hoạt động
+Tuyến không được lập chuyến mới
+Hiển thị thông báo lỗi
+7
+Dữ liệu hợp lệ
+Có thể tạo chuyến
+Lưu chuyến với trạng thái unassigned
+8
+Nhấn Hủy
+Hủy thao tác
+Quay lại MH_TRIP_LIST
+6.9. Màn hình MH_ASSIGNMENT_FORM — Lập phiếu phân công chuyến
+Thành phần
+Nội dung
+Mã màn hình
+MH_ASSIGNMENT_FORM
+Tên màn hình
+Lập phiếu phân công chuyến
+Người sử dụng
+Nhân viên điều phối
+Mục đích
+Gán xe và tài xế cho một chuyến xe chưa được phân công
+Dữ liệu đầu vào
+Mã chuyến, xe buýt, tài xế
+Dữ liệu kết xuất
+Phiếu phân công chuyến hoặc cảnh báo xung đột
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Thông tin chuyến
+Kết xuất
+Hiển thị mã chuyến, tuyến, ngày chạy, giờ xuất bến dự kiến, giờ kết thúc dự kiến
+2
+Danh sách xe
+Chọn
+Chọn xe buýt có trạng thái hoạt động
+3
+Danh sách tài xế
+Chọn
+Chọn tài xế đang làm việc và không nghỉ trong thời gian chuyến
+4
+Nút Kiểm tra phân công
+Xử lý
+Kiểm tra điều kiện phân công
+5
+Kết quả kiểm tra
+Kết xuất
+Hiển thị hợp lệ hoặc cảnh báo
+6
+Nút Lưu phân công
+Xử lý
+Lưu phiếu phân công
+7
+Nút Hủy
+Xử lý
+Hủy thao tác
+Nguyên tắc hiển thị cảnh báo xung đột
+Loại xung đột
+Hình thức hiển thị
+Xử lý
+Xe đang hỏng hoặc ngưng sử dụng
+Khung cảnh báo màu đỏ
+Không cho lưu
+Xe trùng lịch
+Khung cảnh báo màu đỏ, hiển thị chuyến bị trùng
+Không cho lưu
+Tài xế không hoạt động
+Khung cảnh báo màu đỏ
+Không cho lưu
+Tài xế có yêu cầu nghỉ đã duyệt
+Khung cảnh báo màu đỏ
+Không cho lưu
+Tài xế trùng lịch
+Khung cảnh báo màu đỏ, hiển thị chuyến bị trùng
+Không cho lưu
+Tài xế lái liên tục quá 04 giờ
+Khung cảnh báo màu đỏ hoặc vàng tùy mức độ
+Yêu cầu điều phối chọn tài xế khác
+Không có xung đột
+Thông báo màu xanh
+Cho phép lưu
+Danh sách biến cố và xử lý
+STT
+Biến cố
+Ý nghĩa
+Xử lý tương ứng
+1
+Chọn chuyến
+Người dùng chọn chuyến cần phân công
+Hệ thống hiển thị thông tin chuyến
+2
+Chọn xe
+Người dùng chọn xe buýt
+Hệ thống ghi nhận xe được chọn
+3
+Chọn tài xế
+Người dùng chọn tài xế
+Hệ thống ghi nhận tài xế được chọn
+4
+Nhấn Kiểm tra phân công
+Kiểm tra tính hợp lệ
+Hệ thống kiểm tra trạng thái xe, trạng thái tài xế, nghỉ đã duyệt, trùng lịch, lái liên tục
+5
+Phát hiện xung đột
+Phân công không hợp lệ
+Hệ thống hiển thị cảnh báo và khóa nút Lưu
+6
+Không có xung đột
+Phân công hợp lệ
+Hệ thống mở nút Lưu phân công
+7
+Nhấn Lưu phân công
+Lưu dữ liệu
+Hệ thống tạo phiếu phân công và cập nhật trạng thái chuyến
+8
+Chuyến đã có phiếu active
+Không thể lập mới
+Hệ thống gợi ý chuyển sang MH_ASSIGNMENT_ADJUST
+9
+Nhấn Hủy
+Hủy thao tác
+Quay lại danh sách chuyến
+6.10. Màn hình MH_ASSIGNMENT_ADJUST — Điều chỉnh phân công chuyến
+Thành phần
+Nội dung
+Mã màn hình
+MH_ASSIGNMENT_ADJUST
+Tên màn hình
+Điều chỉnh phân công chuyến
+Người sử dụng
+Nhân viên điều phối
+Mục đích
+Đổi xe hoặc đổi tài xế cho chuyến đã được phân công
+Dữ liệu đầu vào
+Mã chuyến, xe mới, tài xế mới
+Dữ liệu kết xuất
+Phiếu phân công mới hoặc cảnh báo xung đột
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Thông tin chuyến
+Kết xuất
+Hiển thị thông tin chuyến cần điều chỉnh
+2
+Phiếu phân công hiện tại
+Kết xuất
+Hiển thị xe, tài xế, thời điểm phân công hiện tại
+3
+Danh sách xe thay thế
+Chọn
+Chọn xe mới nếu cần đổi xe
+4
+Danh sách tài xế thay thế
+Chọn
+Chọn tài xế mới nếu cần đổi tài xế
+5
+Nút Kiểm tra lại phân công
+Xử lý
+Kiểm tra lại điều kiện phân công
+6
+Kết quả kiểm tra
+Kết xuất
+Hiển thị hợp lệ hoặc cảnh báo
+7
+Nút Lưu điều chỉnh
+Xử lý
+Lưu phiếu phân công mới
+8
+Nút Hủy
+Xử lý
+Hủy thao tác
+Danh sách biến cố và xử lý
+STT
+Biến cố
+Ý nghĩa
+Xử lý tương ứng
+1
+Mở màn hình
+Điều phối muốn thay đổi phân công
+Hệ thống hiển thị phiếu phân công active hiện tại
+2
+Chọn xe mới
+Đổi xe cho chuyến
+Hệ thống ghi nhận xe mới
+3
+Chọn tài xế mới
+Đổi tài xế cho chuyến
+Hệ thống ghi nhận tài xế mới
+4
+Nhấn Kiểm tra lại phân công
+Kiểm tra điều kiện mới
+Hệ thống kiểm tra trạng thái, trùng lịch, nghỉ đã duyệt và lái liên tục
+5
+Có xung đột
+Phân công mới không hợp lệ
+Hiển thị cảnh báo và khóa nút Lưu
+6
+Không có xung đột
+Phân công mới hợp lệ
+Cho phép lưu điều chỉnh
+7
+Nhấn Lưu điều chỉnh
+Cập nhật phân công
+Hệ thống chuyển phiếu cũ sang replaced và tạo phiếu mới active
+8
+Nhấn Hủy
+Hủy thao tác
+Quay lại màn hình trước đó
+6.11. Màn hình MH_SCHEDULE_OVERVIEW — Lịch phân công tổng quan
+Thành phần
+Nội dung
+Mã màn hình
+MH_SCHEDULE_OVERVIEW
+Tên màn hình
+Lịch phân công tổng quan
+Người sử dụng
+Nhân viên điều phối, Quản lý
+Mục đích
+Xem lịch phân công chuyến theo ngày, tuyến, xe hoặc tài xế
+Dữ liệu đầu vào
+Bộ lọc ngày, tuyến, xe, tài xế, trạng thái
+Dữ liệu kết xuất
+Danh sách chuyến và phiếu phân công tương ứng
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Bộ lọc ngày
+Nhập liệu
+Chọn ngày cần xem lịch
+2
+Bộ lọc tuyến
+Chọn
+Lọc lịch theo tuyến
+3
+Bộ lọc xe
+Chọn
+Lọc lịch theo xe
+4
+Bộ lọc tài xế
+Chọn
+Lọc lịch theo tài xế
+5
+Bộ lọc trạng thái
+Chọn
+Lọc theo trạng thái chuyến
+6
+Bảng lịch phân công
+Kết xuất
+Hiển thị mã chuyến, tuyến, giờ, xe, tài xế, trạng thái
+7
+Nút Xem chi tiết
+Xử lý
+Mở thông tin chi tiết chuyến/phân công
+8
+Nút Điều chỉnh
+Điều hướng
+Chuyển sang MH_ASSIGNMENT_ADJUST nếu chuyến đã phân công
+Danh sách biến cố và xử lý
+STT
+Biến cố
+Ý nghĩa
+Xử lý tương ứng
+1
+Chọn bộ lọc
+Người dùng chọn tiêu chí lọc
+Hệ thống ghi nhận tiêu chí
+2
+Nhấn Tìm kiếm
+Tìm lịch phân công
+Hệ thống truy vấn và hiển thị kết quả
+3
+Chọn Xem chi tiết
+Xem thông tin chuyến
+Hệ thống mở chi tiết chuyến
+4
+Chọn Điều chỉnh
+Muốn đổi xe/tài xế
+Hệ thống chuyển sang MH_ASSIGNMENT_ADJUST
+5
+Không có dữ liệu
+Không tìm thấy lịch phù hợp
+Hiển thị thông báo không có dữ liệu
+6.12. Màn hình MH_AFFECTED_TRIPS — Danh sách chuyến bị ảnh hưởng
+Thành phần
+Nội dung
+Mã màn hình
+MH_AFFECTED_TRIPS
+Tên màn hình
+Danh sách chuyến bị ảnh hưởng
+Người sử dụng
+Nhân viên điều phối
+Mục đích
+Hiển thị các chuyến bị ảnh hưởng do tài xế nghỉ hoặc xe hỏng để điều phối xử lý
+Dữ liệu đầu vào
+Mã tài xế nghỉ hoặc mã xe hỏng, khoảng thời gian cần kiểm tra
+Dữ liệu kết xuất
+Danh sách chuyến cần đổi xe hoặc đổi tài xế
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Nguyên nhân ảnh hưởng
+Kết xuất
+Hiển thị lý do: tài xế nghỉ hoặc xe hỏng
+2
+Bộ lọc ngày
+Nhập liệu
+Chọn ngày cần kiểm tra
+3
+Danh sách chuyến bị ảnh hưởng
+Kết xuất
+Hiển thị mã chuyến, tuyến, giờ xuất bến dự kiến, xe, tài xế
+4
+Trạng thái xử lý
+Kết xuất
+Chưa xử lý, đang xử lý, đã xử lý
+5
+Nút Đổi xe
+Điều hướng
+Chuyển sang MH_ASSIGNMENT_ADJUST với yêu cầu thay xe
+6
+Nút Đổi tài xế
+Điều hướng
+Chuyển sang MH_ASSIGNMENT_ADJUST với yêu cầu thay tài xế
+7
+Nút Kiểm tra lại phân công
+Xử lý
+Kiểm tra xung đột sau khi thay đổi
+8
+Nút Lưu điều chỉnh
+Xử lý
+Lưu lại phân công mới
+Danh sách biến cố và xử lý
+STT
+Biến cố
+Ý nghĩa
+Xử lý tương ứng
+1
+Mở màn hình
+Điều phối xem chuyến bị ảnh hưởng
+Hệ thống hiển thị danh sách chuyến liên quan
+2
+Chọn nguyên nhân
+Xác định do tài xế nghỉ hoặc xe hỏng
+Hệ thống lọc các chuyến tương ứng
+3
+Chọn Đổi xe
+Cần thay xe cho chuyến
+Hệ thống hiển thị danh sách xe đang hoạt động, không trùng lịch
+4
+Chọn Đổi tài xế
+Cần thay tài xế cho chuyến
+Hệ thống hiển thị danh sách tài xế khả dụng
+5
+Nhấn Kiểm tra lại phân công
+Kiểm tra sau điều chỉnh
+Hệ thống kiểm tra trùng lịch, trạng thái xe, trạng thái tài xế, nghỉ đã duyệt, thời gian lái liên tục
+6
+Có xung đột
+Phân công mới không hợp lệ
+Hiển thị cảnh báo và không cho lưu
+7
+Không có xung đột
+Phân công mới hợp lệ
+Cho phép lưu điều chỉnh
+8
+Nhấn Lưu điều chỉnh
+Cập nhật phân công
+Hệ thống chuyển phiếu cũ sang replaced và tạo phiếu phân công mới
+6.13. Màn hình MH_LEAVE_APPROVAL — Duyệt yêu cầu nghỉ
+Thành phần
+Nội dung
+Mã màn hình
+MH_LEAVE_APPROVAL
+Tên màn hình
+Duyệt yêu cầu nghỉ
+Người sử dụng
+Quản lý
+Mục đích
+Duyệt hoặc từ chối yêu cầu xin nghỉ của tài xế
+Dữ liệu đầu vào
+Mã yêu cầu nghỉ, quyết định duyệt/từ chối
+Dữ liệu kết xuất
+Trạng thái yêu cầu nghỉ được cập nhật
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Bộ lọc trạng thái
+Chọn
+Lọc yêu cầu chờ duyệt, đã duyệt, từ chối
+2
+Danh sách yêu cầu nghỉ
+Kết xuất
+Hiển thị tài xế, ngày nghỉ, ca nghỉ, lý do, trạng thái
+3
+Nút Xem chi tiết
+Xử lý
+Xem chi tiết yêu cầu nghỉ
+4
+Nút Duyệt
+Xử lý
+Duyệt yêu cầu nghỉ
+5
+Nút Từ chối
+Xử lý
+Từ chối yêu cầu nghỉ
+6
+Cảnh báo chuyến bị ảnh hưởng
+Kết xuất
+Hiển thị nếu tài xế đã có chuyến trong thời gian nghỉ
+Danh sách biến cố và xử lý
+STT
+Biến cố
+Ý nghĩa
+Xử lý tương ứng
+1
+Mở màn hình
+Quản lý xem yêu cầu nghỉ
+Hệ thống hiển thị danh sách yêu cầu
+2
+Chọn yêu cầu
+Xem chi tiết yêu cầu
+Hệ thống hiển thị thông tin tài xế, ngày nghỉ, ca nghỉ, lý do
+3
+Nhấn Duyệt
+Chấp nhận yêu cầu nghỉ
+Hệ thống cập nhật trạng thái thành approved
+4
+Tài xế có chuyến đã phân công
+Có chuyến bị ảnh hưởng
+Hệ thống hiển thị danh sách chuyến bị ảnh hưởng
+5
+Nhấn Từ chối
+Không chấp nhận yêu cầu nghỉ
+Hệ thống cập nhật trạng thái thành rejected
+6
+Yêu cầu đã xử lý
+Không cho xử lý lại
+Hệ thống hiển thị thông báo
+6.14. Màn hình MH_DRIVER_SCHEDULE — Lịch làm việc cá nhân
+Thành phần
+Nội dung
+Mã màn hình
+MH_DRIVER_SCHEDULE
+Tên màn hình
+Lịch làm việc cá nhân
+Người sử dụng
+Tài xế
+Mục đích
+Cho phép tài xế xem các chuyến được phân công
+Dữ liệu đầu vào
+Tài khoản tài xế đang đăng nhập, bộ lọc ngày/tuần
+Dữ liệu kết xuất
+Danh sách chuyến được phân công
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Bộ lọc ngày/tuần
+Chọn
+Chọn thời gian cần xem lịch
+2
+Danh sách chuyến
+Kết xuất
+Hiển thị tuyến, ngày, giờ, xe, trạng thái
+3
+Nút Xem chi tiết
+Xử lý
+Xem chi tiết chuyến
+4
+Nút Gửi yêu cầu nghỉ
+Điều hướng
+Chuyển sang màn hình gửi yêu cầu nghỉ
+5
+Nút Báo sự cố
+Điều hướng
+Chuyển sang màn hình báo sự cố
+Danh sách biến cố và xử lý
+STT
+Biến cố
+Ý nghĩa
+Xử lý tương ứng
+1
+Tài xế mở màn hình
+Xem lịch cá nhân
+Hệ thống hiển thị các chuyến của tài xế
+2
+Chọn ngày/tuần
+Lọc lịch làm việc
+Hệ thống hiển thị lịch theo thời gian chọn
+3
+Xem chi tiết chuyến
+Xem thông tin chuyến
+Hệ thống hiển thị tuyến, xe, giờ xuất bến
+4
+Chọn Gửi yêu cầu nghỉ
+Xin nghỉ
+Chuyển đến MH_LEAVE_REQUEST
+5
+Chọn Báo sự cố
+Báo vấn đề phát sinh
+Chuyển đến MH_INCIDENT_REPORT
+6.15. Màn hình MH_LEAVE_REQUEST — Gửi yêu cầu xin nghỉ
+Thành phần
+Nội dung
+Mã màn hình
+MH_LEAVE_REQUEST
+Tên màn hình
+Gửi yêu cầu xin nghỉ
+Người sử dụng
+Tài xế
+Mục đích
+Cho phép tài xế gửi yêu cầu nghỉ theo ngày hoặc ca
+Dữ liệu đầu vào
+Ngày nghỉ, ca nghỉ, lý do
+Dữ liệu kết xuất
+Yêu cầu nghỉ ở trạng thái chờ duyệt
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Ngày xin nghỉ
+Nhập liệu
+Chọn ngày nghỉ
+2
+Ca nghỉ
+Chọn
+Sáng, chiều, cả ngày
+3
+Lý do
+Nhập liệu
+Nhập lý do xin nghỉ
+4
+Nút Gửi yêu cầu
+Xử lý
+Gửi yêu cầu nghỉ
+5
+Thông báo kết quả
+Kết xuất
+Hiển thị gửi thành công hoặc lỗi
+Danh sách biến cố và xử lý
+STT
+Biến cố
+Ý nghĩa
+Xử lý tương ứng
+1
+Nhập thông tin nghỉ
+Tài xế điền form
+Hệ thống ghi nhận dữ liệu
+2
+Nhấn Gửi yêu cầu
+Tài xế gửi đơn nghỉ
+Hệ thống kiểm tra dữ liệu bắt buộc
+3
+Dữ liệu hợp lệ
+Có thể lưu yêu cầu
+Hệ thống lưu yêu cầu với trạng thái pending
+4
+Thiếu ngày nghỉ/ca nghỉ
+Dữ liệu chưa đầy đủ
+Hiển thị thông báo lỗi
+6.16. Màn hình MH_INCIDENT_REPORT — Báo sự cố
+Thành phần
+Nội dung
+Mã màn hình
+MH_INCIDENT_REPORT
+Tên màn hình
+Báo sự cố
+Người sử dụng
+Tài xế
+Mục đích
+Cho phép tài xế báo xe hỏng hoặc sự cố chuyến
+Dữ liệu đầu vào
+Chuyến liên quan, xe liên quan, loại sự cố, mô tả
+Dữ liệu kết xuất
+Báo cáo sự cố được ghi nhận
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Chuyến liên quan
+Chọn
+Chọn chuyến đang được phân công, có thể để trống nếu xe hỏng ngoài chuyến
+2
+Xe liên quan
+Chọn/Kết xuất
+Hiển thị xe được phân công hoặc chọn xe liên quan
+3
+Loại sự cố
+Chọn
+Xe hỏng, trễ do giao thông, sự cố khác
+4
+Mô tả sự cố
+Nhập liệu
+Nhập mô tả ngắn về sự cố
+5
+Nút Gửi báo cáo
+Xử lý
+Gửi báo cáo sự cố
+6
+Thông báo kết quả
+Kết xuất
+Hiển thị gửi thành công hoặc lỗi
+Danh sách biến cố và xử lý
+STT
+Biến cố
+Ý nghĩa
+Xử lý tương ứng
+1
+Chọn chuyến
+Tài xế chọn chuyến liên quan
+Hệ thống tự hiển thị xe của chuyến
+2
+Chọn loại sự cố
+Xác định loại vấn đề
+Hệ thống ghi nhận loại sự cố
+3
+Nhập mô tả
+Mô tả vấn đề
+Hệ thống ghi nhận mô tả
+4
+Nhấn Gửi báo cáo
+Gửi sự cố
+Hệ thống lưu sự cố với trạng thái pending
+5
+Sự cố là xe hỏng
+Xe không thể tiếp tục vận hành
+Hệ thống thông báo cho Nhân viên điều phối xử lý
+6
+Thiếu xe hoặc loại sự cố
+Dữ liệu không hợp lệ
+Hiển thị thông báo lỗi
+6.17. Màn hình MH_INCIDENT_MANAGE — Xử lý sự cố
+Thành phần
+Nội dung
+Mã màn hình
+MH_INCIDENT_MANAGE
+Tên màn hình
+Xử lý sự cố
+Người sử dụng
+Nhân viên điều phối
+Mục đích
+Xem và xử lý các sự cố do tài xế báo
+Dữ liệu đầu vào
+Danh sách sự cố, trạng thái xử lý
+Dữ liệu kết xuất
+Sự cố được cập nhật trạng thái, chuyến bị ảnh hưởng được xử lý
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Danh sách sự cố
+Kết xuất
+Hiển thị sự cố chờ xử lý
+2
+Bộ lọc trạng thái
+Chọn
+Lọc pending, processing, resolved
+3
+Nút Xem chi tiết
+Xử lý
+Xem nội dung sự cố
+4
+Nút Cập nhật trạng thái
+Xử lý
+Cập nhật trạng thái xử lý
+5
+Nút Xử lý chuyến bị ảnh hưởng
+Điều hướng
+Chuyển đến màn hình chuyến bị ảnh hưởng
+Danh sách biến cố và xử lý
+STT
+Biến cố
+Ý nghĩa
+Xử lý tương ứng
+1
+Mở màn hình
+Xem danh sách sự cố
+Hệ thống hiển thị sự cố
+2
+Chọn sự cố
+Xem chi tiết
+Hệ thống hiển thị chuyến, xe, tài xế, mô tả
+3
+Cập nhật trạng thái
+Điều phối xử lý sự cố
+Hệ thống lưu trạng thái mới
+4
+Sự cố xe hỏng
+Cần đổi xe
+Hệ thống chuyển sang danh sách chuyến bị ảnh hưởng
+6.18. Màn hình MH_TRIP_LOG — Theo dõi thực hiện chuyến
+Thành phần
+Nội dung
+Mã màn hình
+MH_TRIP_LOG
+Tên màn hình
+Theo dõi thực hiện chuyến
+Người sử dụng
+Nhân viên điều phối
+Mục đích
+Ghi nhận kết quả thực tế của chuyến xe
+Dữ liệu đầu vào
+Giờ xuất bến thực tế, giờ kết thúc thực tế, trạng thái thực hiện, ghi chú
+Dữ liệu kết xuất
+Nhật ký thực hiện chuyến
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Danh sách chuyến đã phân công
+Kết xuất
+Chọn chuyến cần cập nhật
+2
+Giờ xuất bến thực tế
+Nhập liệu
+Nhập thời điểm xuất bến
+3
+Giờ kết thúc thực tế
+Nhập liệu
+Nhập thời điểm kết thúc
+4
+Trạng thái thực hiện
+Chọn
+Đang chạy, hoàn thành, trễ, hủy
+5
+Số phút trễ
+Kết xuất
+Hệ thống tự tính
+6
+Ghi chú
+Nhập liệu
+Nhập ghi chú nếu có
+7
+Nút Lưu
+Xử lý
+Lưu kết quả thực hiện chuyến
+Danh sách biến cố và xử lý
+STT
+Biến cố
+Ý nghĩa
+Xử lý tương ứng
+1
+Chọn chuyến
+Điều phối chọn chuyến cần cập nhật
+Hệ thống hiển thị thông tin chuyến
+2
+Nhập giờ thực tế
+Ghi nhận thời gian vận hành
+Hệ thống ghi nhận dữ liệu
+3
+Nhấn Lưu
+Lưu nhật ký chuyến
+Hệ thống tính số phút trễ và lưu dữ liệu
+4
+Giờ kết thúc nhỏ hơn giờ xuất bến
+Dữ liệu không hợp lệ
+Hiển thị thông báo lỗi
+5
+Chọn trạng thái Hủy
+Chuyến không thực hiện
+Hệ thống cho phép nhập ghi chú/lý do
+6
+Chuyến đã có nhật ký
+Cần cập nhật lại
+Hệ thống cập nhật bản ghi hiện có nếu người dùng có quyền
+6.19. Màn hình MH_REPORT_ROUTE — Báo cáo hiệu suất tuyến
+Thành phần
+Nội dung
+Mã màn hình
+MH_REPORT_ROUTE
+Tên màn hình
+Báo cáo hiệu suất tuyến
+Người sử dụng
+Quản lý
+Mục đích
+Thống kê số chuyến theo tuyến trong khoảng thời gian
+Dữ liệu đầu vào
+Từ ngày, đến ngày, tuyến
+Dữ liệu kết xuất
+Báo cáo số chuyến kế hoạch, thực hiện, đúng giờ, trễ, hủy, tỷ lệ đúng giờ
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Từ ngày
+Nhập liệu
+Chọn ngày bắt đầu
+2
+Đến ngày
+Nhập liệu
+Chọn ngày kết thúc
+3
+Bộ lọc tuyến
+Chọn
+Chọn một tuyến hoặc tất cả tuyến
+4
+Nút Xem báo cáo
+Xử lý
+Tạo báo cáo
+5
+Bảng kết quả
+Kết xuất
+Hiển thị số liệu theo tuyến
+6
+Nút Xuất Excel
+Xử lý
+Xuất báo cáo dạng Excel nếu có hỗ trợ
+7
+Nút Xuất PDF
+Xử lý
+Xuất báo cáo dạng PDF nếu có hỗ trợ
+6.20. Màn hình MH_REPORT_BUS — Báo cáo sử dụng xe
+Thành phần
+Nội dung
+Mã màn hình
+MH_REPORT_BUS
+Tên màn hình
+Báo cáo sử dụng xe
+Người sử dụng
+Quản lý
+Mục đích
+Thống kê tình hình sử dụng xe buýt
+Dữ liệu đầu vào
+Từ ngày, đến ngày, xe, trạng thái xe
+Dữ liệu kết xuất
+Số chuyến đã chạy, tổng giờ hoạt động, số chuyến hủy liên quan đến xe, trạng thái hiện tại
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Từ ngày
+Nhập liệu
+Chọn ngày bắt đầu
+2
+Đến ngày
+Nhập liệu
+Chọn ngày kết thúc
+3
+Bộ lọc xe
+Chọn
+Chọn xe cần thống kê
+4
+Bộ lọc trạng thái xe
+Chọn
+Hoạt động, hỏng, ngưng sử dụng
+5
+Nút Xem báo cáo
+Xử lý
+Tạo báo cáo
+6
+Bảng kết quả
+Kết xuất
+Hiển thị dữ liệu sử dụng xe
+7
+Nút Xuất Excel/PDF
+Xử lý
+Xuất báo cáo nếu có hỗ trợ
+6.21. Màn hình MH_REPORT_DRIVER — Báo cáo năng suất tài xế
+Thành phần
+Nội dung
+Mã màn hình
+MH_REPORT_DRIVER
+Tên màn hình
+Báo cáo năng suất tài xế
+Người sử dụng
+Quản lý
+Mục đích
+Thống kê số chuyến, tổng giờ lái, số lần trễ và số ngày nghỉ của tài xế
+Dữ liệu đầu vào
+Từ ngày, đến ngày, tài xế
+Dữ liệu kết xuất
+Báo cáo năng suất tài xế
+Nội dung màn hình
+STT
+Thành phần
+Loại
+Ý nghĩa
+1
+Từ ngày
+Nhập liệu
+Chọn ngày bắt đầu
+2
+Đến ngày
+Nhập liệu
+Chọn ngày kết thúc
+3
+Bộ lọc tài xế
+Chọn
+Chọn một tài xế hoặc tất cả
+4
+Nút Xem báo cáo
+Xử lý
+Tạo báo cáo
+5
+Bảng kết quả
+Kết xuất
+Hiển thị số chuyến, tổng giờ lái, số lần trễ, số ngày nghỉ
+6
+Nút Xuất Excel
+Xử lý
+Xuất báo cáo Excel nếu có hỗ trợ
+7
+Nút Xuất PDF
+Xử lý
+Xuất báo cáo PDF nếu có hỗ trợ
+7. Thống nhất thuật ngữ sử dụng trong giao diện
+Để tránh nhầm lẫn khi thiết kế và lập trình, hệ thống sử dụng thống nhất các thuật ngữ sau:
+Thuật ngữ
+Ý nghĩa
+Giờ xuất bến dự kiến
+Thời gian chuyến dự kiến bắt đầu
+Giờ kết thúc dự kiến
+Thời gian chuyến dự kiến kết thúc
+Giờ xuất bến thực tế
+Thời gian xe thực sự xuất bến
+Giờ kết thúc thực tế
+Thời gian xe thực sự kết thúc chuyến
+Trạng thái chuyến
+Chưa phân công, Đã phân công, Đang chạy, Hoàn thành, Trễ, Hủy
+Trạng thái phiếu phân công
+active, replaced, cancelled
+Trạng thái tài khoản
+active, inactive, locked
+Trạng thái tuyến
+active, inactive
+Trạng thái xe
+active, broken, inactive
+Trạng thái tài xế
+active, suspended, inactive
+Trạng thái yêu cầu nghỉ
+pending, approved, rejected
+Trạng thái xử lý sự cố
+pending, processing, resolved
+Trạng thái thực hiện chuyến
+in_progress, completed, delayed, cancelled
+8. Màn hình quan trọng nhất của hệ thống
+Màn hình quan trọng nhất là:
+MH_ASSIGNMENT_FORM — Lập phiếu phân công chuyến
+Lý do
+Đây là màn hình xử lý nghiệp vụ trung tâm của đề tài.
+Màn hình này liên quan trực tiếp đến các bảng quan trọng: trips, buses, drivers, trip_assignments, leave_requests, configurations.
+Màn hình này gọi đến các xử lý kiểm tra trạng thái xe, trạng thái tài xế, tài xế nghỉ, trùng lịch xe, trùng lịch tài xế và thời gian lái liên tục.
+Kết quả của màn hình này ảnh hưởng đến lịch phân công, lịch làm việc của tài xế, theo dõi thực hiện chuyến và báo cáo thống kê.
+Ngoài ra, MH_ASSIGNMENT_ADJUST — Điều chỉnh phân công chuyến cũng là màn hình quan trọng vì hỗ trợ xử lý các tình huống phát sinh như xe hỏng, tài xế nghỉ hoặc điều phối chủ động đổi xe/tài xế.
+9. Kết luận phần thiết kế giao diện
+Thiết kế giao diện web của hệ thống được xây dựng theo hướng phân quyền rõ ràng theo vai trò. Quản trị viên hệ thống quản lý tài khoản, phân quyền và cấu hình; Quản lý quản lý đầy đủ danh mục tuyến xe, xe buýt, tài xế, duyệt nghỉ và xem báo cáo; Nhân viên điều phối lập chuyến, phân công chuyến, điều chỉnh phân công, xử lý phát sinh và theo dõi thực hiện chuyến; Tài xế xem lịch làm việc, gửi yêu cầu nghỉ và báo sự cố.
+Các màn hình được tổ chức theo bố cục web quản trị gồm header, sidebar và vùng nội dung chính. Các màn hình quan trọng như quản lý tuyến, quản lý xe, quản lý tài xế, lập chuyến, lập phiếu phân công, điều chỉnh phân công, duyệt yêu cầu nghỉ, chuyến bị ảnh hưởng, báo sự cố, theo dõi chuyến và báo cáo thống kê đã được mô tả theo thành phần giao diện, dữ liệu đầu vào, dữ liệu kết xuất, biến cố và xử lý tương ứng.
+Thiết kế giao diện này là cơ sở để triển khai các màn hình cụ thể trong quá trình cài đặt, đồng thời bảo đảm đáp ứng đầy đủ các use case đã xác định ở phần mô hình hóa yêu cầu. Các màn hình được thiết kế theo vai trò người dùng, giúp hệ thống dễ sử dụng, dễ mở rộng và phù hợp với nghiệp vụ phân công chuyến xe buýt.

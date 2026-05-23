@@ -21,11 +21,12 @@ const leaveRequestController = {
     try {
       const driverRes = await pool.query('SELECT driver_code FROM drivers WHERE user_id = $1', [req.user.id]);
       if (!driverRes.rows.length) return error(res, 'Không tìm thấy hồ sơ tài xế', 404);
-      const { leave_date, reason } = req.body;
+      const { leave_date, shift_type, reason } = req.body;
       if (!leave_date) return error(res, 'Thiếu ngày nghỉ', 400);
       const result = await pool.query(
-        `INSERT INTO leave_requests (driver_code, leave_date, reason) VALUES ($1, $2, $3) RETURNING *`,
-        [driverRes.rows[0].driver_code, leave_date, reason || null]
+        `INSERT INTO leave_requests (driver_code, leave_date, shift_type, reason) 
+         VALUES ($1, $2, $3, $4) RETURNING *`,
+        [driverRes.rows[0].driver_code, leave_date, shift_type || 'full_day', reason || null]
       );
       return success(res, result.rows[0], 'Gửi yêu cầu nghỉ thành công', 201);
     } catch (err) { next(err); }
@@ -69,12 +70,23 @@ const leaveRequestController = {
       const leaveRes = await pool.query('SELECT * FROM leave_requests WHERE id = $1', [req.params.requestId]);
       if (!leaveRes.rows.length) return error(res, 'Không tìm thấy yêu cầu nghỉ', 404);
       const leave = leaveRes.rows[0];
-      const result = await pool.query(
-        `SELECT t.*, ta.id AS assignment_id, ta.bus_id
-         FROM trip_assignments ta JOIN trips t ON ta.trip_code = t.trip_code
-         WHERE ta.driver_code = $1 AND t.trip_date = $2 AND ta.status = 'active'`,
-        [leave.driver_code, leave.leave_date]
-      );
+      
+      let query = `
+        SELECT t.*, ta.id AS assignment_id, ta.bus_id, r.route_name
+        FROM trip_assignments ta 
+        JOIN trips t ON ta.trip_code = t.trip_code
+        JOIN routes r ON t.route_code = r.route_code
+        WHERE ta.driver_code = $1 AND t.trip_date = $2 AND ta.status = 'active'
+      `;
+      const params = [leave.driver_code, leave.leave_date];
+      
+      if (leave.shift_type === 'morning') {
+        query += ` AND t.scheduled_departure < '12:00:00'`;
+      } else if (leave.shift_type === 'afternoon') {
+        query += ` AND t.scheduled_departure >= '12:00:00'`;
+      }
+      
+      const result = await pool.query(query, params);
       return success(res, result.rows);
     } catch (err) { next(err); }
   },

@@ -25,11 +25,18 @@ const routeController = {
 
   create: async (req, res, next) => {
     try {
-      const { route_code, route_name } = req.body;
-      if (!route_code || !route_name) return error(res, 'Thiếu mã tuyến hoặc tên tuyến', 400);
+      const { route_code, route_name, start_point, end_point, estimated_minutes } = req.body;
+      if (!route_code || !route_name || !start_point || !end_point || !estimated_minutes)
+        return error(res, 'Thiếu thông tin bắt buộc', 400);
+      
+      const parsedMinutes = parseInt(estimated_minutes, 10);
+      if (isNaN(parsedMinutes) || parsedMinutes <= 0) {
+        return error(res, 'Thời gian chạy dự kiến phải là số nguyên dương', 400);
+      }
+
       const result = await pool.query(
-        'INSERT INTO routes (route_code, route_name) VALUES ($1, $2) RETURNING *',
-        [route_code, route_name]
+        'INSERT INTO routes (route_code, route_name, start_point, end_point, estimated_minutes) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [route_code, route_name, start_point, end_point, parsedMinutes]
       );
       return success(res, result.rows[0], 'Thêm tuyến xe thành công', 201);
     } catch (err) {
@@ -40,10 +47,18 @@ const routeController = {
 
   update: async (req, res, next) => {
     try {
-      const { route_name } = req.body;
+      const { route_name, start_point, end_point, estimated_minutes } = req.body;
+      if (!route_name || !start_point || !end_point || !estimated_minutes)
+        return error(res, 'Thiếu thông tin bắt buộc', 400);
+
+      const parsedMinutes = parseInt(estimated_minutes, 10);
+      if (isNaN(parsedMinutes) || parsedMinutes <= 0) {
+        return error(res, 'Thời gian chạy dự kiến phải là số nguyên dương', 400);
+      }
+
       const result = await pool.query(
-        'UPDATE routes SET route_name = $1 WHERE route_code = $2 RETURNING *',
-        [route_name, req.params.routeCode]
+        'UPDATE routes SET route_name = $1, start_point = $2, end_point = $3, estimated_minutes = $4 WHERE route_code = $5 RETURNING *',
+        [route_name, start_point, end_point, parsedMinutes, req.params.routeCode]
       );
       if (!result.rows.length) return error(res, 'Không tìm thấy tuyến xe', 404);
       return success(res, result.rows[0], 'Cập nhật tuyến xe thành công');

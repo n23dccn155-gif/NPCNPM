@@ -1,0 +1,1408 @@
+THIẾT KẾ CƠ SỞ DỮ LIỆU
+1. Mục tiêu thiết kế cơ sở dữ liệu
+Cơ sở dữ liệu của phần mềm được thiết kế nhằm phục vụ bài toán phân công chuyến xe buýt ở Thành phố Hồ Chí Minh. Hệ thống tập trung vào các nghiệp vụ chính gồm:
+Quản lý tài khoản và phân quyền người dùng.
+Quản lý danh mục tuyến xe, xe buýt và tài xế.
+Lập chuyến xe theo tuyến và thời gian dự kiến.
+Phân công xe buýt và tài xế cho từng chuyến.
+Kiểm tra xung đột trong quá trình phân công.
+Điều chỉnh phân công khi cần đổi xe hoặc đổi tài xế.
+Xử lý yêu cầu xin nghỉ của tài xế.
+Xử lý sự cố xe hỏng hoặc sự cố chuyến.
+Theo dõi kết quả thực hiện chuyến.
+Lập báo cáo thống kê theo tuyến, xe và tài xế.
+Cấu hình các tham số phục vụ kiểm tra phân công.
+So với hướng thiết kế ban đầu, cơ sở dữ liệu được điều chỉnh theo phạm vi mới của đề tài:
+Nội dung điều chỉnh
+Mô tả
+Không quản lý bảo trì xe chuyên sâu
+Không lưu lịch sửa chữa, chi phí sửa chữa, kỹ thuật viên hoặc số km vận hành
+Không quản lý tổng thời gian lái xe theo ngày/tuần
+Hệ thống chỉ cảnh báo thời gian lái xe liên tục vượt quá 04 giờ
+Xe chỉ quản lý trạng thái phục vụ phân công
+Gồm: Hoạt động, Hỏng, Ngưng sử dụng
+Tài xế có tài khoản đăng nhập
+Tài xế có thể xem lịch, gửi yêu cầu nghỉ và báo sự cố
+Tách rõ tuyến, chuyến và phiếu phân công
+Tuyến là lộ trình cố định; chuyến là lần chạy cụ thể; phiếu phân công là việc gán xe và tài xế cho chuyến
+Không xóa vật lý dữ liệu đã phát sinh lịch sử
+Tuyến, xe, tài xế đã có dữ liệu vận hành sẽ được chuyển trạng thái ngưng sử dụng thay vì xóa khỏi hệ thống
+Sử dụng PostgreSQL
+Kiểu dữ liệu và ràng buộc được thiết kế phù hợp với PostgreSQL
+2. Phân nhóm các bảng dữ liệu
+Các bảng dữ liệu của hệ thống được chia thành các nhóm sau:
+Nhóm bảng
+Các bảng
+Chức năng
+Nhóm người dùng và phân quyền
+roles, users
+Quản lý vai trò và tài khoản đăng nhập
+Nhóm danh mục vận hành
+routes, buses, drivers
+Quản lý tuyến xe, xe buýt và tài xế
+Nhóm vận hành chính
+trips, trip_assignments, trip_logs
+Quản lý chuyến, phân công và thực hiện chuyến
+Nhóm xử lý phát sinh
+leave_requests, incident_reports
+Quản lý nghỉ phép và sự cố
+Nhóm cấu hình
+configurations
+Lưu tham số phục vụ kiểm tra phân công
+Nhóm mở rộng
+notifications, system_logs
+Thông báo nội bộ và nhật ký hệ thống nếu được cài đặt
+3. Nhóm người dùng và phân quyền
+3.1. Bảng roles — Vai trò người dùng
+Mục đích
+Bảng roles lưu các vai trò được sử dụng trong hệ thống. Mỗi tài khoản người dùng được gán một vai trò để xác định quyền truy cập các chức năng.
+Danh sách thuộc tính
+STT
+Tên thuộc tính
+Kiểu dữ liệu PostgreSQL
+Khóa/Ràng buộc
+Miền giá trị/Ghi chú
+Ý nghĩa
+1
+role_id
+INTEGER GENERATED ALWAYS AS IDENTITY
+PK
+Tự tăng
+Mã vai trò
+2
+role_code
+VARCHAR(20)
+UNIQUE, NOT NULL
+ADMIN, MANAGER, DISPATCHER, DRIVER
+Mã vai trò
+3
+role_name
+VARCHAR(100)
+NOT NULL
+Không rỗng
+Tên vai trò
+Dữ liệu mẫu
+role_id
+role_code
+role_name
+1
+ADMIN
+Quản trị viên hệ thống
+2
+MANAGER
+Quản lý
+3
+DISPATCHER
+Nhân viên điều phối
+4
+DRIVER
+Tài xế
+Ghi chú
+Mỗi người dùng có một vai trò chính.
+Các quyền cụ thể theo vai trò được xử lý ở tầng nghiệp vụ của hệ thống.
+3.2. Bảng users — Người dùng
+Mục đích
+Bảng users lưu tài khoản đăng nhập của tất cả người dùng trong hệ thống, gồm Quản trị viên hệ thống, Quản lý, Nhân viên điều phối và Tài xế.
+Trong thiết kế này, bảng users sử dụng user_id dạng số tự tăng làm khóa chính. Hệ thống không sử dụng thêm user_code vì tài khoản đã có username để đăng nhập; riêng mã nghiệp vụ của tài xế được lưu trong bảng drivers.
+Danh sách thuộc tính
+STT
+Tên thuộc tính
+Kiểu dữ liệu PostgreSQL
+Khóa/Ràng buộc
+Miền giá trị/Ghi chú
+Ý nghĩa
+1
+user_id
+INTEGER GENERATED ALWAYS AS IDENTITY
+PK
+Tự tăng
+Mã người dùng
+2
+username
+VARCHAR(50)
+UNIQUE, NOT NULL
+Không trùng
+Tên đăng nhập
+3
+password_hash
+VARCHAR(255)
+NOT NULL
+Mật khẩu đã băm/mã hóa
+Mật khẩu đăng nhập
+4
+full_name
+VARCHAR(100)
+NOT NULL
+Không rỗng
+Họ tên người dùng
+5
+phone
+VARCHAR(20)
+NULL
+Có thể rỗng
+Số điện thoại
+6
+role_id
+INTEGER
+FK, NOT NULL
+Tham chiếu roles(role_id)
+Vai trò người dùng
+7
+status
+VARCHAR(20)
+NOT NULL, DEFAULT 'active'
+active, inactive, locked
+Trạng thái tài khoản
+Miền giá trị của status
+Giá trị
+Ý nghĩa
+Có được đăng nhập không?
+active
+Tài khoản đang hoạt động
+Có
+inactive
+Tài khoản ngưng sử dụng
+Không
+locked
+Tài khoản bị khóa
+Không
+Ghi chú
+Người dùng đăng nhập bằng username và mật khẩu.
+Tài khoản có trạng thái inactive hoặc locked không được đăng nhập hệ thống.
+Không lưu created_at vì ngày tạo tài khoản không ảnh hưởng trực tiếp đến nghiệp vụ chính trong phạm vi đồ án.
+Chỉ tài khoản có vai trò DRIVER mới được liên kết với hồ sơ tài xế trong bảng drivers. Điều kiện này được kiểm tra tại tầng xử lý chương trình.
+4. Nhóm danh mục vận hành
+4.1. Bảng routes — Tuyến xe
+Mục đích
+Bảng routes lưu thông tin các tuyến xe buýt. Tuyến xe là lộ trình cố định, làm cơ sở để lập các chuyến xe cụ thể.
+Do mã tuyến như 01, 08, 150 là mã nghiệp vụ dễ nhận biết và tương đối ổn định, thiết kế sử dụng route_code làm khóa chính, không cần thêm route_id.
+Danh sách thuộc tính
+STT
+Tên thuộc tính
+Kiểu dữ liệu PostgreSQL
+Khóa/Ràng buộc
+Miền giá trị/Ghi chú
+Ý nghĩa
+1
+route_code
+VARCHAR(10)
+PK
+01, 08, 150
+Mã tuyến
+2
+route_name
+VARCHAR(200)
+NOT NULL
+Không rỗng
+Tên tuyến
+3
+start_point
+VARCHAR(100)
+NOT NULL
+Không rỗng
+Điểm đầu
+4
+end_point
+VARCHAR(100)
+NOT NULL
+Không rỗng
+Điểm cuối
+5
+estimated_minutes
+INTEGER
+NOT NULL, CHECK > 0
+Số phút dương
+Thời gian chạy dự kiến
+6
+status
+VARCHAR(20)
+NOT NULL, DEFAULT 'active'
+active, inactive
+Trạng thái tuyến
+Miền giá trị của status
+Giá trị
+Ý nghĩa
+Có được dùng để lập chuyến mới không?
+active
+Tuyến đang hoạt động
+Có
+inactive
+Tuyến ngưng hoạt động
+Không
+Ghi chú
+Một tuyến xe có thể được sử dụng để lập nhiều chuyến xe.
+Tuyến có trạng thái inactive không được sử dụng để lập chuyến mới.
+Hệ thống không lưu thông tin lộ trình chi tiết hoặc danh sách trạm dừng vì các nội dung này nằm ngoài phạm vi đề tài.
+Tuyến đã phát sinh chuyến xe không được xóa vật lý; hệ thống chỉ chuyển trạng thái sang inactive.
+4.2. Bảng buses — Xe buýt
+Mục đích
+Bảng buses lưu thông tin xe buýt phục vụ việc phân công chuyến. Trong phạm vi đề tài, hệ thống chỉ quản lý thông tin cần thiết để xác định xe có thể được phân công hay không.
+Danh sách thuộc tính
+STT
+Tên thuộc tính
+Kiểu dữ liệu PostgreSQL
+Khóa/Ràng buộc
+Miền giá trị/Ghi chú
+Ý nghĩa
+1
+bus_id
+INTEGER GENERATED ALWAYS AS IDENTITY
+PK
+Tự tăng
+Mã xe nội bộ
+2
+license_plate
+VARCHAR(20)
+UNIQUE, NOT NULL
+Không trùng
+Biển số xe
+3
+capacity
+INTEGER
+NOT NULL, CHECK > 0
+Số nguyên dương
+Số chỗ của xe
+4
+status
+VARCHAR(20)
+NOT NULL, DEFAULT 'active'
+active, broken, inactive
+Trạng thái xe
+Miền giá trị của status
+Giá trị
+Ý nghĩa
+Có được phân công không?
+active
+Xe đang hoạt động
+Có
+broken
+Xe bị hỏng
+Không
+inactive
+Xe ngưng sử dụng
+Không
+Ghi chú
+Thiết kế dùng bus_id làm khóa chính vì biển số là dữ liệu nghiệp vụ có thể có ký tự đặc biệt và không nên dùng làm khóa liên kết ở nhiều bảng.
+license_plate vẫn được đặt ràng buộc UNIQUE để không cho phép trùng biển số.
+Các thuộc tính như số hiệu xe, loại xe, hãng sản xuất, số km đã chạy, lịch bảo trì và chi phí sửa chữa không được lưu vì nằm ngoài phạm vi đề tài.
+Xe đã phát sinh phiếu phân công không được xóa vật lý; khi không còn sử dụng, trạng thái xe được chuyển thành inactive.
+4.3. Bảng drivers — Tài xế
+Mục đích
+Bảng drivers lưu thông tin nghiệp vụ của tài xế. Vì tài xế cũng là người dùng hệ thống nên mỗi hồ sơ tài xế được liên kết với một tài khoản trong bảng users.
+Thiết kế sử dụng driver_code làm khóa chính vì mã tài xế như TX001, TX002 dễ hiển thị trong lịch phân công và báo cáo.
+Danh sách thuộc tính
+STT
+Tên thuộc tính
+Kiểu dữ liệu PostgreSQL
+Khóa/Ràng buộc
+Miền giá trị/Ghi chú
+Ý nghĩa
+1
+driver_code
+VARCHAR(20)
+PK
+TX001, TX002
+Mã tài xế
+2
+user_id
+INTEGER
+FK, UNIQUE, NOT NULL
+Tham chiếu users(user_id)
+Tài khoản đăng nhập
+3
+license_type
+VARCHAR(20)
+NOT NULL
+D, E...
+Loại bằng lái
+4
+status
+VARCHAR(20)
+NOT NULL, DEFAULT 'active'
+active, suspended, inactive
+Trạng thái làm việc tổng quát
+Miền giá trị của status
+Giá trị
+Ý nghĩa
+Có được phân công không?
+active
+Đang làm việc
+Có, nếu không có yêu cầu nghỉ đã duyệt trùng thời gian chuyến
+suspended
+Tạm nghỉ/Tạm ngưng công tác
+Không
+inactive
+Ngưng làm việc
+Không
+Ghi chú
+Mỗi tài xế có đúng một tài khoản đăng nhập tương ứng.
+user_id được đặt UNIQUE để bảo đảm một tài khoản không liên kết với nhiều hồ sơ tài xế.
+Không lưu trạng thái on_leave trong bảng drivers, vì nghỉ phép được xác định theo ngày hoặc ca cụ thể thông qua bảng leave_requests.
+Trên giao diện, hệ thống vẫn có thể hiển thị tài xế đang nghỉ trong một ngày cụ thể bằng cách kiểm tra yêu cầu nghỉ đã duyệt.
+Tài xế đã phát sinh dữ liệu phân công không được xóa vật lý; khi ngưng làm việc, trạng thái được chuyển thành inactive.
+5. Nhóm vận hành chính
+5.1. Bảng trips — Chuyến xe
+Mục đích
+Bảng trips lưu thông tin các chuyến xe cụ thể được lập từ tuyến xe. Một chuyến xe là một lần xe chạy theo một tuyến xác định, vào một ngày và khoảng thời gian dự kiến cụ thể.
+Thiết kế sử dụng trip_code làm khóa chính để dễ hiển thị trong giao diện và báo cáo, ví dụ: CX001, CX002.
+Danh sách thuộc tính
+STT
+Tên thuộc tính
+Kiểu dữ liệu PostgreSQL
+Khóa/Ràng buộc
+Miền giá trị/Ghi chú
+Ý nghĩa
+1
+trip_code
+VARCHAR(20)
+PK
+CX001, CX002
+Mã chuyến
+2
+route_code
+VARCHAR(10)
+FK, NOT NULL
+Tham chiếu routes(route_code)
+Tuyến xe
+3
+trip_date
+DATE
+NOT NULL
+Không rỗng
+Ngày chạy
+4
+direction
+VARCHAR(20)
+NOT NULL
+outbound, inbound
+Hướng tuyến
+5
+scheduled_departure
+TIME
+NOT NULL
+Không rỗng
+Giờ xuất bến dự kiến
+6
+scheduled_arrival
+TIME
+NOT NULL
+Lớn hơn giờ xuất bến dự kiến
+Giờ kết thúc dự kiến
+7
+status
+VARCHAR(20)
+NOT NULL, DEFAULT 'unassigned'
+unassigned, assigned, in_progress, completed, delayed, cancelled
+Trạng thái chuyến
+Miền giá trị của status
+Giá trị
+Ý nghĩa
+unassigned
+Chưa phân công
+assigned
+Đã phân công
+in_progress
+Đang thực hiện chuyến
+completed
+Hoàn thành đúng giờ
+delayed
+Hoàn thành nhưng trễ giờ
+cancelled
+Chuyến bị hủy
+Ghi chú
+Một tuyến có thể có nhiều chuyến.
+Một chuyến chỉ thuộc một tuyến.
+Chuyến mới tạo có trạng thái mặc định là unassigned.
+Khi lập phiếu phân công hợp lệ, chuyến chuyển sang trạng thái assigned.
+Trong phạm vi đề tài, mỗi chuyến được giả định bắt đầu và kết thúc trong cùng một ngày vận hành. Vì vậy, scheduled_arrival phải lớn hơn scheduled_departure.
+Mã chuyến được sinh tại tầng chương trình theo quy tắc thống nhất của hệ thống.
+5.2. Bảng trip_assignments — Phiếu phân công chuyến
+Mục đích
+Bảng trip_assignments lưu thông tin phân công xe và tài xế cho từng chuyến. Đây là bảng trung tâm của hệ thống vì trực tiếp thể hiện nghiệp vụ phân công chuyến xe buýt.
+Thiết kế sử dụng assignment_code làm khóa chính vì phiếu phân công là một chứng từ nghiệp vụ cần được hiển thị rõ trong giao diện và báo cáo, ví dụ: PC001, PC002.
+Danh sách thuộc tính
+STT
+Tên thuộc tính
+Kiểu dữ liệu PostgreSQL
+Khóa/Ràng buộc
+Miền giá trị/Ghi chú
+Ý nghĩa
+1
+assignment_code
+VARCHAR(20)
+PK
+PC001, PC002
+Mã phiếu phân công
+2
+trip_code
+VARCHAR(20)
+FK, NOT NULL
+Tham chiếu trips(trip_code)
+Chuyến được phân công
+3
+bus_id
+INTEGER
+FK, NOT NULL
+Tham chiếu buses(bus_id)
+Xe được phân công
+4
+driver_code
+VARCHAR(20)
+FK, NOT NULL
+Tham chiếu drivers(driver_code)
+Tài xế được phân công
+5
+dispatcher_id
+INTEGER
+FK, NOT NULL
+Tham chiếu users(user_id)
+Nhân viên điều phối lập phiếu
+6
+assigned_at
+TIMESTAMP
+NOT NULL
+Thời điểm hiện tại khi lưu
+Thời điểm phân công
+7
+status
+VARCHAR(20)
+NOT NULL, DEFAULT 'active'
+active, replaced, cancelled
+Trạng thái phiếu phân công
+Miền giá trị của status
+Giá trị
+Ý nghĩa
+active
+Phiếu phân công hiện hành của chuyến
+replaced
+Phiếu cũ đã bị thay thế do đổi xe hoặc đổi tài xế
+cancelled
+Phiếu phân công đã bị hủy
+Ghi chú
+Một chuyến có thể có nhiều phiếu phân công trong lịch sử nếu có điều chỉnh xe hoặc tài xế.
+Tại một thời điểm, mỗi chuyến chỉ được có một phiếu phân công trạng thái active.
+Khi điều chỉnh phân công, phiếu cũ được chuyển sang replaced, sau đó tạo phiếu mới ở trạng thái active.
+Backend phải kiểm tra xe, tài xế, trùng lịch, nghỉ đã duyệt và thời gian lái liên tục trước khi tạo phiếu phân công.
+Mã phiếu phân công được sinh tại tầng chương trình.
+Ràng buộc PostgreSQL quan trọng
+PostgreSQL cho phép sử dụng chỉ mục duy nhất có điều kiện để bảo đảm một chuyến chỉ có một phiếu phân công active tại một thời điểm:
+CREATE UNIQUE INDEX uq_trip_active_assignment
+ON trip_assignments (trip_code)
+WHERE status = 'active';
+5.3. Bảng trip_logs — Theo dõi thực hiện chuyến
+Mục đích
+Bảng trip_logs ghi nhận quá trình và kết quả thực tế của chuyến xe sau khi được phân công, bao gồm giờ xuất bến thực tế, giờ kết thúc thực tế, số phút trễ và trạng thái thực hiện.
+Bảng này tham chiếu đến cả chuyến xe và phiếu phân công thực tế được sử dụng để thực hiện chuyến.
+Danh sách thuộc tính
+STT
+Tên thuộc tính
+Kiểu dữ liệu PostgreSQL
+Khóa/Ràng buộc
+Miền giá trị/Ghi chú
+Ý nghĩa
+1
+log_id
+INTEGER GENERATED ALWAYS AS IDENTITY
+PK
+Tự tăng
+Mã theo dõi chuyến
+2
+trip_code
+VARCHAR(20)
+FK, UNIQUE, NOT NULL
+Tham chiếu trips(trip_code)
+Chuyến được theo dõi
+3
+assignment_code
+VARCHAR(20)
+FK, UNIQUE, NOT NULL
+Tham chiếu trip_assignments(assignment_code)
+Phiếu phân công thực tế
+4
+actual_departure
+TIMESTAMP
+NULL
+Có thể rỗng trước khi xe xuất bến
+Giờ xuất bến thực tế
+5
+actual_arrival
+TIMESTAMP
+NULL
+Có thể rỗng khi chuyến đang chạy
+Giờ kết thúc thực tế
+6
+delay_minutes
+INTEGER
+NOT NULL, DEFAULT 0, CHECK >= 0
+Số phút không âm
+Số phút trễ
+7
+execution_status
+VARCHAR(20)
+NOT NULL
+in_progress, completed, delayed, cancelled
+Trạng thái thực hiện
+8
+note
+VARCHAR(255)
+NULL
+Có thể rỗng
+Ghi chú
+Miền giá trị của execution_status
+Giá trị
+Ý nghĩa
+in_progress
+Chuyến đã xuất bến và đang chạy
+completed
+Chuyến hoàn thành đúng giờ
+delayed
+Chuyến hoàn thành nhưng bị trễ
+cancelled
+Chuyến bị hủy
+Công thức tính số phút trễ
+Do bảng trips lưu ngày chạy và giờ dự kiến ở hai thuộc tính riêng biệt, thời điểm xuất bến dự kiến được xác định như sau:
+Thời điểm xuất bến dự kiến =
+trip_date + scheduled_departure
+Số phút trễ được tính theo công thức:
+Số phút trễ =
+Giờ xuất bến thực tế - Thời điểm xuất bến dự kiến
+Quy tắc ghi nhận:
+Nếu kết quả > 0:
+    delay_minutes = số phút chênh lệch
+Ngược lại:
+    delay_minutes = 0
+Ghi chú
+Một chuyến có thể chưa có bản ghi theo dõi nếu chưa bắt đầu thực hiện.
+Mỗi chuyến có tối đa một bản ghi theo dõi thực hiện chính thức.
+Một phiếu phân công chỉ có bản ghi theo dõi nếu phiếu đó thực tế được dùng để thực hiện chuyến.
+Nếu chuyến đã có bản ghi, hệ thống cập nhật bản ghi hiện có thay vì tạo thêm bản ghi mới.
+Dữ liệu trong bảng này được dùng để lập báo cáo hiệu suất tuyến, báo cáo sử dụng xe và báo cáo năng suất tài xế.
+6. Nhóm xử lý phát sinh
+6.1. Bảng leave_requests — Yêu cầu xin nghỉ của tài xế
+Mục đích
+Bảng leave_requests lưu các yêu cầu xin nghỉ do tài xế gửi. Quản lý sẽ xem xét và cập nhật trạng thái duyệt hoặc từ chối. Nếu yêu cầu được duyệt, hệ thống kiểm tra các chuyến bị ảnh hưởng để Nhân viên điều phối xử lý.
+Danh sách thuộc tính
+STT
+Tên thuộc tính
+Kiểu dữ liệu PostgreSQL
+Khóa/Ràng buộc
+Miền giá trị/Ghi chú
+Ý nghĩa
+1
+request_id
+INTEGER GENERATED ALWAYS AS IDENTITY
+PK
+Tự tăng
+Mã yêu cầu nghỉ
+2
+driver_code
+VARCHAR(20)
+FK, NOT NULL
+Tham chiếu drivers(driver_code)
+Tài xế xin nghỉ
+3
+requested_at
+TIMESTAMP
+NOT NULL
+Thời điểm gửi yêu cầu
+Ngày giờ gửi yêu cầu
+4
+leave_date
+DATE
+NOT NULL
+Không rỗng
+Ngày xin nghỉ
+5
+shift_type
+VARCHAR(20)
+NOT NULL
+morning, afternoon, full_day
+Ca nghỉ
+6
+reason
+VARCHAR(255)
+NULL
+Có thể rỗng
+Lý do nghỉ
+7
+status
+VARCHAR(20)
+NOT NULL, DEFAULT 'pending'
+pending, approved, rejected
+Trạng thái yêu cầu
+8
+reviewed_by
+INTEGER
+FK, NULL
+Tham chiếu users(user_id)
+Người xử lý yêu cầu
+9
+reviewed_at
+TIMESTAMP
+NULL
+Có thể rỗng
+Thời điểm xử lý
+Miền giá trị của status
+Giá trị
+Ý nghĩa
+pending
+Chờ duyệt
+approved
+Đã duyệt
+rejected
+Từ chối
+Ghi chú
+Tài xế có thể gửi yêu cầu nghỉ theo ngày và ca làm việc.
+Khi yêu cầu nghỉ được duyệt, tài xế không được phân công vào các chuyến nằm trong khoảng thời gian nghỉ.
+Việc quy đổi morning, afternoon, full_day thành khoảng thời gian cụ thể được xử lý theo quy định ca làm việc của đơn vị tại tầng nghiệp vụ.
+Khi yêu cầu nghỉ được duyệt mà tài xế đã có chuyến chưa thực hiện, hệ thống cảnh báo cho Nhân viên điều phối xử lý.
+Dùng tên trường reviewed_by, reviewed_at thay cho approved_by, approved_at vì yêu cầu có thể được duyệt hoặc bị từ chối.
+6.2. Bảng incident_reports — Báo sự cố chuyến hoặc xe hỏng
+Mục đích
+Bảng incident_reports lưu thông tin sự cố do tài xế gửi trong quá trình sử dụng hệ thống, ví dụ xe hỏng, trễ do giao thông hoặc sự cố khác. Nhân viên điều phối là người tiếp nhận và xử lý các sự cố đã được ghi nhận.
+Thiết kế cho phép trip_code rỗng trong trường hợp tài xế phát hiện xe hỏng khi chưa gắn với một chuyến cụ thể.
+Danh sách thuộc tính
+STT
+Tên thuộc tính
+Kiểu dữ liệu PostgreSQL
+Khóa/Ràng buộc
+Miền giá trị/Ghi chú
+Ý nghĩa
+1
+incident_id
+INTEGER GENERATED ALWAYS AS IDENTITY
+PK
+Tự tăng
+Mã sự cố
+2
+trip_code
+VARCHAR(20)
+FK, NULL
+Tham chiếu trips(trip_code)
+Chuyến liên quan
+3
+bus_id
+INTEGER
+FK, NOT NULL
+Tham chiếu buses(bus_id)
+Xe liên quan
+4
+driver_code
+VARCHAR(20)
+FK, NOT NULL
+Tham chiếu drivers(driver_code)
+Tài xế gửi báo cáo
+5
+reported_at
+TIMESTAMP
+NOT NULL
+Thời điểm báo cáo
+Thời điểm gửi sự cố
+6
+incident_type
+VARCHAR(30)
+NOT NULL
+bus_broken, traffic_delay, other
+Loại sự cố
+7
+description
+VARCHAR(255)
+NULL
+Có thể rỗng
+Mô tả sự cố
+8
+status
+VARCHAR(20)
+NOT NULL, DEFAULT 'pending'
+pending, processing, resolved
+Trạng thái xử lý
+Miền giá trị của status
+Giá trị
+Ý nghĩa
+pending
+Chờ xử lý
+processing
+Đang xử lý
+resolved
+Đã xử lý
+Ghi chú
+Nếu incident_type = 'bus_broken', hệ thống có thể cập nhật trạng thái xe liên quan thành broken.
+Nhân viên điều phối kiểm tra các chuyến chưa thực hiện đang sử dụng xe bị hỏng để tiến hành thay xe.
+Không lưu vị trí chi tiết, mức độ sự cố, chi phí sửa chữa, kỹ thuật viên hoặc lịch sử bảo trì vì các nội dung này không thuộc phạm vi đề tài.
+Nếu sau này hệ thống cho phép Nhân viên điều phối tự lập báo cáo sự cố, có thể bổ sung trường reported_by tham chiếu bảng users.
+7. Nhóm cấu hình hệ thống
+7.1. Bảng configurations — Cấu hình hệ thống
+Mục đích
+Bảng configurations lưu các tham số có thể thay đổi mà không cần sửa mã nguồn. Trong phạm vi đề tài, bảng này chủ yếu phục vụ việc kiểm tra điều kiện phân công và thời gian đăng nhập.
+Thiết kế sử dụng config_key làm khóa chính vì tên tham số là duy nhất và có ý nghĩa rõ ràng.
+Danh sách thuộc tính
+STT
+Tên thuộc tính
+Kiểu dữ liệu PostgreSQL
+Khóa/Ràng buộc
+Miền giá trị/Ghi chú
+Ý nghĩa
+1
+config_key
+VARCHAR(100)
+PK
+Không trùng
+Tên tham số
+2
+config_value
+VARCHAR(255)
+NOT NULL
+Không rỗng
+Giá trị tham số
+3
+config_data_type
+VARCHAR(20)
+NOT NULL
+INT, STRING, BOOLEAN
+Kiểu dữ liệu
+4
+description
+VARCHAR(255)
+NULL
+Có thể rỗng
+Mô tả tham số
+Dữ liệu mẫu
+config_key
+config_value
+config_data_type
+description
+min_break_time_minutes
+15
+INT
+Thời gian nghỉ tối thiểu giữa hai chuyến
+max_continuous_driving_minutes
+240
+INT
+Thời gian lái xe liên tục tối đa
+session_timeout_minutes
+30
+INT
+Tự động đăng xuất khi không hoạt động
+Ghi chú
+Hệ thống không lưu cấu hình liên quan đến bảo trì xe hoặc giới hạn lái xe 10 giờ/ngày vì các nội dung này không thuộc phạm vi xử lý chính.
+Giá trị cấu hình được backend kiểm tra theo config_data_type trước khi sử dụng hoặc cập nhật.
+8. Các bảng mở rộng
+8.1. Bảng notifications — Thông báo nội bộ
+Mục đích
+Bảng notifications là bảng mở rộng, có thể được cài đặt nếu nhóm có thời gian. Bảng này dùng để gửi thông báo trong hệ thống khi có thay đổi lịch phân công, yêu cầu nghỉ được xử lý hoặc sự cố mới được ghi nhận.
+Danh sách thuộc tính
+STT
+Tên thuộc tính
+Kiểu dữ liệu PostgreSQL
+Khóa/Ràng buộc
+Ý nghĩa
+1
+notification_id
+INTEGER GENERATED ALWAYS AS IDENTITY
+PK
+Mã thông báo
+2
+user_id
+INTEGER
+FK, NOT NULL
+Người nhận thông báo
+3
+title
+VARCHAR(200)
+NOT NULL
+Tiêu đề thông báo
+4
+content
+VARCHAR(255)
+NOT NULL
+Nội dung thông báo
+5
+created_at
+TIMESTAMP
+NOT NULL
+Thời điểm tạo
+8.2. Bảng system_logs — Nhật ký hệ thống
+Mục đích
+Bảng system_logs là bảng mở rộng, dùng để ghi nhận các thao tác quan trọng như đăng nhập, thêm dữ liệu, sửa dữ liệu, chuyển trạng thái hoặc lập phiếu phân công.
+Danh sách thuộc tính
+STT
+Tên thuộc tính
+Kiểu dữ liệu PostgreSQL
+Khóa/Ràng buộc
+Ý nghĩa
+1
+log_id
+INTEGER GENERATED ALWAYS AS IDENTITY
+PK
+Mã nhật ký
+2
+user_id
+INTEGER
+FK, NOT NULL
+Người thực hiện thao tác
+3
+action_time
+TIMESTAMP
+NOT NULL
+Thời điểm thao tác
+4
+action_type
+VARCHAR(50)
+NOT NULL
+INSERT, UPDATE, LOGIN, STATUS_CHANGE
+5
+table_name
+VARCHAR(50)
+NULL
+Bảng bị tác động
+6
+record_id
+VARCHAR(50)
+NULL
+Mã bản ghi liên quan
+7
+details
+VARCHAR(255)
+NULL
+Chi tiết thao tác
+Ghi chú
+Chức năng thông báo nội bộ và nhật ký hệ thống chỉ được xem là chức năng mở rộng, không bắt buộc phải triển khai trong phiên bản chính của đồ án.
+9. Danh sách bảng sử dụng trong hệ thống
+9.1. Các bảng bắt buộc
+STT
+Tên bảng
+Mục đích
+1
+roles
+Quản lý vai trò người dùng
+2
+users
+Quản lý tài khoản đăng nhập
+3
+routes
+Quản lý tuyến xe
+4
+buses
+Quản lý xe buýt
+5
+drivers
+Quản lý tài xế
+6
+trips
+Quản lý chuyến xe
+7
+trip_assignments
+Quản lý phiếu phân công chuyến
+8
+trip_logs
+Theo dõi thực hiện chuyến
+9
+leave_requests
+Quản lý yêu cầu xin nghỉ
+10
+incident_reports
+Quản lý sự cố chuyến hoặc xe hỏng
+11
+configurations
+Cấu hình tham số hệ thống
+9.2. Các bảng mở rộng
+STT
+Tên bảng
+Mục đích
+1
+notifications
+Quản lý thông báo nội bộ
+2
+system_logs
+Ghi nhận nhật ký thao tác hệ thống
+10. Mối quan hệ giữa các bảng
+10.1. Quan hệ người dùng và phân quyền
+Quan hệ
+Bội số
+Mô tả
+roles — users
+1 — n
+Một vai trò có thể được gán cho nhiều người dùng; mỗi người dùng có một vai trò
+users — drivers
+1 — 0..1
+Một tài khoản có thể không phải tài xế hoặc liên kết với tối đa một hồ sơ tài xế
+Diễn giải
+Tất cả người dùng đều có tài khoản trong bảng users.
+Chỉ người dùng mang vai trò DRIVER mới có hồ sơ nghiệp vụ trong bảng drivers.
+Quản trị viên hệ thống, Quản lý và Nhân viên điều phối không có bản ghi trong bảng drivers.
+10.2. Quan hệ danh mục và chuyến xe
+Quan hệ
+Bội số
+Mô tả
+routes — trips
+1 — n
+Một tuyến có thể có nhiều chuyến xe
+trips — trip_assignments
+1 — n
+Một chuyến có thể có nhiều phiếu phân công trong lịch sử
+buses — trip_assignments
+1 — n
+Một xe có thể được phân công cho nhiều chuyến khác nhau
+drivers — trip_assignments
+1 — n
+Một tài xế có thể được phân công cho nhiều chuyến khác nhau
+users — trip_assignments
+1 — n
+Một Nhân viên điều phối có thể lập nhiều phiếu phân công
+Diễn giải
+routes thể hiện tuyến xe cố định.
+trips thể hiện từng lần chạy cụ thể của tuyến theo ngày và giờ.
+trip_assignments thể hiện việc gán xe và tài xế cho chuyến.
+Khi đổi xe hoặc đổi tài xế, phiếu cũ không bị xóa mà chuyển sang replaced; phiếu mới được tạo với trạng thái active.
+10.3. Quan hệ theo dõi thực hiện chuyến
+Quan hệ
+Bội số
+Mô tả
+trips — trip_logs
+1 — 0..1
+Một chuyến có thể chưa có hoặc có tối đa một bản ghi theo dõi thực hiện
+trip_assignments — trip_logs
+1 — 0..1
+Một phiếu phân công có thể không được thực hiện hoặc được dùng để ghi nhận tối đa một kết quả thực tế
+Diễn giải
+Chuyến chưa bắt đầu chạy sẽ chưa có dữ liệu trong trip_logs.
+Nếu phiếu phân công bị thay thế trước khi chuyến chạy, phiếu đó không có bản ghi thực hiện.
+Phiếu phân công được dùng thực tế cho chuyến sẽ được liên kết với bản ghi trip_logs.
+10.4. Quan hệ xử lý phát sinh
+Quan hệ
+Bội số
+Mô tả
+drivers — leave_requests
+1 — n
+Một tài xế có thể gửi nhiều yêu cầu nghỉ
+users — leave_requests
+1 — n
+Một Quản lý có thể xử lý nhiều yêu cầu nghỉ
+trips — incident_reports
+1 — 0..n
+Một chuyến có thể không có hoặc có nhiều sự cố
+buses — incident_reports
+1 — n
+Một xe có thể liên quan đến nhiều báo cáo sự cố
+drivers — incident_reports
+1 — n
+Một tài xế có thể gửi nhiều báo cáo sự cố
+Diễn giải
+Khi tài xế gửi yêu cầu nghỉ, dữ liệu được lưu trong leave_requests.
+Khi Quản lý xử lý yêu cầu, hệ thống cập nhật reviewed_by và reviewed_at.
+Khi tài xế báo sự cố, dữ liệu được lưu trong incident_reports.
+incident_reports.trip_code có thể rỗng nếu sự cố xe được phát hiện ngoài một chuyến cụ thể.
+11. Sơ đồ ERD dạng mô tả
+ROLES
+  role_id PK
+  role_code UNIQUE
+  role_name
+        |
+        | 1 - n
+        |
+USERS
+  user_id PK
+  username UNIQUE
+  password_hash
+  full_name
+  phone
+  role_id FK
+  status
+        |
+        | 1 - 0..1
+        |
+DRIVERS
+  driver_code PK
+  user_id FK UNIQUE
+  license_type
+  status
+ROUTES
+  route_code PK
+  route_name
+  start_point
+  end_point
+  estimated_minutes
+  status
+        |
+        | 1 - n
+        |
+TRIPS
+  trip_code PK
+  route_code FK
+  trip_date
+  direction
+  scheduled_departure
+  scheduled_arrival
+  status
+        |
+        | 1 - n
+        |
+TRIP_ASSIGNMENTS
+  assignment_code PK
+  trip_code FK
+  bus_id FK
+  driver_code FK
+  dispatcher_id FK
+  assigned_at
+  status
+        |
+        | 1 - 0..1
+        |
+TRIP_LOGS
+  log_id PK
+  trip_code FK UNIQUE
+  assignment_code FK UNIQUE
+  actual_departure
+  actual_arrival
+  delay_minutes
+  execution_status
+  note
+BUSES
+  bus_id PK
+  license_plate UNIQUE
+  capacity
+  status
+        |
+        | 1 - n
+        |
+TRIP_ASSIGNMENTS
+DRIVERS
+  driver_code PK
+        |
+        | 1 - n
+        |
+LEAVE_REQUESTS
+  request_id PK
+  driver_code FK
+  requested_at
+  leave_date
+  shift_type
+  reason
+  status
+  reviewed_by FK
+  reviewed_at
+DRIVERS
+  driver_code PK
+        |
+        | 1 - n
+        |
+INCIDENT_REPORTS
+  incident_id PK
+  trip_code FK NULL
+  bus_id FK
+  driver_code FK
+  reported_at
+  incident_type
+  description
+  status
+12. ERD dạng Mermaid
+Bạn có thể copy đoạn sau vào công cụ hỗ trợ Mermaid để xem sơ đồ ERD và vẽ lại bằng Draw.io.
+erDiagram
+    ROLES ||--o{ USERS : "has"
+    USERS ||--o| DRIVERS : "driver account"
+    ROUTES ||--o{ TRIPS : "has"
+    TRIPS ||--o{ TRIP_ASSIGNMENTS : "assigned by"
+    BUSES ||--o{ TRIP_ASSIGNMENTS : "uses"
+    DRIVERS ||--o{ TRIP_ASSIGNMENTS : "drives"
+    USERS ||--o{ TRIP_ASSIGNMENTS : "created by"
+    TRIPS ||--o| TRIP_LOGS : "execution log"
+    TRIP_ASSIGNMENTS ||--o| TRIP_LOGS : "executed assignment"
+    DRIVERS ||--o{ LEAVE_REQUESTS : "submits"
+    USERS ||--o{ LEAVE_REQUESTS : "reviews"
+    TRIPS |o--o{ INCIDENT_REPORTS : "may relate to"
+    BUSES ||--o{ INCIDENT_REPORTS : "involves"
+    DRIVERS ||--o{ INCIDENT_REPORTS : "reports"
+    ROLES {
+        integer role_id PK
+        varchar role_code UK
+        varchar role_name
+    }
+    USERS {
+        integer user_id PK
+        varchar username UK
+        varchar password_hash
+        varchar full_name
+        varchar phone
+        integer role_id FK
+        varchar status
+    }
+    ROUTES {
+        varchar route_code PK
+        varchar route_name
+        varchar start_point
+        varchar end_point
+        integer estimated_minutes
+        varchar status
+    }
+    BUSES {
+        integer bus_id PK
+        varchar license_plate UK
+        integer capacity
+        varchar status
+    }
+    DRIVERS {
+        varchar driver_code PK
+        integer user_id FK,UK
+        varchar license_type
+        varchar status
+    }
+    TRIPS {
+        varchar trip_code PK
+        varchar route_code FK
+        date trip_date
+        time scheduled_departure
+        time scheduled_arrival
+        varchar direction
+        varchar status
+    }
+    TRIP_ASSIGNMENTS {
+        varchar assignment_code PK
+        varchar trip_code FK
+        integer bus_id FK
+        varchar driver_code FK
+        integer dispatcher_id FK
+        timestamp assigned_at
+        varchar status
+    }
+    TRIP_LOGS {
+        integer log_id PK
+        varchar trip_code FK,UK
+        varchar assignment_code FK,UK
+        timestamp actual_departure
+        timestamp actual_arrival
+        integer delay_minutes
+        varchar execution_status
+        varchar note
+    }
+    LEAVE_REQUESTS {
+        integer request_id PK
+        varchar driver_code FK
+        timestamp requested_at
+        date leave_date
+        varchar shift_type
+        varchar reason
+        varchar status
+        integer reviewed_by FK
+        timestamp reviewed_at
+    }
+    INCIDENT_REPORTS {
+        integer incident_id PK
+        varchar trip_code FK
+        integer bus_id FK
+        varchar driver_code FK
+        timestamp reported_at
+        varchar incident_type
+        varchar description
+        varchar status
+    }
+    CONFIGURATIONS {
+        varchar config_key PK
+        varchar config_value
+        varchar config_data_type
+        varchar description
+    }
+13. Bảng tổng hợp khóa chính và khóa ngoại
+Bảng
+Khóa chính
+Khóa ngoại
+Ràng buộc duy nhất quan trọng
+roles
+role_id
+Không có
+role_code
+users
+user_id
+role_id
+username
+routes
+route_code
+Không có
+Không có
+buses
+bus_id
+Không có
+license_plate
+drivers
+driver_code
+user_id
+user_id
+trips
+trip_code
+route_code
+Không có
+trip_assignments
+assignment_code
+trip_code, bus_id, driver_code, dispatcher_id
+Một phiếu active cho mỗi chuyến
+trip_logs
+log_id
+trip_code, assignment_code
+trip_code, assignment_code
+leave_requests
+request_id
+driver_code, reviewed_by
+Không có
+incident_reports
+incident_id
+trip_code, bus_id, driver_code
+Không có
+configurations
+config_key
+Không có
+Không có
+14. Ràng buộc dữ liệu và nghiệp vụ chính
+Mã
+Ràng buộc
+Cách thực hiện
+RB01
+username trong bảng users không được trùng
+UNIQUE
+RB02
+license_plate trong bảng buses không được trùng
+UNIQUE
+RB03
+Một tài khoản chỉ liên kết với tối đa một hồ sơ tài xế
+drivers.user_id UNIQUE
+RB04
+Một chuyến chỉ thuộc một tuyến
+Khóa ngoại trips.route_code
+RB05
+Giờ kết thúc dự kiến phải lớn hơn giờ xuất bến dự kiến
+CHECK (scheduled_arrival > scheduled_departure)
+RB06
+Chỉ tuyến có trạng thái active mới được dùng để lập chuyến mới
+Kiểm tra nghiệp vụ tại backend
+RB07
+Chỉ xe có trạng thái active mới được phân công
+Kiểm tra nghiệp vụ tại backend
+RB08
+Chỉ tài xế có trạng thái active mới được phân công
+Kiểm tra nghiệp vụ tại backend
+RB09
+Tài xế có yêu cầu nghỉ approved trùng thời gian chuyến không được phân công
+Kiểm tra từ leave_requests
+RB10
+Một xe không được phân công cho hai chuyến có thời gian chồng chéo
+Kiểm tra nghiệp vụ tại backend
+RB11
+Một tài xế không được phân công cho hai chuyến có thời gian chồng chéo
+Kiểm tra nghiệp vụ tại backend
+RB12
+Tài xế không được lái liên tục quá 240 phút
+Kiểm tra dựa trên cấu hình và lịch phân công
+RB13
+Mỗi chuyến chỉ có một phiếu phân công active tại một thời điểm
+Partial unique index và kiểm tra backend
+RB14
+Khi xe bị hỏng, hệ thống cảnh báo các chuyến chưa thực hiện đang sử dụng xe đó
+Xử lý nghiệp vụ
+RB15
+Khi yêu cầu nghỉ được duyệt, hệ thống cảnh báo các chuyến chưa thực hiện của tài xế đó
+Xử lý nghiệp vụ
+RB16
+Một chuyến có tối đa một bản ghi theo dõi thực hiện chính thức
+trip_logs.trip_code UNIQUE
+RB17
+Số phút trễ không được âm
+CHECK (delay_minutes >= 0)
+RB18
+Tuyến đã phát sinh chuyến không được xóa vật lý
+Chuyển routes.status = 'inactive'
+RB19
+Xe đã phát sinh phân công không được xóa vật lý
+Chuyển buses.status = 'inactive'
+RB20
+Tài xế đã phát sinh phân công không được xóa vật lý
+Chuyển drivers.status = 'inactive'
+15. Công thức xử lý dữ liệu liên quan
+15.1. Kiểm tra chồng chéo thời gian
+Hai chuyến A và B bị xem là chồng chéo nếu:
+A.scheduled_departure < B.scheduled_arrival
+và
+B.scheduled_departure < A.scheduled_arrival
+Công thức này được áp dụng để kiểm tra:
+Trùng lịch xe buýt.
+Trùng lịch tài xế.
+15.2. Kiểm tra thời gian lái xe liên tục
+Thời gian nghỉ giữa hai chuyến liên tiếp:
+Thời gian nghỉ =
+Giờ xuất bến dự kiến của chuyến sau
+-
+Giờ kết thúc dự kiến của chuyến trước
+Nếu thời gian nghỉ nhỏ hơn giá trị min_break_time_minutes, hai chuyến được xem là thuộc cùng một chuỗi lái liên tục.
+Thời gian lái liên tục:
+Thời gian lái liên tục =
+Giờ kết thúc dự kiến của chuyến cuối trong chuỗi
+-
+Giờ xuất bến dự kiến của chuyến đầu tiên trong chuỗi
+Nếu thời gian lái liên tục lớn hơn giá trị max_continuous_driving_minutes, hệ thống cảnh báo vi phạm điều kiện phân công.
+15.3. Tính số phút trễ
+Thời điểm xuất bến dự kiến =
+trip_date + scheduled_departure
+Số phút trễ =
+actual_departure - Thời điểm xuất bến dự kiến
+Nếu kết quả nhỏ hơn hoặc bằng 0, hệ thống ghi nhận:
+delay_minutes = 0
+15.4. Công thức báo cáo hiệu suất tuyến
+Số chuyến kế hoạch =
+COUNT(trips)
+Số chuyến thực hiện =
+COUNT(trip_logs) với execution_status thuộc {completed, delayed}
+Số chuyến đúng giờ =
+COUNT(trip_logs) với execution_status = completed và delay_minutes = 0
+Số chuyến trễ =
+COUNT(trip_logs) với execution_status = delayed hoặc delay_minutes > 0
+Số chuyến hủy =
+COUNT(trip_logs) với execution_status = cancelled
+Tỷ lệ đúng giờ =
+Số chuyến đúng giờ / Số chuyến thực hiện × 100%
+16. Định hướng triển khai trên PostgreSQL
+Khi cài đặt cơ sở dữ liệu bằng PostgreSQL, hệ thống sử dụng:
+Nội dung
+Cách triển khai
+Khóa số tự tăng
+INTEGER GENERATED ALWAYS AS IDENTITY
+Chuỗi tiếng Việt
+VARCHAR hoặc TEXT
+Ngày
+DATE
+Giờ
+TIME
+Ngày giờ
+TIMESTAMP
+Kiểm tra miền giá trị
+CHECK
+Không trùng dữ liệu
+UNIQUE
+Quan hệ bảng
+FOREIGN KEY
+Một phiếu active cho mỗi chuyến
+Partial unique index
+Ví dụ một số ràng buộc quan trọng:
+CREATE UNIQUE INDEX uq_trip_active_assignment
+ON trip_assignments (trip_code)
+WHERE status = 'active';
+ALTER TABLE trips
+ADD CONSTRAINT chk_trip_schedule
+CHECK (scheduled_arrival > scheduled_departure);
+ALTER TABLE buses
+ADD CONSTRAINT chk_bus_status
+CHECK (status IN ('active', 'broken', 'inactive'));
+ALTER TABLE drivers
+ADD CONSTRAINT chk_driver_status
+CHECK (status IN ('active', 'suspended', 'inactive'));
+17. Kết luận phần thiết kế cơ sở dữ liệu
+Thiết kế cơ sở dữ liệu của hệ thống đã được xây dựng phù hợp với phạm vi hiện tại của đề tài Phân công chuyến xe buýt ở Thành phố Hồ Chí Minh. Cơ sở dữ liệu tập trung vào các nghiệp vụ cốt lõi gồm quản lý tuyến xe, xe buýt, tài xế, lập chuyến, phân công chuyến, điều chỉnh phân công, xử lý tài xế nghỉ, xử lý xe hỏng, theo dõi thực hiện chuyến và báo cáo thống kê.
+Thiết kế đã tách rõ ba khái niệm quan trọng:
+routes lưu thông tin tuyến xe cố định.
+trips lưu từng chuyến xe cụ thể theo ngày và giờ.
+trip_assignments lưu việc phân công xe và tài xế cho từng chuyến.
+Bên cạnh đó, thiết kế bảo đảm các yêu cầu nghiệp vụ quan trọng như:
+Không phân công xe hỏng hoặc xe đã ngưng sử dụng.
+Không phân công tài xế không khả dụng hoặc đang có nghỉ được duyệt.
+Không để xe hoặc tài xế bị trùng lịch.
+Cảnh báo thời gian lái liên tục vượt giới hạn.
+Lưu lịch sử điều chỉnh phân công.
+Không xóa vật lý dữ liệu danh mục đã phát sinh lịch sử vận hành.
+Hỗ trợ theo dõi thực hiện chuyến và tổng hợp báo cáo.
+Cơ sở dữ liệu sử dụng PostgreSQL với các ràng buộc khóa chính, khóa ngoại, duy nhất, kiểm tra miền giá trị và chỉ mục duy nhất có điều kiện. Thiết kế này là cơ sở để nhóm tiến hành tạo bảng dữ liệu, xây dựng API backend, kết nối giao diện web và kiểm thử các chức năng nghiệp vụ của hệ thống.

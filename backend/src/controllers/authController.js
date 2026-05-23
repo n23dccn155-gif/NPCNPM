@@ -19,7 +19,7 @@ const authController = {
 
       // Tìm user kèm role_name
       const queryText = `
-        SELECT u.id, u.username, u.password, u.status, r.role_name 
+        SELECT u.id, u.username, u.full_name, u.phone, u.password, u.status, r.role_name 
         FROM users u 
         JOIN roles r ON u.role_id = r.id 
         WHERE u.username = $1
@@ -70,6 +70,8 @@ const authController = {
         user: {
           id: user.id,
           username: user.username,
+          full_name: user.full_name,
+          phone: user.phone,
           role: user.role_name,
         },
       });
@@ -84,7 +86,7 @@ const authController = {
       const userId = req.user.id;
 
       const queryText = `
-        SELECT u.id, u.username, u.status, r.role_name 
+        SELECT u.id, u.username, u.full_name, u.phone, u.status, r.role_name 
         FROM users u 
         JOIN roles r ON u.role_id = r.id 
         WHERE u.id = $1
@@ -105,6 +107,8 @@ const authController = {
         user: {
           id: user.id,
           username: user.username,
+          full_name: user.full_name,
+          phone: user.phone,
           role: user.role_name,
         },
       });

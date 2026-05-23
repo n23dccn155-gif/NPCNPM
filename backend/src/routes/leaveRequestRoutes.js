@@ -6,7 +6,7 @@ const role = require('../middlewares/roleMiddleware');
 
 router.get('/my', auth, role(['driver']), leaveRequestController.getMy);
 router.post('/', auth, role(['driver']), leaveRequestController.create);
-router.get('/', auth, role(['admin', 'manager']), leaveRequestController.getAll);
+router.get('/', auth, role(['admin', 'manager', 'dispatcher']), leaveRequestController.getAll);
 router.patch('/:requestId/review', auth, role(['admin', 'manager']), leaveRequestController.review);
 router.get('/:requestId/affected-trips', auth, role(['admin', 'dispatcher']), leaveRequestController.getAffectedTrips);
 

@@ -1,0 +1,1058 @@
+PHẦN 1. KHẢO SÁT HIỆN TRẠNG
+1.1. Tìm hiểu tổng quan về thế giới thực
+Xe buýt là một trong những phương tiện giao thông công cộng quan trọng tại Thành phố Hồ Chí Minh. Mỗi ngày có nhiều tuyến xe buýt hoạt động nhằm phục vụ nhu cầu đi lại của người dân giữa các khu vực trung tâm, quận huyện, bến xe, trường học, bệnh viện và khu công nghiệp.
+Trong quá trình vận hành thực tế, một tuyến xe buýt có thể phát sinh nhiều chuyến xe trong ngày. Mỗi chuyến xe cần được tổ chức theo một tuyến xác định, có ngày chạy, giờ xuất bến dự kiến, giờ kết thúc dự kiến, xe buýt thực hiện và tài xế phụ trách. Vì vậy, đối với đơn vị vận hành, công việc quan trọng không chỉ là quản lý danh sách tuyến xe, xe buýt hay tài xế, mà còn là tổ chức và phân công từng chuyến xe một cách hợp lý.
+Bài toán phân công chuyến đòi hỏi mỗi chuyến phải được gán đúng tuyến, đúng xe, đúng tài xế và đúng thời gian. Đồng thời, việc phân công phải bảo đảm:
+Không phân công một xe cho hai chuyến có thời gian chồng chéo.
+Không phân công một tài xế cho hai chuyến có thời gian chồng chéo.
+Không sử dụng xe đang hỏng hoặc đã ngưng sử dụng.
+Không phân công tài xế đang nghỉ hoặc không khả dụng.
+Cảnh báo khi tài xế có nguy cơ lái xe liên tục quá thời gian cho phép.
+Đây là nghiệp vụ trung tâm của đề tài “Xây dựng phần mềm phân công chuyến xe buýt ở Thành phố Hồ Chí Minh”.
+Trong thực tế, việc phân công chuyến còn có thể phát sinh nhiều tình huống cần xử lý như: tài xế gửi yêu cầu xin nghỉ, xe bị hỏng, chuyến bị trễ giờ, cần đổi xe, đổi tài xế hoặc điều chỉnh lại phân công đã lập. Nếu việc điều hành chủ yếu được thực hiện bằng sổ tay, bảng trắng hoặc các file Excel rời rạc thì dễ xảy ra sai sót, mất thời gian tra cứu và khó tổng hợp báo cáo.
+Từ nhu cầu đó, việc xây dựng phần mềm web hỗ trợ phân công chuyến xe buýt là cần thiết. Phần mềm giúp đơn vị vận hành quản lý tập trung dữ liệu tuyến xe, xe buýt, tài xế, chuyến xe và phiếu phân công; đồng thời hỗ trợ kiểm tra xung đột, xử lý phát sinh, theo dõi kết quả thực hiện chuyến và lập báo cáo thống kê.
+Trong phạm vi đề tài, hệ thống không tập trung vào các nghiệp vụ dành cho hành khách hoặc các nghiệp vụ vận hành mở rộng như:
+Bán vé hoặc quản lý doanh thu vé.
+Tra cứu tuyến xe cho hành khách.
+Đặt vé xe buýt.
+Giám sát GPS thời gian thực.
+Quản lý bảo trì xe chuyên sâu.
+Theo dõi số km hoặc chi phí sửa chữa xe.
+Tính lương chi tiết cho tài xế.
+Hệ thống tập trung vào nghiệp vụ nội bộ của đơn vị vận hành, bao gồm: quản lý dữ liệu danh mục, lập chuyến, phân công xe và tài xế, kiểm tra xung đột, xử lý tài xế nghỉ, xử lý xe hỏng, theo dõi thực hiện chuyến và báo cáo thống kê.
+Các hoạt động chính trong môi trường thực tế
+STT
+Hoạt động
+Mô tả
+1
+Quản lý tuyến xe
+Lưu trữ và cập nhật mã tuyến, tên tuyến, điểm đầu, điểm cuối, thời gian dự kiến và trạng thái tuyến
+2
+Quản lý xe buýt
+Lưu trữ thông tin xe, biển số, số chỗ và trạng thái xe
+3
+Quản lý tài xế
+Lưu trữ thông tin tài xế, loại bằng lái và trạng thái làm việc
+4
+Lập chuyến xe
+Tạo các chuyến xe cụ thể theo tuyến, ngày chạy, hướng tuyến và thời gian dự kiến
+5
+Phân công chuyến
+Gán xe buýt và tài xế cho từng chuyến xe
+6
+Kiểm tra xung đột
+Kiểm tra trùng lịch xe, trùng lịch tài xế, trạng thái khả dụng và thời gian lái liên tục
+7
+Điều chỉnh phân công
+Đổi xe hoặc đổi tài xế cho chuyến đã được phân công khi cần
+8
+Xử lý tài xế nghỉ
+Duyệt yêu cầu nghỉ và xử lý các chuyến bị ảnh hưởng
+9
+Xử lý xe hỏng
+Ghi nhận sự cố xe hỏng và thay xe cho các chuyến bị ảnh hưởng
+10
+Theo dõi thực hiện chuyến
+Ghi nhận giờ thực tế, tình trạng hoàn thành, trễ hoặc hủy chuyến
+11
+Báo cáo thống kê
+Thống kê hiệu suất tuyến, tình hình sử dụng xe và năng suất tài xế
+1.2. Tìm hiểu hiện trạng tổ chức
+Trong phạm vi đề tài, mô hình tổ chức được khảo sát và mô phỏng là mô hình của một đơn vị vận hành xe buýt. Các vai trò trong đơn vị phối hợp với nhau để bảo đảm mỗi chuyến xe được lập kế hoạch, phân công và thực hiện đúng yêu cầu.
+Ghi chú về cơ cấu vai trò
+Sơ đồ trên chỉ mô tả các vai trò có liên quan đến phần mềm. Quản trị viên hệ thống là vai trò kỹ thuật, phụ trách tài khoản, phân quyền và cấu hình hệ thống; không phải là cấp dưới của Quản lý trong quy trình nghiệp vụ điều phối chuyến xe.
+Trong khi đó:
+Quản lý chịu trách nhiệm quản lý dữ liệu danh mục dùng chung của hệ thống gồm tuyến xe, xe buýt và tài xế; duyệt yêu cầu nghỉ; xem báo cáo.
+Nhân viên điều phối trực tiếp lập chuyến, lập phiếu phân công, điều chỉnh phân công và xử lý các chuyến bị ảnh hưởng.
+Tài xế xem lịch làm việc cá nhân, gửi yêu cầu xin nghỉ và báo sự cố.
+Trong phạm vi đề tài, hệ thống không tách riêng bộ phận kỹ thuật hoặc bảo trì xe. Thông tin xe chỉ được quản lý ở mức phục vụ phân công chuyến, gồm biển số, số chỗ và trạng thái xe. Xe có trạng thái Hỏng hoặc Ngưng sử dụng không được phép phân công cho chuyến mới.
+Bảng chức danh và trách nhiệm
+Chức danh
+Trách nhiệm chính
+Quyền hạn
+Quản trị viên hệ thống
+Quản lý tài khoản, phân quyền, cấu hình hệ thống
+Tạo tài khoản, cập nhật tài khoản, khóa/mở khóa tài khoản, gán vai trò, cập nhật tham số hệ thống
+Quản lý
+Quản lý danh mục tuyến xe, xe buýt, tài xế; duyệt yêu cầu nghỉ; xem báo cáo
+Thêm, sửa, ngưng hoạt động và tra cứu tuyến xe; thêm, sửa, ngưng sử dụng và cập nhật trạng thái xe buýt; thêm, sửa, ngưng làm việc và cập nhật trạng thái tài xế; duyệt yêu cầu nghỉ; xem báo cáo
+Nhân viên điều phối
+Lập chuyến, phân công xe và tài xế, điều chỉnh phân công, xử lý phát sinh
+Tạo chuyến, lập phiếu phân công, kiểm tra xung đột, đổi xe, đổi tài xế, xử lý chuyến bị ảnh hưởng, cập nhật thực hiện chuyến
+Tài xế
+Xem lịch làm việc, gửi yêu cầu xin nghỉ, báo sự cố
+Xem lịch cá nhân, gửi yêu cầu nghỉ, xem trạng thái nghỉ, báo xe hỏng hoặc sự cố chuyến
+Mối quan hệ giữa các đối tượng
+Đối tượng
+Mối quan hệ nghiệp vụ
+Quản lý và Nhân viên điều phối
+Quản lý duy trì dữ liệu danh mục và giám sát hoạt động; nhân viên điều phối trực tiếp lập và điều chỉnh phân công
+Nhân viên điều phối và Tài xế
+Nhân viên điều phối phân công chuyến; tài xế thực hiện chuyến theo lịch được giao
+Tài xế và Quản lý
+Tài xế gửi yêu cầu xin nghỉ; Quản lý xem xét và duyệt hoặc từ chối
+Tài xế và Nhân viên điều phối
+Tài xế báo sự cố; nhân viên điều phối tiếp nhận và xử lý các chuyến bị ảnh hưởng
+Quản trị viên hệ thống và các người dùng khác
+Quản trị viên cấp tài khoản, phân quyền và cấu hình hệ thống
+1.3. Tìm hiểu hiện trạng nghiệp vụ
+Qua khảo sát hiện trạng, công tác phân công chuyến tại các đơn vị vận hành xe buýt có thể vẫn còn phụ thuộc vào cách làm thủ công như ghi chép trên giấy, bảng trắng hoặc sử dụng các file Excel riêng lẻ. Cách làm này có ưu điểm là đơn giản trong giai đoạn đầu, nhưng khi số lượng tuyến, xe, tài xế và chuyến tăng lên thì việc kiểm soát sẽ trở nên khó khăn.
+Một tình huống vận hành điển hình có thể mô tả như sau:
+Mỗi ngày, nhân viên điều phối cần xem danh sách tuyến đang hoạt động, các chuyến dự kiến cần thực hiện, danh sách xe đang khả dụng và danh sách tài xế có thể làm việc. Sau đó, nhân viên điều phối lập phiếu phân công xe và tài xế cho từng chuyến.
+Trong quá trình vận hành, nếu có tài xế gửi yêu cầu xin nghỉ và được duyệt, hoặc có xe bị báo hỏng, các chuyến chưa thực hiện có liên quan phải được kiểm tra và điều chỉnh lại. Ngoài ra, nhân viên điều phối cũng có thể chủ động đổi xe hoặc đổi tài xế cho một chuyến đã phân công khi cần thiết.
+Nếu các công việc trên chỉ được thực hiện bằng mắt thường hoặc file Excel rời rạc, có thể xảy ra các vấn đề như:
+Một xe bị phân công cho hai chuyến có thời gian chồng chéo.
+Một tài xế bị phân công cho hai chuyến có thời gian chồng chéo.
+Xe đang hỏng vẫn được đưa vào lịch chạy.
+Tài xế đã nghỉ vẫn xuất hiện trong phiếu phân công.
+Khó xác định các chuyến bị ảnh hưởng khi có xe hỏng hoặc tài xế nghỉ.
+Khó tổng hợp số chuyến thực hiện, chuyến trễ, tình hình sử dụng xe và năng suất tài xế.
+Vì vậy, phần mềm cần hỗ trợ tập trung hóa dữ liệu, tự động kiểm tra các điều kiện khi phân công, lưu lịch sử điều chỉnh và cung cấp các báo cáo phục vụ quản lý.
+1.4. Các nghiệp vụ chính hiện tại
+Nghiệp vụ
+Thông tin đầu vào
+Quá trình xử lý
+Thông tin kết xuất
+Loại nghiệp vụ
+Quản lý tuyến xe
+Thông tin tuyến mới hoặc thông tin cần điều chỉnh
+Quản lý thêm mới, cập nhật, ngưng hoạt động hoặc tra cứu tuyến
+Danh sách tuyến xe
+Lưu trữ, Tra cứu
+Quản lý xe buýt
+Thông tin xe, biển số, số chỗ, trạng thái xe
+Quản lý thêm mới, cập nhật, ngưng sử dụng, tra cứu xe và cập nhật trạng thái xe
+Danh sách xe buýt
+Lưu trữ, Tra cứu
+Quản lý tài xế
+Thông tin tài xế, loại bằng lái, trạng thái làm việc
+Quản lý thêm mới, cập nhật, ngưng làm việc, tra cứu và cập nhật trạng thái tài xế
+Danh sách tài xế
+Lưu trữ, Tra cứu
+Lập chuyến xe
+Tuyến, ngày chạy, hướng tuyến, giờ xuất bến dự kiến, giờ kết thúc dự kiến
+Tạo chuyến xe cụ thể theo tuyến và thời gian
+Danh sách chuyến xe
+Lưu trữ
+Lập phiếu phân công chuyến
+Chuyến cần phân công, xe khả dụng, tài xế khả dụng
+Gán xe và tài xế cho chuyến sau khi kiểm tra điều kiện
+Phiếu phân công chuyến
+Lưu trữ, Tra cứu, Tính toán
+Kiểm tra xung đột phân công
+Chuyến, xe, tài xế và lịch phân công hiện có
+So sánh thời gian và trạng thái để phát hiện xung đột
+Danh sách cảnh báo hoặc kết quả hợp lệ
+Tính toán
+Điều chỉnh phân công
+Chuyến đã phân công, xe mới hoặc tài xế mới
+Kiểm tra lại điều kiện, thay thế phiếu phân công cũ bằng phiếu mới
+Phiếu phân công điều chỉnh
+Lưu trữ, Tra cứu, Tính toán
+Ghi nhận yêu cầu nghỉ
+Tài xế, ngày nghỉ, ca nghỉ, lý do
+Lưu yêu cầu nghỉ và chuyển cho Quản lý xử lý
+Phiếu yêu cầu nghỉ
+Lưu trữ
+Duyệt yêu cầu nghỉ
+Yêu cầu nghỉ đang chờ duyệt
+Quản lý duyệt hoặc từ chối; xác định chuyến bị ảnh hưởng nếu yêu cầu được duyệt
+Trạng thái yêu cầu nghỉ, danh sách chuyến bị ảnh hưởng
+Lưu trữ, Tra cứu
+Xử lý tài xế nghỉ
+Yêu cầu nghỉ đã duyệt, lịch phân công hiện có
+Tìm chuyến bị ảnh hưởng và chọn tài xế thay thế
+Lịch phân công điều chỉnh
+Tra cứu, Tính toán, Lưu trữ
+Báo sự cố xe/chuyến
+Xe, chuyến liên quan, loại sự cố, mô tả
+Tài xế gửi báo cáo sự cố để điều phối tiếp nhận
+Phiếu báo sự cố
+Lưu trữ
+Xử lý xe hỏng
+Báo cáo xe hỏng, lịch phân công hiện có
+Ghi nhận xe không khả dụng, xác định chuyến bị ảnh hưởng và thay xe
+Lịch phân công điều chỉnh
+Tra cứu, Tính toán, Lưu trữ
+Theo dõi thực hiện chuyến
+Giờ dự kiến, giờ thực tế, trạng thái chuyến
+Ghi nhận chuyến đang chạy, hoàn thành, trễ hoặc hủy; tính số phút trễ
+Sổ theo dõi thực hiện chuyến
+Lưu trữ, Tính toán
+Lập báo cáo điều hành
+Dữ liệu tuyến, xe, tài xế, chuyến, phân công và nhật ký chuyến
+Tổng hợp dữ liệu theo tiêu chí quản lý
+Báo cáo tuyến, xe và tài xế
+Tổng hợp, Thống kê
+1.5. Phân loại nghiệp vụ theo nhóm
+Loại nghiệp vụ
+Các nghiệp vụ cụ thể
+Nghiệp vụ lưu trữ
+Quản lý tuyến xe, xe buýt, tài xế, chuyến xe, phiếu phân công, yêu cầu nghỉ, sự cố, nhật ký thực hiện chuyến
+Nghiệp vụ tra cứu
+Tra cứu danh mục, lịch phân công, chuyến theo ngày, tuyến, xe, tài xế, trạng thái; tra cứu yêu cầu nghỉ và sự cố
+Nghiệp vụ tính toán
+Kiểm tra trùng lịch xe, trùng lịch tài xế, kiểm tra xe/tài xế khả dụng, kiểm tra thời gian lái liên tục, tính số phút trễ
+Nghiệp vụ tổng hợp/thống kê
+Thống kê số chuyến theo tuyến, tình hình sử dụng xe, năng suất tài xế, tỷ lệ đúng giờ
+1.6. Nhận xét về hiện trạng
+Từ kết quả khảo sát, có thể rút ra một số hạn chế chính của quy trình hiện tại:
+Việc lập và điều chỉnh phân công chuyến còn mang tính thủ công nên dễ xảy ra nhầm lẫn hoặc bỏ sót.
+Dữ liệu tuyến xe, xe buýt, tài xế và chuyến xe có thể bị lưu trữ rời rạc, khó đồng bộ.
+Khó kiểm tra nhanh xe nào đang hoạt động, xe nào bị hỏng hoặc đã ngưng sử dụng.
+Khó kiểm tra tài xế nào đang khả dụng hoặc đang có yêu cầu nghỉ đã được duyệt.
+Dễ xảy ra tình trạng một xe hoặc một tài xế bị phân công vào hai chuyến có thời gian chồng chéo.
+Việc xử lý phát sinh như tài xế nghỉ, xe hỏng hoặc cần điều chỉnh phân công chưa có cơ chế hỗ trợ tập trung.
+Việc tổng hợp số chuyến, chuyến trễ, tình hình sử dụng xe và năng suất tài xế mất nhiều thời gian.
+Từ đó, phần mềm cần được xây dựng theo hướng:
+Quản lý tập trung các danh mục tuyến xe, xe buýt và tài xế.
+Hỗ trợ nhân viên điều phối lập chuyến và phân công chuyến.
+Tự động kiểm tra các điều kiện khi phân công.
+Hỗ trợ xử lý chuyến bị ảnh hưởng khi tài xế nghỉ hoặc xe hỏng.
+Ghi nhận kết quả thực hiện chuyến.
+Tổng hợp báo cáo phục vụ Quản lý.
+PHẦN 2. LẬP DANH SÁCH CÁC YÊU CẦU
+2.1. Đối tượng sử dụng hệ thống
+Hệ thống có bốn đối tượng sử dụng chính:
+STT
+Đối tượng
+Vai trò
+1
+Quản trị viên hệ thống
+Quản lý tài khoản, phân quyền và cấu hình hệ thống
+2
+Quản lý
+Quản lý đầy đủ các danh mục tuyến xe, xe buýt, tài xế; duyệt yêu cầu nghỉ; xem báo cáo
+3
+Nhân viên điều phối
+Lập chuyến, phân công xe/tài xế, điều chỉnh phân công, xử lý phát sinh và theo dõi chuyến
+4
+Tài xế
+Xem lịch cá nhân, gửi yêu cầu xin nghỉ, xem trạng thái nghỉ và báo sự cố
+Trong đó:
+Quản lý chịu trách nhiệm duy trì dữ liệu danh mục dùng chung của hệ thống, gồm tuyến xe, xe buýt và tài xế; đồng thời duyệt yêu cầu nghỉ và theo dõi báo cáo.
+Nhân viên điều phối là người dùng trung tâm của nghiệp vụ phân công chuyến, trực tiếp lập chuyến, phân công, điều chỉnh và xử lý các chuyến bị ảnh hưởng.
+Tài xế sử dụng hệ thống để xem lịch làm việc, gửi yêu cầu nghỉ và báo sự cố.
+Quản trị viên hệ thống phụ trách kỹ thuật hệ thống, không trực tiếp tham gia phân công chuyến.
+2.2. Yêu cầu chức năng nghiệp vụ
+2.2.1. Nhóm chức năng của Quản trị viên hệ thống
+Mã bộ phận: ADTên bộ phận: Quản trị viên hệ thống
+STT
+Mã chức năng
+Công việc
+Loại công việc
+Quy định liên quan
+Ghi chú
+1
+AD01
+Quản lý tài khoản người dùng
+Lưu trữ, Tra cứu
+AD_QĐ01
+Tạo, cập nhật, khóa/mở khóa và xem danh sách tài khoản
+2
+AD02
+Phân quyền người dùng
+Lưu trữ
+AD_QĐ02
+Gán vai trò cho tài khoản
+3
+AD03
+Cấu hình tham số hệ thống
+Lưu trữ
+AD_QĐ03
+Cấu hình thời gian lái liên tục tối đa và thời gian nghỉ tối thiểu
+4
+AD04
+Xem nhật ký hệ thống
+Tra cứu
+Chức năng mở rộng, theo dõi các thao tác quan trọng nếu được cài đặt
+Bảng quy định liên quan — Quản trị viên hệ thống
+STT
+Mã quy định
+Tên quy định
+Mô tả
+1
+AD_QĐ01
+Quy định tài khoản
+Mỗi người dùng có một tài khoản đăng nhập gồm tên đăng nhập, mật khẩu, họ tên, vai trò và trạng thái tài khoản
+2
+AD_QĐ02
+Quy định phân quyền
+Hệ thống có các vai trò: Quản trị viên hệ thống, Quản lý, Nhân viên điều phối và Tài xế
+3
+AD_QĐ03
+Cấu hình thời gian lái liên tục
+Hệ thống cho phép cấu hình thời gian lái liên tục tối đa, mặc định là 240 phút; đồng thời cấu hình thời gian nghỉ tối thiểu giữa các chuyến
+Ghi chú về phạm vi kiểm tra thời gian lái xe
+Trong phạm vi đề tài, hệ thống chỉ đưa vào xử lý ràng buộc thời gian lái xe liên tục tối đa 04 giờ thông qua tham số cấu hình. Các quy định khác về tổng thời gian làm việc trong ngày hoặc trong tuần không được mô hình hóa trong phiên bản hiện tại của phần mềm.
+2.2.2. Nhóm chức năng của Quản lý
+Mã bộ phận: QLTên bộ phận: Quản lý
+STT
+Mã chức năng
+Công việc
+Loại công việc
+Quy định/Biểu mẫu liên quan
+Ghi chú
+1
+QL01
+Quản lý danh mục tuyến xe
+Lưu trữ, Tra cứu
+QL_BM01, QL_QĐ06
+Thêm, sửa, ngưng hoạt động và xem danh sách tuyến
+2
+QL02
+Quản lý danh mục xe buýt
+Lưu trữ, Tra cứu
+QL_BM02, QL_QĐ01, QL_QĐ04, QL_QĐ06
+Thêm, sửa, ngưng sử dụng, xem danh sách xe và cập nhật trạng thái xe
+3
+QL03
+Quản lý danh mục tài xế
+Lưu trữ, Tra cứu
+QL_BM03, QL_QĐ02, QL_QĐ05, QL_QĐ06
+Thêm, sửa, ngưng làm việc, xem danh sách tài xế và cập nhật trạng thái
+4
+QL04
+Xem yêu cầu xin nghỉ của tài xế
+Tra cứu
+QL_BM04
+Xem danh sách yêu cầu nghỉ
+5
+QL05
+Duyệt hoặc từ chối yêu cầu nghỉ
+Lưu trữ
+QL_QĐ03
+Cập nhật trạng thái yêu cầu nghỉ
+6
+QL06
+Xem báo cáo hiệu suất tuyến
+Tra cứu, Tổng hợp
+QL_BM05
+Xem số chuyến kế hoạch, thực hiện, đúng giờ, trễ và hủy
+7
+QL07
+Xem báo cáo tình hình sử dụng xe
+Tra cứu, Tổng hợp
+QL_BM06
+Thống kê số chuyến và trạng thái theo xe
+8
+QL08
+Xem báo cáo năng suất tài xế
+Tra cứu, Tổng hợp
+QL_BM07
+Thống kê số chuyến, tổng giờ lái, số lần trễ và số ngày nghỉ
+Bảng quy định liên quan — Quản lý
+STT
+Mã quy định
+Tên quy định
+Mô tả
+1
+QL_QĐ01
+Quy định trạng thái xe
+Xe có các trạng thái: Hoạt động, Hỏng, Ngưng sử dụng
+2
+QL_QĐ02
+Quy định trạng thái tài xế
+Tài xế có các trạng thái: Đang làm việc, Nghỉ phép, Tạm nghỉ, Ngưng làm việc
+3
+QL_QĐ03
+Quy định duyệt nghỉ
+Yêu cầu nghỉ của tài xế có các trạng thái: Chờ duyệt, Đã duyệt, Từ chối
+4
+QL_QĐ04
+Quy định xe khả dụng
+Chỉ xe có trạng thái Hoạt động mới được phép phân công cho chuyến
+5
+QL_QĐ05
+Quy định tài xế khả dụng
+Chỉ tài xế có trạng thái Đang làm việc và không có yêu cầu nghỉ đã duyệt trong thời gian chuyến mới được phép phân công
+6
+QL_QĐ06
+Quy định ngưng sử dụng dữ liệu danh mục
+Đối với tuyến xe, xe buýt hoặc tài xế đã phát sinh dữ liệu vận hành, hệ thống ưu tiên chuyển trạng thái ngưng hoạt động/ngưng sử dụng/ngưng làm việc thay vì xóa hoàn toàn khỏi hệ thống
+Ghi chú
+Trong giao diện, hệ thống có thể hiển thị thao tác Xóa cho người dùng. Tuy nhiên, đối với dữ liệu đã được sử dụng trong chuyến hoặc phiếu phân công, thao tác này được xử lý dưới dạng cập nhật trạng thái để bảo toàn lịch sử vận hành.
+2.2.3. Nhóm chức năng của Nhân viên điều phối
+Mã bộ phận: DHTên bộ phận: Nhân viên điều phối
+STT
+Mã chức năng
+Công việc
+Loại công việc
+Quy định/Biểu mẫu liên quan
+Ghi chú
+1
+DH01
+Xem lịch phân công tổng quan
+Tra cứu
+DH_BM01
+Xem lịch chạy theo ngày, tuyến, xe, tài xế và trạng thái
+2
+DH02
+Lập chuyến xe
+Lưu trữ
+DH_BM02
+Tạo chuyến theo tuyến, ngày, hướng tuyến và thời gian dự kiến
+3
+DH03
+Lập phiếu phân công chuyến
+Lưu trữ, Tính toán
+DH_BM03, DH_QĐ01, DH_QĐ02, DH_QĐ03, DH_QĐ04, DH_QĐ07
+Gán xe và tài xế cho chuyến chưa được phân công
+4
+DH04
+Kiểm tra xung đột phân công
+Tính toán
+DH_QĐ01, DH_QĐ02, DH_QĐ03, DH_QĐ04, DH_QĐ07
+Cảnh báo trùng xe, trùng tài xế, xe/tài xế không khả dụng và vi phạm thời gian lái liên tục
+5
+DH05
+Điều chỉnh phân công chuyến
+Lưu trữ, Tính toán
+DH_BM04, DH_QĐ01, DH_QĐ02, DH_QĐ03, DH_QĐ04, DH_QĐ07
+Đổi xe hoặc đổi tài xế cho chuyến đã phân công
+6
+DH06
+Xử lý xe hỏng
+Tra cứu, Tính toán, Lưu trữ
+DH_BM04, DH_QĐ05
+Tiếp nhận sự cố xe hỏng, xác định chuyến bị ảnh hưởng và chọn xe thay thế
+7
+DH07
+Xử lý tài xế nghỉ
+Tra cứu, Tính toán, Lưu trữ
+DH_BM04, DH_QĐ06
+Tìm chuyến bị ảnh hưởng và phân công tài xế thay thế
+8
+DH08
+Ghi nhận thực hiện chuyến
+Lưu trữ, Tính toán
+DH_BM05
+Cập nhật giờ xuất bến thực tế, giờ kết thúc thực tế, trạng thái và số phút trễ
+9
+DH09
+Tra cứu lịch sử phân công
+Tra cứu
+Tra cứu theo ngày, tuyến, xe, tài xế và trạng thái phân công
+Bảng quy định liên quan — Nhân viên điều phối
+STT
+Mã quy định
+Tên quy định
+Mô tả
+1
+DH_QĐ01
+Kiểm tra trùng lịch xe
+Một xe không được phân công cho hai chuyến có thời gian chồng chéo
+2
+DH_QĐ02
+Kiểm tra trùng lịch tài xế
+Một tài xế không được phân công cho hai chuyến có thời gian chồng chéo
+3
+DH_QĐ03
+Kiểm tra trạng thái xe
+Chỉ xe có trạng thái Hoạt động mới được phép chọn khi phân công
+4
+DH_QĐ04
+Kiểm tra trạng thái tài xế
+Chỉ tài xế có trạng thái Đang làm việc và không có yêu cầu nghỉ đã duyệt trong thời gian chuyến mới được phân công
+5
+DH_QĐ05
+Xử lý xe hỏng
+Khi xe được báo hỏng, hệ thống cảnh báo các chuyến chưa thực hiện có sử dụng xe đó; xe ở trạng thái Hỏng không được phân công mới
+6
+DH_QĐ06
+Xử lý tài xế nghỉ
+Khi yêu cầu nghỉ của tài xế được duyệt, hệ thống cảnh báo các chuyến chưa thực hiện có phân công tài xế đó
+7
+DH_QĐ07
+Kiểm tra lái xe liên tục
+Hệ thống cảnh báo nếu việc phân công khiến tài xế có chuỗi lái liên tục vượt quá 240 phút
+Công thức kiểm tra chồng chéo thời gian
+Hai chuyến A và B được xem là chồng chéo thời gian nếu:
+A.GiờXuấtBếnDựKiến < B.GiờKếtThúcDựKiến
+và
+B.GiờXuấtBếnDựKiến < A.GiờKếtThúcDựKiến
+Công thức này được áp dụng để kiểm tra:
+Một xe có bị phân công vào hai chuyến trùng thời gian hay không.
+Một tài xế có bị phân công vào hai chuyến trùng thời gian hay không.
+Công thức kiểm tra thời gian lái xe liên tục
+Đối với một tài xế, hệ thống xét các chuyến đã được phân công theo thứ tự thời gian trong ngày. Một chuỗi chuyến được xem là lái liên tục nếu khoảng nghỉ giữa hai chuyến liên tiếp nhỏ hơn thời gian nghỉ tối thiểu được cấu hình trong hệ thống.
+Thời gian nghỉ giữa hai chuyến, tính theo phút:
+Thời gian nghỉ =
+Giờ xuất bến dự kiến của chuyến sau
+-
+Giờ kết thúc dự kiến của chuyến trước
+Nếu:
+Thời gian nghỉ < Thời gian nghỉ tối thiểu
+thì hai chuyến được xem là thuộc cùng một chuỗi lái liên tục.
+Khi đó, thời gian lái liên tục được tính như sau:
+Thời gian lái liên tục =
+Giờ kết thúc dự kiến của chuyến cuối trong chuỗi
+-
+Giờ xuất bến dự kiến của chuyến đầu tiên trong chuỗi
+Nếu:
+Thời gian lái liên tục > 240 phút
+thì hệ thống hiển thị cảnh báo vi phạm điều kiện phân công.
+Ghi chú: Trong phạm vi đồ án, công thức này được sử dụng để hỗ trợ cảnh báo trước khi lưu phân công hoặc điều chỉnh phân công. Nhân viên điều phối chịu trách nhiệm lựa chọn phương án phân công phù hợp.
+Công thức tính số phút trễ
+Số phút trễ =
+Giờ xuất bến thực tế
+-
+Giờ xuất bến dự kiến
+Nếu kết quả lớn hơn 0 thì chuyến được ghi nhận là trễ. Nếu kết quả nhỏ hơn hoặc bằng 0 thì số phút trễ được ghi nhận bằng 0.
+2.2.4. Nhóm chức năng của Tài xế
+Mã bộ phận: TXTên bộ phận: Tài xế
+STT
+Mã chức năng
+Công việc
+Loại công việc
+Quy định/Biểu mẫu liên quan
+Ghi chú
+1
+TX01
+Đăng nhập hệ thống
+Tra cứu
+Tài xế đăng nhập bằng tài khoản được cấp
+2
+TX02
+Xem lịch làm việc cá nhân
+Tra cứu
+TX_BM01
+Xem các chuyến được phân công
+3
+TX03
+Gửi yêu cầu xin nghỉ
+Lưu trữ
+TX_BM02, TX_QĐ01
+Gửi ngày nghỉ, ca nghỉ và lý do
+4
+TX04
+Xem trạng thái yêu cầu nghỉ
+Tra cứu
+TX_QĐ02
+Xem yêu cầu đang chờ duyệt, đã duyệt hoặc bị từ chối
+5
+TX05
+Báo xe hỏng hoặc sự cố chuyến
+Lưu trữ
+TX_BM03, TX_QĐ03
+Gửi thông tin sự cố cho nhân viên điều phối
+6
+TX06
+Xem thông báo điều phối
+Tra cứu
+Chức năng mở rộng, nhận thông báo thay đổi lịch hoặc phân công mới nếu được cài đặt
+Bảng quy định liên quan — Tài xế
+STT
+Mã quy định
+Tên quy định
+Mô tả
+1
+TX_QĐ01
+Gửi yêu cầu nghỉ
+Tài xế có thể gửi yêu cầu nghỉ theo ngày và ca làm việc
+2
+TX_QĐ02
+Trạng thái yêu cầu nghỉ
+Yêu cầu nghỉ có các trạng thái: Chờ duyệt, Đã duyệt, Từ chối
+3
+TX_QĐ03
+Báo sự cố
+Tài xế có thể báo sự cố liên quan đến xe hoặc chuyến đang được phân công; chuyến liên quan có thể để trống nếu sự cố được phát hiện ngoài chuyến
+4
+TX_QĐ04
+Giới hạn quyền tài xế
+Tài xế không được lập chuyến, phân công chuyến, điều chỉnh phân công hoặc sửa dữ liệu danh mục hệ thống
+2.3. Các biểu mẫu liên quan
+QL_BM01. Danh sách tuyến xe
+Mã tuyến
+Tên tuyến
+Điểm đầu
+Điểm cuối
+Thời gian dự kiến
+Trạng thái
+01
+Bến Thành - Chợ Lớn
+Bến Thành
+Chợ Lớn
+45 phút
+Hoạt động
+08
+Bến xe Quận 8 - Đại học Quốc gia
+Bến xe Quận 8
+Đại học Quốc gia TP.HCM
+90 phút
+Hoạt động
+QL_BM02. Danh sách xe buýt
+ID xe
+Biển số
+Số chỗ
+Trạng thái
+1
+51B-123.45
+45
+Hoạt động
+2
+51B-678.90
+40
+Hoạt động
+3
+51B-999.99
+45
+Hỏng
+QL_BM03. Danh sách tài xế
+Mã tài xế
+Họ tên
+Số điện thoại
+Loại bằng
+Trạng thái
+TX001
+Nguyễn Văn A
+090xxxxxxx
+D
+Đang làm việc
+TX002
+Trần Văn B
+091xxxxxxx
+D
+Đang làm việc
+TX003
+Lê Văn C
+092xxxxxxx
+D
+Nghỉ phép
+QL_BM04. Danh sách yêu cầu nghỉ của tài xế
+Mã yêu cầu
+Tài xế
+Ngày nghỉ
+Ca nghỉ
+Lý do
+Trạng thái
+NP001
+Nguyễn Văn A
+21/03/2026
+Sáng
+Việc gia đình
+Chờ duyệt
+NP002
+Trần Văn B
+22/03/2026
+Cả ngày
+Việc cá nhân
+Đã duyệt
+DH_BM01. Lịch phân công chuyến tổng quan
+Ngày chạy
+Mã chuyến
+Tuyến
+Giờ xuất bến dự kiến
+Giờ kết thúc dự kiến
+Xe
+Tài xế
+Trạng thái chuyến
+20/03/2026
+CX001
+01
+05:30
+06:15
+51B-123.45
+Nguyễn Văn A
+Đã phân công
+20/03/2026
+CX002
+01
+06:15
+07:00
+51B-678.90
+Trần Văn B
+Đã phân công
+DH_BM02. Danh sách chuyến xe
+Mã chuyến
+Tuyến
+Ngày chạy
+Hướng tuyến
+Giờ xuất bến dự kiến
+Giờ kết thúc dự kiến
+Trạng thái
+CX001
+01
+20/03/2026
+Lượt đi
+05:30
+06:15
+Chưa phân công
+CX002
+01
+20/03/2026
+Lượt về
+06:15
+07:00
+Chưa phân công
+DH_BM03. Phiếu phân công chuyến
+Thông tin
+Nội dung
+Mã phiếu phân công
+PC001
+Thời điểm lập phiếu
+19/03/2026 - 08:00
+Người phân công
+Nhân viên điều phối
+Mã chuyến
+CX001
+Tuyến
+01 - Bến Thành - Chợ Lớn
+Ngày chạy
+20/03/2026
+Giờ xuất bến dự kiến
+05:30
+Giờ kết thúc dự kiến
+06:15
+Xe
+51B-123.45
+Tài xế
+Nguyễn Văn A
+Kết quả kiểm tra xung đột
+Không có xung đột
+Trạng thái phiếu phân công
+Active
+DH_BM04. Danh sách chuyến bị ảnh hưởng
+Mã chuyến
+Tuyến
+Giờ xuất bến dự kiến
+Xe hiện tại
+Tài xế hiện tại
+Nguyên nhân
+Trạng thái xử lý
+CX005
+01
+08:00
+51B-123.45
+Nguyễn Văn A
+Tài xế nghỉ đã duyệt
+Chưa xử lý
+CX006
+08
+09:30
+51B-999.99
+Trần Văn B
+Xe hỏng
+Chưa xử lý
+DH_BM05. Sổ theo dõi thực hiện chuyến
+Ngày chạy
+Mã chuyến
+Tuyến
+Giờ xuất bến dự kiến
+Giờ xuất bến thực tế
+Số phút trễ
+Trạng thái
+20/03/2026
+CX001
+01
+05:30
+05:28
+0
+Hoàn thành
+20/03/2026
+CX002
+01
+06:15
+06:20
+5
+Trễ
+TX_BM01. Lịch làm việc cá nhân
+Ngày chạy
+Mã chuyến
+Tuyến
+Giờ xuất bến dự kiến
+Giờ kết thúc dự kiến
+Xe
+Trạng thái
+20/03/2026
+CX001
+01
+05:30
+06:15
+51B-123.45
+Đã phân công
+20/03/2026
+CX004
+01
+08:00
+08:45
+51B-123.45
+Đã phân công
+TX_BM02. Phiếu yêu cầu xin nghỉ
+Thông tin
+Nội dung
+Mã yêu cầu
+NP001
+Tài xế
+Nguyễn Văn A
+Ngày gửi
+19/03/2026
+Ngày xin nghỉ
+21/03/2026
+Ca nghỉ
+Sáng
+Lý do
+Việc gia đình
+Trạng thái
+Chờ duyệt
+TX_BM03. Phiếu báo sự cố
+Thông tin
+Nội dung
+Mã sự cố
+SC001
+Người báo cáo
+Nguyễn Văn A
+Xe liên quan
+51B-123.45
+Chuyến liên quan
+CX001
+Thời điểm báo
+20/03/2026 - 07:30
+Loại sự cố
+Xe hỏng
+Mô tả
+Xe chết máy, không thể tiếp tục vận hành
+Trạng thái xử lý
+Chờ xử lý
+QL_BM05. Báo cáo hiệu suất tuyến
+Tuyến
+Số chuyến kế hoạch
+Số chuyến thực hiện
+Đúng giờ
+Trễ giờ
+Hủy
+Tỷ lệ đúng giờ
+01
+120
+118
+110
+8
+2
+93,2%
+08
+90
+88
+80
+8
+2
+90,9%
+Công thức
+Tỷ lệ đúng giờ =
+Số chuyến đúng giờ / Số chuyến thực hiện × 100%
+QL_BM06. Báo cáo tình hình sử dụng xe
+ID xe
+Biển số
+Số chuyến đã chạy
+Tổng giờ hoạt động
+Số chuyến hủy liên quan đến xe
+Trạng thái hiện tại
+1
+51B-123.45
+45
+36
+0
+Hoạt động
+2
+51B-678.90
+40
+32
+1
+Hoạt động
+3
+51B-999.99
+10
+8
+2
+Hỏng
+QL_BM07. Báo cáo năng suất tài xế
+Mã tài xế
+Họ tên
+Số chuyến
+Tổng giờ lái
+Số lần trễ
+Số ngày nghỉ
+TX001
+Nguyễn Văn A
+45
+36
+2
+1
+TX002
+Trần Văn B
+42
+33,5
+1
+0
+2.4. Xác định yêu cầu chức năng hệ thống
+STT
+Nội dung
+Mô tả chi tiết
+Mức độ
+1
+Đăng nhập hệ thống
+Người dùng đăng nhập bằng tên đăng nhập và mật khẩu
+Bắt buộc
+2
+Phân quyền sử dụng
+Hệ thống phân quyền theo vai trò: Quản trị viên hệ thống, Quản lý, Nhân viên điều phối, Tài xế
+Bắt buộc
+3
+Quản lý tuyến xe
+Cho phép Quản lý thêm, sửa, ngưng hoạt động và tra cứu danh mục tuyến xe
+Bắt buộc
+4
+Quản lý xe buýt
+Cho phép Quản lý thêm, sửa, ngưng sử dụng, tra cứu xe và cập nhật trạng thái xe: Hoạt động, Hỏng, Ngưng sử dụng
+Bắt buộc
+5
+Quản lý tài xế
+Cho phép Quản lý thêm, sửa, ngưng làm việc, tra cứu hồ sơ tài xế và cập nhật trạng thái làm việc
+Bắt buộc
+6
+Lập chuyến xe
+Cho phép Nhân viên điều phối tạo chuyến xe theo tuyến, ngày chạy, hướng tuyến và thời gian dự kiến
+Bắt buộc
+7
+Lập phiếu phân công chuyến
+Cho phép Nhân viên điều phối gán xe và tài xế cho chuyến chưa được phân công
+Bắt buộc
+8
+Kiểm tra xung đột tự động
+Kiểm tra trùng lịch xe, trùng lịch tài xế, trạng thái xe, trạng thái tài xế, yêu cầu nghỉ đã duyệt và thời gian lái liên tục
+Bắt buộc
+9
+Điều chỉnh phân công chuyến
+Cho phép Nhân viên điều phối đổi xe hoặc đổi tài xế cho chuyến đã được phân công
+Bắt buộc
+10
+Quản lý yêu cầu nghỉ
+Tài xế gửi yêu cầu nghỉ; Quản lý xem, duyệt hoặc từ chối yêu cầu
+Bắt buộc
+11
+Xử lý tài xế nghỉ
+Khi yêu cầu nghỉ được duyệt, hệ thống xác định chuyến bị ảnh hưởng để Nhân viên điều phối chọn tài xế thay thế
+Bắt buộc
+12
+Báo và xử lý sự cố xe hỏng
+Tài xế báo sự cố; hệ thống hỗ trợ Nhân viên điều phối xác định chuyến bị ảnh hưởng và chọn xe thay thế
+Bắt buộc
+13
+Theo dõi thực hiện chuyến
+Ghi nhận giờ xuất bến thực tế, giờ kết thúc thực tế, trạng thái chuyến và số phút trễ nếu có
+Bắt buộc
+14
+Tra cứu lịch phân công
+Tra cứu lịch theo ngày, tuyến, xe, tài xế và trạng thái
+Bắt buộc
+15
+Báo cáo thống kê
+Thống kê hiệu suất tuyến, tình hình sử dụng xe và năng suất tài xế
+Bắt buộc
+16
+Cấu hình tham số hệ thống
+Cho phép cập nhật thời gian nghỉ tối thiểu và thời gian lái liên tục tối đa
+Bắt buộc
+17
+Ghi nhật ký hệ thống
+Ghi nhận thao tác quan trọng như đăng nhập, cập nhật dữ liệu và phân công chuyến
+Mở rộng
+18
+Xuất báo cáo Excel/PDF
+Xuất báo cáo để lưu trữ hoặc in ấn
+Mở rộng
+19
+Thông báo nội bộ
+Gửi thông báo khi có thay đổi lịch, duyệt nghỉ hoặc phân công mới
+Mở rộng
+2.5. Xác định yêu cầu chất lượng
+STT
+Yêu cầu chất lượng
+Tiêu chuẩn
+Mô tả chi tiết
+1
+Giao diện dễ sử dụng
+Tiện dụng
+Giao diện web rõ ràng, dễ thao tác; các màn hình theo đúng vai trò; tài xế có thể xem lịch trên trình duyệt thiết bị di động
+2
+Dữ liệu nhất quán
+Tin cậy
+Hệ thống không cho phép lưu phân công trùng xe, trùng tài xế, sử dụng xe không khả dụng hoặc tài xế đang nghỉ
+3
+Bảo toàn lịch sử vận hành
+Tin cậy
+Tuyến, xe hoặc tài xế đã phát sinh dữ liệu lịch sử được chuyển trạng thái ngưng sử dụng thay vì xóa vật lý khỏi hệ thống
+4
+Phản hồi nhanh
+Hiệu quả
+Các thao tác tra cứu, lọc danh sách và kiểm tra xung đột phản hồi nhanh trong điều kiện dữ liệu thử nghiệm
+5
+Bảo mật tài khoản
+An toàn
+Người dùng phải đăng nhập và chỉ được truy cập chức năng phù hợp với vai trò
+6
+Dễ thay đổi quy định
+Bảo trì
+Các tham số như thời gian lái liên tục tối đa và thời gian nghỉ tối thiểu có thể được cấu hình
+7
+Dễ mở rộng
+Mở rộng
+Hệ thống có thể mở rộng thêm GPS, bảo trì xe, thông báo nâng cao hoặc các chức năng khác trong tương lai
+8
+Hỗ trợ báo cáo
+Tương thích
+Báo cáo được hiển thị rõ ràng và có thể mở rộng để xuất Excel hoặc PDF
+2.6. Phạm vi thực hiện của hệ thống
+Các chức năng nằm trong phạm vi
+Quản lý tài khoản và phân quyền sử dụng.
+Cấu hình thời gian lái liên tục tối đa và thời gian nghỉ tối thiểu.
+Quản lý danh mục tuyến xe: thêm, sửa, ngưng hoạt động và tra cứu.
+Quản lý danh mục xe buýt: thêm, sửa, ngưng sử dụng, tra cứu và cập nhật trạng thái xe.
+Quản lý danh mục tài xế: thêm, sửa, ngưng làm việc, tra cứu và cập nhật trạng thái.
+Lập chuyến xe.
+Lập phiếu phân công xe và tài xế cho chuyến.
+Điều chỉnh phân công chuyến đã có.
+Kiểm tra trùng lịch xe.
+Kiểm tra trùng lịch tài xế.
+Kiểm tra trạng thái khả dụng của xe.
+Kiểm tra trạng thái khả dụng và yêu cầu nghỉ đã duyệt của tài xế.
+Cảnh báo tài xế lái liên tục quá 04 giờ.
+Tài xế xem lịch làm việc cá nhân.
+Tài xế gửi yêu cầu xin nghỉ và xem trạng thái xử lý.
+Quản lý duyệt hoặc từ chối yêu cầu nghỉ.
+Tài xế báo xe hỏng hoặc sự cố chuyến.
+Nhân viên điều phối xử lý chuyến bị ảnh hưởng do xe hỏng hoặc tài xế nghỉ.
+Ghi nhận thực hiện chuyến và tính số phút trễ.
+Tra cứu lịch phân công.
+Báo cáo thống kê cơ bản theo tuyến, xe và tài xế.
+Các chức năng không nằm trong phạm vi
+Quản lý bán vé.
+Quản lý doanh thu vé.
+Tra cứu tuyến xe dành cho hành khách.
+Đặt vé xe buýt.
+Giám sát GPS thời gian thực.
+Tính lương chi tiết cho tài xế.
+Quản lý bảo trì xe chuyên sâu.
+Cảnh báo bảo trì theo số km.
+Quản lý phụ xe.
+Tối ưu hóa tự động toàn bộ lịch phân công.
+Tự động lựa chọn xe hoặc tài xế tối ưu.
+Tích hợp email hoặc SMS thực tế.
+Cài đặt nhật ký hệ thống chi tiết và thông báo nội bộ nếu thời gian thực hiện đồ án không cho phép.
+Các chức năng ngoài phạm vi có thể được xem là hướng mở rộng trong tương lai.
+PHẦN 3. KẾT LUẬN
+Qua quá trình khảo sát hiện trạng và xác định yêu cầu, có thể thấy bài toán phân công chuyến xe buýt tại Thành phố Hồ Chí Minh là một bài toán thực tế, liên quan đến nhiều đối tượng và phát sinh nhiều tình huống cần xử lý trong quá trình điều hành. Trong đó, nghiệp vụ trung tâm là lập chuyến, phân công xe và tài xế, kiểm tra xung đột, theo dõi thực hiện chuyến và điều chỉnh phân công khi có phát sinh.
+Trên cơ sở khảo sát, hệ thống xác định bốn nhóm người dùng chính gồm: Quản trị viên hệ thống, Quản lý, Nhân viên điều phối và Tài xế.
+Trong đó:
+Quản trị viên hệ thống phụ trách tài khoản, phân quyền và cấu hình hệ thống.
+Quản lý chịu trách nhiệm quản lý đầy đủ các danh mục tuyến xe, xe buýt và tài xế; duyệt yêu cầu nghỉ; xem báo cáo.
+Nhân viên điều phối là người dùng trung tâm của nghiệp vụ vận hành, trực tiếp lập chuyến, phân công, điều chỉnh phân công và xử lý chuyến bị ảnh hưởng.
+Tài xế sử dụng hệ thống để xem lịch, gửi yêu cầu nghỉ và báo sự cố.
+Hệ thống không đi sâu vào quản lý bảo trì xe, bán vé, doanh thu, GPS thời gian thực hoặc dịch vụ tra cứu cho hành khách. Thay vào đó, hệ thống tập trung vào nghiệp vụ phân công chuyến xe buýt nội bộ, phù hợp với phạm vi của đồ án môn học.
+Kết quả của giai đoạn khảo sát hiện trạng và xác định yêu cầu là cơ sở để thực hiện các bước tiếp theo:
+Mô hình hóa Use Case.
+Thiết kế cơ sở dữ liệu.
+Thiết kế giao diện web.
+Thiết kế xử lý.
+Thiết kế kiến trúc và kế hoạch cài đặt.
+Cài đặt và kiểm thử hệ thống.

@@ -18,7 +18,7 @@ export default function ScheduleOverview() {
   const [routes, setRoutes] = useState([]);
   const [buses, setBuses] = useState([]);
   const [drivers, setDrivers] = useState([]);
-  const [tripForm, setTripForm] = useState({ trip_code: '', route_code: '', trip_date: '', scheduled_departure: '' });
+  const [tripForm, setTripForm] = useState({ trip_code: '', route_code: '', trip_date: '', direction: 'outbound', scheduled_departure: '', scheduled_arrival: '' });
   const [assignForm, setAssignForm] = useState({ bus_id: '', driver_code: '' });
   const [checkResult, setCheckResult] = useState(null);
   const [formError, setFormError] = useState('');
@@ -31,10 +31,10 @@ export default function ScheduleOverview() {
       getDrivers({ status: 'working' }),
       getRoutes({ status: 'active' }),
     ]);
-    setSchedule(sched.data.data);
-    setBuses(busRes.data.data);
-    setDrivers(driverRes.data.data);
-    setRoutes(routeRes.data.data);
+    setSchedule(sched.data?.data || []);
+    setBuses(busRes.data?.data || []);
+    setDrivers(driverRes.data?.data || []);
+    setRoutes(routeRes.data?.data || []);
     setLoading(false);
   };
 
@@ -78,7 +78,7 @@ export default function ScheduleOverview() {
           <div className="flex gap-2 items-center">
             <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)}
               className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            <button onClick={() => { setTripForm({ trip_code: '', route_code: '', trip_date: filterDate, scheduled_departure: '' }); setFormError(''); setShowTripModal(true); }}
+            <button onClick={() => { setTripForm({ trip_code: '', route_code: '', trip_date: filterDate, direction: 'outbound', scheduled_departure: '', scheduled_arrival: '' }); setFormError(''); setShowTripModal(true); }}
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium">+ Lập chuyến</button>
           </div>
         }
@@ -91,7 +91,7 @@ export default function ScheduleOverview() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
-                {['Mã chuyến', 'Tuyến', 'Giờ xuất bến', 'Xe', 'Tài xế', 'Trạng thái', 'Thao tác'].map(h => (
+                {['Mã chuyến', 'Tuyến', 'Chiều', 'Giờ chạy', 'Xe', 'Tài xế', 'Trạng thái', 'Thao tác'].map(h => (
                   <th key={h} className={`px-4 py-3 text-xs font-medium text-gray-500 uppercase ${h === 'Thao tác' ? 'text-right' : 'text-left'}`}>{h}</th>
                 ))}
               </tr>
@@ -101,11 +101,21 @@ export default function ScheduleOverview() {
                 <tr key={s.trip_code} className="hover:bg-gray-50 transition">
                   <td className="px-4 py-3 font-mono text-sm font-medium text-gray-900">{s.trip_code}</td>
                   <td className="px-4 py-3 text-sm text-gray-700">{s.route_code} - {s.route_name}</td>
-                  <td className="px-4 py-3 text-sm text-gray-700">{s.scheduled_departure}</td>
-                  <td className="px-4 py-3 text-sm text-gray-700">{s.bus_id || <span className="text-gray-400 italic">Chưa phân công</span>}</td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${s.direction === 'outbound' ? 'bg-indigo-50 text-indigo-600' : 'bg-pink-50 text-pink-600'}`}>
+                      {s.direction === 'outbound' ? '→ Đi' : '← Về'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-700 font-mono">
+                    {s.scheduled_departure?.substring(0,5)} – {s.scheduled_arrival?.substring(0,5) || '?'}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-700">{s.bus_id || <span className="text-gray-400 italic">Chưa chọn</span>}</td>
                   <td className="px-4 py-3 text-sm text-gray-700">{s.driver_name || <span className="text-gray-400 italic">—</span>}</td>
                   <td className="px-4 py-3">
-                    {s.assignment_status ? <StatusBadge status={s.assignment_status} /> : <span className="text-xs text-orange-500 font-medium">Chưa phân công</span>}
+                    {s.assignment_status
+                      ? <StatusBadge status={s.assignment_status} />
+                      : <span className="text-xs text-orange-500 font-medium">Chưa phân công</span>
+                    }
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button onClick={() => openAssign(s)} className="bg-blue-50 hover:bg-blue-100 text-blue-600 text-xs px-3 py-1.5 rounded-lg font-medium transition">
@@ -124,28 +134,47 @@ export default function ScheduleOverview() {
       <Modal isOpen={showTripModal} title="Lập chuyến xe mới" onClose={() => setShowTripModal(false)}>
         <form onSubmit={handleCreateTrip} className="space-y-4">
           {formError && <AlertBox type="error" message={formError} />}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Mã chuyến *</label>
-            <input value={tripForm.trip_code} onChange={(e) => setTripForm({ ...tripForm, trip_code: e.target.value })} required placeholder="VD: CX001"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Mã chuyến *</label>
+              <input value={tripForm.trip_code} onChange={(e) => setTripForm({ ...tripForm, trip_code: e.target.value })} required placeholder="VD: CX001"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tuyến xe *</label>
+              <select value={tripForm.route_code} onChange={(e) => setTripForm({ ...tripForm, route_code: e.target.value })} required
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">— Chọn tuyến —</option>
+                {routes.map(r => <option key={r.route_code} value={r.route_code}>{r.route_code} - {r.route_name}</option>)}
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tuyến xe *</label>
-            <select value={tripForm.route_code} onChange={(e) => setTripForm({ ...tripForm, route_code: e.target.value })} required
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="">— Chọn tuyến —</option>
-              {routes.map(r => <option key={r.route_code} value={r.route_code}>{r.route_code} - {r.route_name}</option>)}
-            </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Ngày chạy *</label>
+              <input type="date" value={tripForm.trip_date} onChange={(e) => setTripForm({ ...tripForm, trip_date: e.target.value })} required
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Hướng chạy *</label>
+              <select value={tripForm.direction} onChange={(e) => setTripForm({ ...tripForm, direction: e.target.value })} required
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="outbound">Chiều đi (Outbound)</option>
+                <option value="inbound">Chiều về (Inbound)</option>
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Ngày chạy *</label>
-            <input type="date" value={tripForm.trip_date} onChange={(e) => setTripForm({ ...tripForm, trip_date: e.target.value })} required
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Giờ xuất bến dự kiến *</label>
-            <input type="time" value={tripForm.scheduled_departure} onChange={(e) => setTripForm({ ...tripForm, scheduled_departure: e.target.value })} required
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Giờ xuất bến *</label>
+              <input type="time" value={tripForm.scheduled_departure} onChange={(e) => setTripForm({ ...tripForm, scheduled_departure: e.target.value })} required
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Giờ kết thúc dự kiến *</label>
+              <input type="time" value={tripForm.scheduled_arrival} onChange={(e) => setTripForm({ ...tripForm, scheduled_arrival: e.target.value })} required
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
           </div>
           <div className="flex gap-3 justify-end pt-2">
             <button type="button" onClick={() => setShowTripModal(false)} className="px-4 py-2 border rounded-xl text-sm text-gray-600">Hủy</button>

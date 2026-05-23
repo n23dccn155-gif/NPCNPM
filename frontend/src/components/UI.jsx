@@ -4,18 +4,26 @@ const colors = {
   inactive: 'bg-gray-100 text-gray-600',
   broken: 'bg-red-100 text-red-700',
   working: 'bg-green-100 text-green-700',
+  suspended: 'bg-orange-100 text-orange-700',
+  locked: 'bg-red-100 text-red-700',
   pending: 'bg-yellow-100 text-yellow-700',
   approved: 'bg-blue-100 text-blue-700',
   rejected: 'bg-red-100 text-red-700',
   replaced: 'bg-gray-100 text-gray-600',
   completed: 'bg-green-100 text-green-700',
   cancelled: 'bg-red-100 text-red-700',
+  in_progress: 'bg-blue-100 text-blue-700',
+  assigned: 'bg-indigo-100 text-indigo-700',
+  unassigned: 'bg-gray-100 text-gray-500',
+  delayed: 'bg-orange-100 text-orange-700',
 };
 const labels = {
   active: 'Hoạt động', inactive: 'Ngưng', broken: 'Hỏng',
-  working: 'Đang làm', pending: 'Chờ duyệt', approved: 'Đã duyệt',
+  working: 'Đang làm', suspended: 'Tạm nghỉ', locked: 'Bị khóa',
+  pending: 'Chờ duyệt', approved: 'Đã duyệt',
   rejected: 'Từ chối', replaced: 'Đã thay', completed: 'Hoàn thành',
-  cancelled: 'Hủy',
+  cancelled: 'Hủy', in_progress: 'Đang chạy', assigned: 'Đã phân công',
+  unassigned: 'Chưa phân công', delayed: 'Trễ',
 };
 
 export function StatusBadge({ status }) {
