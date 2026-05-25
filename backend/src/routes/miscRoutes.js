@@ -27,5 +27,7 @@ router.put('/profile', auth, userController.updateProfile);
 // Configurations
 router.get('/configurations', auth, configurationController.getAll);
 router.put('/configurations/:configKey', auth, role(['admin']), configurationController.update);
+router.get('/configurations-schedules', auth, configurationController.getSchedules);
+router.post('/configurations-schedules', auth, role(['admin']), configurationController.createSchedule);
 
 module.exports = router;

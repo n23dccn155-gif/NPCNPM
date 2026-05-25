@@ -55,6 +55,8 @@ CREATE TABLE drivers (
     driver_code VARCHAR(50) PRIMARY KEY,
     full_name VARCHAR(255) NOT NULL,
     user_id INTEGER UNIQUE,
+    route_code VARCHAR(20),
+    base_slot INTEGER DEFAULT 0,
     license_type VARCHAR(20) NOT NULL DEFAULT 'E',
     status VARCHAR(20) DEFAULT 'active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

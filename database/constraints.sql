@@ -13,6 +13,7 @@ ALTER TABLE buses
 
 ALTER TABLE drivers
     ADD CONSTRAINT fk_drivers_users FOREIGN KEY (user_id) REFERENCES users(id),
+    ADD CONSTRAINT fk_drivers_routes FOREIGN KEY (route_code) REFERENCES routes(route_code),
     ADD CONSTRAINT chk_drivers_status CHECK (status IN ('active', 'suspended', 'inactive'));
 
 ALTER TABLE trips

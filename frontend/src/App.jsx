@@ -12,6 +12,7 @@ import Profile from './pages/shared/Profile';
 // Admin
 import UserList from './pages/admin/UserList';
 import Configuration from './pages/admin/Configuration';
+import ConfigRingPage from './pages/admin/ConfigRingPage';
 
 // Manager
 import RouteList from './pages/manager/RouteList';
@@ -21,14 +22,14 @@ import LeaveApproval from './pages/manager/LeaveApproval';
 import Reports from './pages/manager/Reports';
 
 // Dispatcher
-import ScheduleOverview from './pages/dispatcher/ScheduleOverview';
+import AutoSchedulerPage from './pages/dispatcher/AutoSchedulerPage';
 import TripManage from './pages/dispatcher/TripManage';
 import AffectedTrips from './pages/dispatcher/AffectedTrips';
 import IncidentManage from './pages/dispatcher/IncidentManage';
 import TripLog from './pages/dispatcher/TripLog';
 
 // Driver
-import DriverSchedule from './pages/driver/DriverSchedule';
+import MyAssignmentsPage from './pages/driver/MyAssignmentsPage';
 import LeaveRequest from './pages/driver/LeaveRequest';
 import IncidentReport from './pages/driver/IncidentReport';
 
@@ -58,8 +59,10 @@ function App() {
           <Route path="/profile" element={<PrivateRoute allowedRoles={ALL_ROLES}><Profile /></PrivateRoute>} />
 
           {/* Admin Routes */}
+          <Route path="/admin" element={<Navigate to="/admin/users" replace />} />
           <Route path="/admin/users" element={<PrivateRoute allowedRoles={['admin']}><UserList /></PrivateRoute>} />
           <Route path="/admin/configurations" element={<PrivateRoute allowedRoles={['admin']}><Configuration /></PrivateRoute>} />
+          <Route path="/admin/config" element={<PrivateRoute allowedRoles={['admin']}><ConfigRingPage /></PrivateRoute>} />
 
           {/* Manager Routes */}
           <Route path="/manager/routes" element={<PrivateRoute allowedRoles={['manager']}><RouteList /></PrivateRoute>} />
@@ -69,16 +72,19 @@ function App() {
           <Route path="/manager/reports" element={<PrivateRoute allowedRoles={['manager']}><Reports /></PrivateRoute>} />
 
           {/* Dispatcher Routes */}
-          <Route path="/dispatcher/schedule" element={<PrivateRoute allowedRoles={['dispatcher']}><ScheduleOverview /></PrivateRoute>} />
+          <Route path="/dispatcher/schedule" element={<PrivateRoute allowedRoles={['dispatcher', 'admin', 'manager']}><AutoSchedulerPage /></PrivateRoute>} />
           <Route path="/dispatcher/trips" element={<PrivateRoute allowedRoles={['dispatcher']}><TripManage /></PrivateRoute>} />
           <Route path="/dispatcher/affected-trips" element={<PrivateRoute allowedRoles={['dispatcher']}><AffectedTrips /></PrivateRoute>} />
           <Route path="/dispatcher/incidents" element={<PrivateRoute allowedRoles={['dispatcher']}><IncidentManage /></PrivateRoute>} />
           <Route path="/dispatcher/trip-logs" element={<PrivateRoute allowedRoles={['dispatcher']}><TripLog /></PrivateRoute>} />
 
           {/* Driver Routes */}
-          <Route path="/driver/schedule" element={<PrivateRoute allowedRoles={['driver']}><DriverSchedule /></PrivateRoute>} />
+          <Route path="/driver/schedule" element={<PrivateRoute allowedRoles={['driver']}><MyAssignmentsPage /></PrivateRoute>} />
           <Route path="/driver/leave" element={<PrivateRoute allowedRoles={['driver']}><LeaveRequest /></PrivateRoute>} />
           <Route path="/driver/incidents" element={<PrivateRoute allowedRoles={['driver']}><IncidentReport /></PrivateRoute>} />
+
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

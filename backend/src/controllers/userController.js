@@ -113,6 +113,100 @@ const configurationController = {
       return success(res, result.rows[0], 'Cập nhật cấu hình thành công');
     } catch (err) { next(err); }
   },
+
+  getSchedules: async (req, res, next) => {
+    try {
+      const result = await pool.query('SELECT * FROM configuration_schedules ORDER BY effective_date DESC');
+      return success(res, result.rows);
+    } catch (err) { next(err); }
+  },
+
+  createSchedule: async (req, res, next) => {
+    try {
+      const {
+        effective_date, morning_shift_start, morning_shift_end,
+        afternoon_shift_start, afternoon_shift_end, standby_percentage,
+        min_break_minutes, trip_duration_minutes, trip_frequency_minutes
+      } = req.body;
+
+      if (morning_shift_end !== afternoon_shift_start) {
+        return error(res, 'Giờ kết thúc ca sáng phải trùng với giờ bắt đầu ca chiều', 400);
+      }
+
+      // Check driver capacity
+      function timeToMinutes(timeStr) {
+          if (!timeStr) return 0;
+          const parts = timeStr.split(':');
+          return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+      }
+      
+      const morningStart = timeToMinutes(morning_shift_start);
+      const morningEnd = timeToMinutes(morning_shift_end);
+      const afternoonStart = timeToMinutes(afternoon_shift_start);
+      const afternoonEnd = timeToMinutes(afternoon_shift_end);
+      
+      // Ép kiểu sang số để tránh lỗi nối chuỗi (VD: "75" + "15" = "7515")
+      const duration = parseInt(trip_duration_minutes, 10) || 75;
+      const breakMin = parseInt(min_break_minutes, 10) || 10;
+      const freqMin = parseInt(trip_frequency_minutes, 10) || 15;
+      const standbyPct = parseFloat(standby_percentage) || 10;
+
+      // Chu kỳ 1 xe chạy 1 vòng (đi và về)
+      const cycleTime = 2 * (duration + breakMin);
+      
+      // Số lượng xe (và tài xế) cần hoạt động ĐỒNG THỜI trong 1 ca để đảm bảo giãn cách
+      const driversPerShift = Math.ceil(cycleTime / freqMin);
+      
+      const morningNeeded = driversPerShift;
+      const afternoonNeeded = driversPerShift;
+      
+      const morningStandby = Math.round(morningNeeded * (standbyPct / 100));
+      const afternoonStandby = Math.round(afternoonNeeded * (standbyPct / 100));
+      
+      const routeNeeded = morningNeeded + morningStandby + afternoonNeeded + afternoonStandby;
+      
+      const routeCountRes = await pool.query("SELECT COUNT(*) FROM routes WHERE status = 'active'");
+      const activeRoutesCount = parseInt(routeCountRes.rows[0].count);
+      const totalNeededDrivers = routeNeeded * activeRoutesCount;
+      
+      const driverCountRes = await pool.query("SELECT COUNT(*) FROM drivers WHERE status = 'active'");
+      const availableDrivers = parseInt(driverCountRes.rows[0].count);
+      
+      if (totalNeededDrivers > availableDrivers) {
+          return error(res, `Cấu hình thất bại: Thuật toán yêu cầu tối thiểu ${totalNeededDrivers} tài xế (cho ${activeRoutesCount} tuyến), nhưng hệ thống chỉ có ${availableDrivers} tài xế đang hoạt động. Vui lòng tăng giãn cách, giảm dự bị hoặc bổ sung nhân sự!`, 400);
+      }
+
+      const query = `
+        INSERT INTO configuration_schedules (
+          effective_date, morning_shift_start, morning_shift_end,
+          afternoon_shift_start, afternoon_shift_end, standby_percentage,
+          min_break_minutes, trip_duration_minutes, trip_frequency_minutes
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (effective_date) DO UPDATE SET
+          morning_shift_start = EXCLUDED.morning_shift_start,
+          morning_shift_end = EXCLUDED.morning_shift_end,
+          afternoon_shift_start = EXCLUDED.afternoon_shift_start,
+          afternoon_shift_end = EXCLUDED.afternoon_shift_end,
+          standby_percentage = EXCLUDED.standby_percentage,
+          min_break_minutes = EXCLUDED.min_break_minutes,
+          trip_duration_minutes = EXCLUDED.trip_duration_minutes,
+          trip_frequency_minutes = EXCLUDED.trip_frequency_minutes
+        RETURNING *;
+      `;
+      const values = [
+        effective_date, morning_shift_start, morning_shift_end,
+        afternoon_shift_start, afternoon_shift_end, standby_percentage,
+        min_break_minutes, trip_duration_minutes, trip_frequency_minutes
+      ];
+      const result = await pool.query(query, values);
+
+      // Xóa các dữ liệu phân công và chuyến xe cũ từ ngày bắt đầu áp dụng
+      await pool.query('DELETE FROM trip_assignments WHERE trip_code IN (SELECT trip_code FROM trips WHERE trip_date >= $1)', [effective_date]);
+      await pool.query('DELETE FROM trips WHERE trip_date >= $1', [effective_date]);
+
+      return success(res, result.rows[0], 'Lưu cấu hình và làm mới lịch trình thành công', 201);
+    } catch (err) { next(err); }
+  }
 };
 
 module.exports = { userController, configurationController };

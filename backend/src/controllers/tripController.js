@@ -9,14 +9,70 @@ function timeToMinutes(timeStr) {
   const m = parseInt(parts[1], 10);
   return h * 60 + m;
 }
+const { calculateDriverSchedule, getConfigForDate } = require('./schedulerController');
 
 const tripController = {
   getAll: async (req, res, next) => {
     try {
       const { route_code, trip_date_from, trip_date_to, trip_date } = req.query;
+      
+      // Tự động sinh chuyến xe (Auto-Schedule Sync) cho ngày cụ thể hoặc hôm nay nếu chưa có
+      const targetDate = trip_date || new Date().toISOString().split('T')[0];
+      const checkTrips = await pool.query('SELECT COUNT(*) FROM trips WHERE trip_date = $1', [targetDate]);
+      
+      if (parseInt(checkTrips.rows[0].count) < 40) {
+        // Lấy cấu hình cho ngày targetDate
+        const config = await getConfigForDate(targetDate);
+        
+        // Tạo chuyến xe tự động dựa vào Module Time Ring
+        const driverRes = await pool.query("SELECT * FROM drivers WHERE status = 'active'");
+        const busRes = await pool.query("SELECT * FROM buses WHERE status = 'active'");
+        
+        for (const driver of driverRes.rows) {
+          const s = calculateDriverSchedule(driver, targetDate, busRes.rows, config);
+          if (!s.isStandby) {
+            const [baseH, baseM] = s.departureTime.split(':').map(Number);
+            let currentMin = baseH * 60 + baseM;
+
+            for (let i = 0; i < 6; i++) {
+              const direction = i % 2 === 0 ? 'outbound' : 'inbound';
+              const tripCode = `TR${s.route_code}-${targetDate.replace(/-/g,'').substring(4)}-${s.driver_code.substring(3)}-${i+1}`;
+              
+              const hStart = Math.floor(currentMin / 60) % 24;
+              const mStart = currentMin % 60;
+              const depTime = `${String(hStart).padStart(2, '0')}:${String(mStart).padStart(2, '0')}`;
+              
+              const endMin = currentMin + config.trip_duration_minutes;
+              
+              const hEnd = Math.floor(endMin / 60) % 24;
+              const mEnd = endMin % 60;
+              const arrTime = `${String(hEnd).padStart(2, '0')}:${String(mEnd).padStart(2, '0')}`;
+
+              await pool.query(
+                `INSERT INTO trips (trip_code, route_code, trip_date, direction, scheduled_departure, scheduled_arrival, status) 
+                 VALUES ($1, $2, $3, $4, $5, $6, 'assigned') ON CONFLICT DO NOTHING`,
+                [tripCode, s.route_code, targetDate, direction, depTime, arrTime]
+              );
+              await pool.query(
+                `INSERT INTO trip_assignments (trip_code, driver_code, bus_id, dispatcher_id, status) 
+                 VALUES ($1, $2, $3, $4, 'active') ON CONFLICT DO NOTHING`,
+                [tripCode, s.driver_code, s.bus_id, req.user.id]
+              );
+
+              currentMin = endMin + config.min_break_minutes;
+              if (currentMin % config.trip_frequency_minutes !== 0) {
+                currentMin += (config.trip_frequency_minutes - (currentMin % config.trip_frequency_minutes));
+              }
+            }
+          }
+        }
+      }
+
       let query = `
         SELECT t.*, r.route_name,
-          ta.bus_id, ta.driver_code, ta.status AS assignment_status
+          ta.bus_id, ta.driver_code, ta.status AS assignment_status,
+          CEIL(CAST(split_part(t.trip_code, '-', 4) AS FLOAT) / 2.0) AS round_num,
+          MIN(t.scheduled_departure) OVER (PARTITION BY ta.driver_code, CEIL(CAST(split_part(t.trip_code, '-', 4) AS FLOAT) / 2.0)) AS round_start_time
         FROM trips t
         JOIN routes r ON t.route_code = r.route_code
         LEFT JOIN trip_assignments ta ON t.trip_code = ta.trip_code AND ta.status = 'active'
@@ -27,7 +83,7 @@ const tripController = {
       if (trip_date) { params.push(trip_date); query += ` AND t.trip_date = $${params.length}`; }
       if (trip_date_from) { params.push(trip_date_from); query += ` AND t.trip_date >= $${params.length}`; }
       if (trip_date_to) { params.push(trip_date_to); query += ` AND t.trip_date <= $${params.length}`; }
-      query += ' ORDER BY t.trip_date, t.scheduled_departure';
+      query += ' ORDER BY round_num, round_start_time, ta.driver_code, t.scheduled_departure';
       const result = await pool.query(query, params);
       return success(res, result.rows);
     } catch (err) { next(err); }

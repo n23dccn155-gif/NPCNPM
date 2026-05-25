@@ -10,6 +10,7 @@ const tripRoutes = require('./routes/tripRoutes');
 const assignmentRoutes = require('./routes/assignmentRoutes');
 const leaveRequestRoutes = require('./routes/leaveRequestRoutes');
 const incidentRoutes = require('./routes/incidentRoutes');
+const schedulerRoutes = require('./routes/schedulerRoutes');
 const miscRoutes = require('./routes/miscRoutes');
 const errorMiddleware = require('./middlewares/errorMiddleware');
 
@@ -17,6 +18,10 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use((req, res, next) => {
+  console.log(`[API] ${req.method} ${req.url}`);
+  next();
+});
 
 // Health check
 app.get('/', (req, res) => res.json({ message: 'Bus Trip Assignment API - Running', version: '1.0.0' }));
@@ -30,6 +35,7 @@ app.use('/api/trips', tripRoutes);
 app.use('/api/assignments', assignmentRoutes);
 app.use('/api/leave-requests', leaveRequestRoutes);
 app.use('/api/incidents', incidentRoutes);
+app.use('/api/scheduler', schedulerRoutes);
 app.use('/api', miscRoutes);
 
 // Error handler (always last)
