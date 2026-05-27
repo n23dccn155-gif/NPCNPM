@@ -41,10 +41,10 @@ INSERT INTO buses (bus_id, license_plate, capacity, status) VALUES
 ON CONFLICT DO NOTHING;
 
 -- 6. Tài xế
-INSERT INTO drivers (driver_code, full_name, user_id, license_type, status) VALUES 
-('TX001', 'Nguyễn Văn A', 4, 'E', 'active'),
-('TX002', 'Trần Văn B',   5, 'E', 'active'),
-('TX003', 'Lê Văn C',     6, 'D', 'inactive')
+INSERT INTO drivers (driver_code, full_name, user_id, route_code, base_slot, license_type, status) VALUES 
+('TX001', 'Nguyễn Văn A', 4, '01', 0,  'E', 'active'),
+('TX002', 'Trần Văn B',   5, '01', 13, 'E', 'active'),
+('TX003', 'Lê Văn C',     6, '08', 0,  'D', 'inactive')
 ON CONFLICT DO NOTHING;
 
 -- 7. Chuyến xe (Lập sẵn một số chuyến mẫu chưa phân công và đã phân công)
@@ -60,3 +60,79 @@ INSERT INTO trip_assignments (trip_code, bus_id, driver_code, dispatcher_id, sta
 ('CX001', '51B-123.45', 'TX001', 3, 'active'),
 ('CX003', '51B-678.90', 'TX002', 3, 'active')
 ON CONFLICT DO NOTHING;
+
+-- 9. Dữ liệu cấu hình xếp lịch mặc định
+INSERT INTO configuration_schedules (
+    effective_date, morning_shift_start, morning_shift_end, 
+    afternoon_shift_start, afternoon_shift_end, standby_percentage, 
+    min_break_minutes, trip_duration_minutes, trip_frequency_minutes
+) VALUES (
+    '2026-05-25', '05:30', '14:00', '14:00', '22:30', 10, 10, 75, 15
+)
+ON CONFLICT DO NOTHING;
+
+-- 10. Tự động chèn 10 xe buýt và 10 tài xế chạy thử nghiệm xoay ca
+DO $$
+DECLARE
+    i INTEGER;
+    u_id INTEGER;
+    d_code VARCHAR(50);
+    r_code VARCHAR(20);
+    b_slot INTEGER;
+BEGIN
+    -- Chèn 10 xe buýt hoạt động
+    FOR i IN 1..10 LOOP
+        INSERT INTO buses (bus_id, license_plate, capacity, status)
+        VALUES (
+            '51B-500.' || LPAD(i::text, 2, '0'),
+            '51B-500.' || LPAD(i::text, 2, '0'),
+            45,
+            'active'
+        ) ON CONFLICT DO NOTHING;
+    END LOOP;
+
+    -- Chèn 10 tài khoản người dùng và thông tin tài xế tương ứng
+    FOR i IN 1..10 LOOP
+        -- Thêm tài khoản người dùng (mật khẩu: 123456)
+        INSERT INTO users (username, password, full_name, phone, role_id, status)
+        VALUES (
+            'driver50_' || i,
+            '$2b$10$rV/jSfQXxZnVSK9dcYg4T.p4JOq0OnNxmypDw.VlkXYlYv/NVE.Ry',
+            'Tài xế tự động ' || i,
+            '090500' || LPAD(i::text, 4, '0'),
+            4,
+            'active'
+        )
+        ON CONFLICT (username) DO UPDATE SET status = 'active'
+        RETURNING id INTO u_id;
+
+        -- Xác định mã tài xế
+        d_code := 'TX500' || LPAD(i::text, 2, '0');
+
+        -- Chia 5 người tuyến '01' và 5 người tuyến '08'
+        IF i <= 5 THEN
+            r_code := '01';
+            b_slot := i - 1;
+        ELSE
+            r_code := '08';
+            b_slot := i - 6;
+        END IF;
+
+        -- Thêm tài xế
+        INSERT INTO drivers (driver_code, full_name, user_id, route_code, base_slot, license_type, status)
+        VALUES (
+            d_code,
+            'Tài xế tự động ' || i,
+            u_id,
+            r_code,
+            b_slot,
+            'E',
+            'active'
+        )
+        ON CONFLICT (driver_code) DO UPDATE 
+        SET route_code = EXCLUDED.route_code, 
+            base_slot = EXCLUDED.base_slot,
+            user_id = EXCLUDED.user_id,
+            status = 'active';
+    END LOOP;
+END $$;

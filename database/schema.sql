@@ -1,5 +1,6 @@
 -- SCHEMA.SQL: Tạo các bảng dữ liệu đầy đủ theo tài liệu thiết kế
 
+DROP TABLE IF EXISTS configuration_schedules CASCADE;
 DROP TABLE IF EXISTS configurations CASCADE;
 DROP TABLE IF EXISTS incident_reports CASCADE;
 DROP TABLE IF EXISTS leave_requests CASCADE;
@@ -130,3 +131,20 @@ CREATE TABLE configurations (
     config_data_type VARCHAR(20) NOT NULL DEFAULT 'INT', -- INT, STRING, BOOLEAN
     description TEXT
 );
+
+-- 12. Cấu hình ca làm việc và xếp lịch tự động
+CREATE TABLE configuration_schedules (
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    effective_date DATE NOT NULL,
+    morning_shift_start VARCHAR(5) NOT NULL,
+    morning_shift_end VARCHAR(5) NOT NULL,
+    afternoon_shift_start VARCHAR(5) NOT NULL,
+    afternoon_shift_end VARCHAR(5) NOT NULL,
+    standby_percentage INT NOT NULL,
+    min_break_minutes INT NOT NULL,
+    trip_duration_minutes INT NOT NULL,
+    trip_frequency_minutes INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_config_effective_date ON configuration_schedules(effective_date);
