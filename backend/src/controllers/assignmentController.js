@@ -415,17 +415,18 @@ const assignmentController = {
 
       const busesRes = await pool.query(busQuery, [group.route_code]);
 
-      // Lọc các xe bị trùng lịch
+      // Lọc các xe bị trùng lịch hoặc đã được phân công trong ngày này
       const availableBuses = [];
       for (let bus of busesRes.rows) {
         const overlap = await pool.query(
           `SELECT tg.group_name 
            FROM assignments a
            JOIN trip_groups tg ON a.group_id = tg.group_id
+           JOIN operation_plans p ON tg.plan_id = p.plan_id
            WHERE a.bus_id = $1 AND a.status = 'active' 
-             AND tg.group_id != $2
-             AND tg.start_time < $3 AND $4 < tg.end_time`,
-          [bus.bus_id, groupId, group.end_time, group.start_time]
+             AND p.operation_date = $2
+             AND tg.group_id != $3`,
+          [bus.bus_id, group.operation_date, groupId]
         );
         if (overlap.rows.length === 0) {
           availableBuses.push(bus);
@@ -447,17 +448,18 @@ const assignmentController = {
         [group.operation_date]
       );
 
-      // Lọc các tài xế bị trùng lịch
+      // Lọc các tài xế bị trùng lịch hoặc đã được phân công trong ngày này
       const availableDrivers = [];
       for (let driver of driversRes.rows) {
         const overlap = await pool.query(
           `SELECT tg.group_name 
            FROM assignments a
            JOIN trip_groups tg ON a.group_id = tg.group_id
+           JOIN operation_plans p ON tg.plan_id = p.plan_id
            WHERE a.driver_id = $1 AND a.status = 'active' 
-             AND tg.group_id != $2
-             AND tg.start_time < $3 AND $4 < tg.end_time`,
-          [driver.driver_id, groupId, group.end_time, group.start_time]
+             AND p.operation_date = $2
+             AND tg.group_id != $3`,
+          [driver.driver_id, group.operation_date, groupId]
         );
         if (overlap.rows.length === 0) {
           availableDrivers.push(driver);

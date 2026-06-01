@@ -10,6 +10,7 @@ export default function RouteBusManage() {
   const [buses, setBuses] = useState([]);
   const [selectedRoute, setSelectedRoute] = useState(null);
   const [routeBuses, setRouteBuses] = useState([]);
+  const [allRouteBuses, setAllRouteBuses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [rbLoading, setRbLoading] = useState(false);
   const [error, setError] = useState('');
@@ -22,6 +23,25 @@ export default function RouteBusManage() {
 
   // Confirm delete
   const [confirm, setConfirm] = useState({ open: false, rb: null });
+  const [warningModal, setWarningModal] = useState({ open: false, title: '', message: '' });
+
+  const loadAllRouteBuses = async (routesList) => {
+    try {
+      const results = await Promise.all(
+        routesList.map(r => getRouteBuses(r.route_code))
+      );
+      const allBusesAssigned = [];
+      results.forEach(res => {
+        const list = res.data?.data || res.data || [];
+        list.forEach(item => {
+          allBusesAssigned.push(item);
+        });
+      });
+      setAllRouteBuses(allBusesAssigned);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   useEffect(() => {
     Promise.all([
@@ -34,6 +54,7 @@ export default function RouteBusManage() {
       if (routeData.length > 0) {
         setSelectedRoute(routeData[0]);
       }
+      loadAllRouteBuses(routeData);
     }).catch(() => setError('Không thể tải dữ liệu'))
       .finally(() => setLoading(false));
   }, []);
@@ -62,11 +83,22 @@ export default function RouteBusManage() {
       return;
     }
 
+    // Check operating bus limit
+    if (addBusRole === 'operating' && operatingCount >= requiredOperating) {
+      setWarningModal({
+        open: true,
+        title: 'Không thể thêm xe vận doanh',
+        message: `Số lượng xe vận doanh của tuyến này đã đạt giới hạn tối đa được xác nhận thiết lập khi thêm/sửa tuyến (${operatingCount}/${requiredOperating} xe).`
+      });
+      return;
+    }
+
     try {
       await addBusToRoute(selectedRoute.route_code, { bus_id: Number(addBusId), bus_role: addBusRole });
       setAddBusId('');
       setAddBusRole('operating');
       loadRouteBuses(selectedRoute.route_code);
+      loadAllRouteBuses(routes);
       setSuccessMsg('Đã bố trí xe vào tuyến thành công');
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err) {
@@ -79,6 +111,7 @@ export default function RouteBusManage() {
       await removeBusFromRoute(confirm.rb.route_code, confirm.rb.bus_id);
       setConfirm({ open: false, rb: null });
       loadRouteBuses(selectedRoute.route_code);
+      loadAllRouteBuses(routes);
       setSuccessMsg('Đã gỡ xe khỏi tuyến');
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err) {
@@ -93,9 +126,9 @@ export default function RouteBusManage() {
   const requiredOperating = selectedRoute?.confirmed_operating_buses || 0;
   const operatingWarning = selectedRoute && operatingCount < requiredOperating;
 
-  // Available buses: not already assigned to this route
-  const assignedBusIds = routeBuses.map(rb => rb.bus_id);
-  const availableBuses = buses.filter(b => b.status === 'active' && !assignedBusIds.includes(b.bus_id));
+  // Available buses: not already assigned to ANY route
+  const assignedBusIdsAcrossAllRoutes = allRouteBuses.map(rb => rb.bus_id);
+  const availableBuses = buses.filter(b => b.status === 'active' && !assignedBusIdsAcrossAllRoutes.includes(b.bus_id));
 
   if (loading) return <Layout><div className="flex justify-center py-12 text-gray-500">Đang tải...</div></Layout>;
 
@@ -121,11 +154,10 @@ export default function RouteBusManage() {
                 <button
                   key={r.route_code}
                   onClick={() => setSelectedRoute(r)}
-                  className={`w-full text-left px-5 py-3.5 transition-all ${
-                    selectedRoute?.route_code === r.route_code
-                      ? 'bg-blue-50 border-l-4 border-blue-600'
-                      : 'hover:bg-slate-50 border-l-4 border-transparent'
-                  }`}
+                  className={`w-full text-left px-5 py-3.5 transition-all ${selectedRoute?.route_code === r.route_code
+                    ? 'bg-blue-50 border-l-4 border-blue-600'
+                    : 'hover:bg-slate-50 border-l-4 border-transparent'
+                    }`}
                 >
                   <div className="flex items-center justify-between">
                     <div>
@@ -168,7 +200,6 @@ export default function RouteBusManage() {
                   <div className="rounded-xl p-3 text-center bg-green-50 border border-green-100">
                     <div className="text-2xl font-bold text-green-700">{standbyCount}</div>
                     <div className="text-2xs font-semibold text-slate-500 mt-0.5">Xe dự phòng</div>
-                    <div className="text-2xs text-slate-400 mt-0.5">Đếm từ danh sách xe tuyến</div>
                   </div>
                   <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-center">
                     <div className="text-2xl font-bold text-slate-700">{routeBuses.length}</div>
@@ -250,10 +281,9 @@ export default function RouteBusManage() {
                           <td className="px-6 py-3.5 text-slate-600">{rb.seat_count} chỗ</td>
                           <td className="px-6 py-3.5"><StatusBadge status={rb.status} /></td>
                           <td className="px-6 py-3.5">
-                            <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-2xs font-bold ${
-                              rb.bus_role === 'operating' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'
-                            }`}>
-                              {rb.bus_role === 'operating' ? '🚌 Vận doanh' : '🔧 Dự phòng'}
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-2xs font-bold ${rb.bus_role === 'operating' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'
+                              }`}>
+                              {rb.bus_role === 'operating' ? ' Vận doanh' : ' Dự phòng'}
                             </span>
                           </td>
                           <td className="px-6 py-3.5">
@@ -286,6 +316,15 @@ export default function RouteBusManage() {
         onConfirm={handleRemoveBus}
         onCancel={() => setConfirm({ open: false, rb: null })}
         danger
+      />
+
+      <ConfirmDialog
+        isOpen={warningModal.open}
+        title={warningModal.title}
+        message={warningModal.message}
+        confirmText="Đồng ý"
+        onConfirm={() => setWarningModal({ open: false, title: '', message: '' })}
+        onCancel={() => setWarningModal({ open: false, title: '', message: '' })}
       />
     </Layout>
   );

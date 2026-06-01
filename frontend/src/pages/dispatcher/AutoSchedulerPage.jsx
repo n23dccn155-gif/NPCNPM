@@ -338,25 +338,21 @@ export default function AutoSchedulerPage() {
               )}
 
               {planDetail.scheduling_metrics && (
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                    <div className="text-2xs text-slate-400 font-bold uppercase">Lượt tối thiểu/chiều</div>
+                    <div className="text-2xs text-slate-400 font-bold uppercase">Số lượt xuất bến mỗi chiều</div>
                     <div className="text-lg font-bold text-slate-800">{planDetail.scheduling_metrics.expected_trips_per_direction}</div>
                   </div>
                   <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                    <div className="text-2xs text-slate-400 font-bold uppercase">Giãn cách chốt</div>
+                    <div className="text-2xs text-slate-400 font-bold uppercase">Thời gian giãn cách chuyến</div>
                     <div className="text-lg font-bold text-slate-800">{planDetail.scheduling_metrics.headway_minutes}p</div>
                   </div>
                   <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
                     <div className="text-2xs text-slate-400 font-bold uppercase">Vòng xe</div>
                     <div className="text-lg font-bold text-slate-800">{planDetail.scheduling_metrics.round_trip_time_minutes}p</div>
                   </div>
-                  <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
-                    <div className="text-2xs text-blue-500 font-bold uppercase">Xe gợi ý</div>
-                    <div className="text-lg font-bold text-blue-700">{planDetail.scheduling_metrics.suggested_operating_buses}</div>
-                  </div>
                   <div className="bg-green-50 rounded-xl p-3 border border-green-100">
-                    <div className="text-2xs text-green-500 font-bold uppercase">Xe xác nhận</div>
+                    <div className="text-2xs text-green-500 font-bold uppercase">Số xe vận doanh</div>
                     <div className="text-lg font-bold text-green-700">{planDetail.scheduling_metrics.confirmed_operating_buses}</div>
                   </div>
                 </div>
@@ -428,8 +424,13 @@ export default function AutoSchedulerPage() {
                     {planDetail.trips?.map(t => (
                       <div key={t.trip_id} className="px-4 py-3 flex justify-between items-center text-xs hover:bg-slate-50 transition">
                         <div>
-                          <span className="font-bold font-mono text-slate-700">ORDER #{t.trip_order}</span>
+                          <span className="font-bold font-mono text-slate-700">Chuyến #{t.trip_order}</span>
                           <span className="text-slate-400 ml-2">({t.direction_type === 'outbound' ? 'Chiều đi' : 'Chiều về'})</span>
+                          {t.group_name && (
+                            <span className="ml-3 px-2 py-0.5 rounded-lg text-3xs font-semibold bg-blue-50 text-blue-600 border border-blue-100">
+                              {t.group_name}
+                            </span>
+                          )}
                         </div>
                         <div className="font-semibold text-slate-800">
                           {new Date(t.scheduled_departure).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - {new Date(t.scheduled_arrival).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
