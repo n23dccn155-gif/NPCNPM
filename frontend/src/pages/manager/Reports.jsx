@@ -1,8 +1,7 @@
-// pages/manager/Reports.jsx — Báo cáo (cải tiến với 3 loại theo Figma)
 import { useState } from 'react';
 import Layout from '../../components/Layout';
 import { PageHeader, AlertBox } from '../../components/UI';
-import { getRouteReport, getBusReport, getDriverReport } from '../../services/miscService';
+import { getRouteReport, getBusReport, getDriverReport } from '../../services/reportService';
 
 const TABS = [
   { key: 'routes', label: 'Báo cáo hiệu suất tuyến' },
@@ -20,22 +19,26 @@ const COLS = {
     { key: 'delayed_trips', label: 'Trễ giờ', color: '#dc2626' },
     { key: 'cancelled_trips', label: 'Hủy', color: '#dc2626' },
     { key: 'on_time_rate', label: 'Tỷ lệ đúng giờ', format: 'pct' },
+    { key: 'avg_delay_minutes', label: 'Trễ TB (phút)' },
   ],
   buses: [
-    { key: 'bus_id', label: 'Xe' },
-    { key: 'bus_id', label: 'Biển số' },
-    { key: 'total_assignments', label: 'Chuyến đã chạy' },
-    { key: 'cancelled_trips', label: 'Chuyến hủy do xe', color: '#dc2626' },
-    { key: 'status', label: 'Trạng thái' },
+    { key: 'license_plate', label: 'Biển số xe' },
+    { key: 'total_assignments', label: 'Lần phân công' },
+    { key: 'trips_run', label: 'Chuyến đã chạy' },
+    { key: 'cancelled_trips', label: 'Chuyến hủy liên quan', color: '#dc2626' },
+    { key: 'incident_count', label: 'Số sự cố', color: '#dc2626' },
+    { key: 'status', label: 'Trạng thái hiện tại' },
   ],
   drivers: [
-    { key: 'driver_code', label: 'Mã' },
-    { key: 'full_name', label: 'Họ tên' },
+    { key: 'full_name', label: 'Họ tên tài xế' },
+    { key: 'username', label: 'Tên tài khoản' },
     { key: 'total_assignments', label: 'Lần phân công' },
-    { key: 'executed_trips', label: 'Đã thực hiện' },
-    { key: 'delayed_trips', label: 'Lần trễ', color: '#dc2626' },
-    { key: 'leave_days', label: 'Ngày nghỉ' },
-    { key: 'status', label: 'Trạng thái' },
+    { key: 'executed_trips', label: 'Đã chạy thực tế' },
+    { key: 'delayed_trips', label: 'Số chuyến trễ', color: '#dc2626' },
+    { key: 'total_driving_hours', label: 'Tổng giờ lái' },
+    { key: 'leaves_approved', label: 'Ngày nghỉ đã duyệt' },
+    { key: 'incidents_reported', label: 'Sự cố đã báo', color: '#dc2626' },
+    { key: 'status', label: 'Trạng thái hiện tại' },
   ],
 };
 
@@ -44,24 +47,32 @@ export default function Reports() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [filters, setFilters] = useState({ from_date: '', to_date: '' });
   const [hasLoaded, setHasLoaded] = useState(false);
 
   const load = async () => {
-    setLoading(true); setError('');
+    setLoading(true);
+    setError('');
     try {
       let res;
-      if (tab === 'routes') res = await getRouteReport(filters);
-      else if (tab === 'buses') res = await getBusReport(filters);
-      else res = await getDriverReport(filters);
-      setData(res.data?.data || []);
+      if (tab === 'routes') res = await getRouteReport();
+      else if (tab === 'buses') res = await getBusReport();
+      else res = await getDriverReport();
+      
+      setData(res.data?.data || res.data || []);
       setHasLoaded(true);
-    } catch { setError('Không thể tải báo cáo'); }
-    finally { setLoading(false); }
+    } catch (err) {
+      console.error(err);
+      setError('Không thể tải dữ liệu báo cáo thống kê');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleTabChange = (key) => {
-    setTab(key); setData([]); setHasLoaded(false); setError('');
+    setTab(key);
+    setData([]);
+    setHasLoaded(false);
+    setError('');
   };
 
   const cols = COLS[tab];
@@ -69,7 +80,10 @@ export default function Reports() {
   const formatVal = (row, col) => {
     const val = row[col.key];
     if (val === null || val === undefined) return '—';
-    if (col.format === 'pct') return typeof val === 'number' ? `${(val * 100).toFixed(1)}%` : val;
+    if (col.format === 'pct') {
+      const parsedVal = parseFloat(val);
+      return isNaN(parsedVal) ? val : `${(parsedVal * 100).toFixed(1)}%`;
+    }
     return String(val);
   };
 
@@ -81,23 +95,28 @@ export default function Reports() {
   };
 
   const busStatusLabel = { active: 'Hoạt động', broken: 'Hỏng', inactive: 'Ngưng' };
-  const busStatusColor = { active: '#16a34a', broken: '#dc2626', inactive: '#64748b' };
+  const busStatusBg = { active: 'bg-green-50 text-green-700', broken: 'bg-red-50 text-red-700', inactive: 'bg-slate-50 text-slate-700' };
+  
   const driverStatusLabel = { working: 'Đang làm', on_leave: 'Nghỉ phép', inactive: 'Ngưng' };
+  const driverStatusBg = { working: 'bg-green-50 text-green-700', on_leave: 'bg-amber-50 text-amber-700', inactive: 'bg-slate-50 text-slate-700' };
 
   return (
     <Layout>
-      <PageHeader title="Báo cáo thống kê" subtitle="Theo dõi hiệu quả hoạt động của hệ thống" />
+      <PageHeader
+        title="Báo cáo thống kê hiệu suất"
+        subtitle="Theo dõi và đánh giá năng lực hoạt động của đội ngũ tài xế, xe buýt và các tuyến xe"
+      />
 
-      {/* Tabs — matching Figma */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm mb-5">
-        <div className="flex border-b border-slate-100">
+      {/* Tabs */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm mb-6 overflow-hidden">
+        <div className="flex border-b border-slate-100 bg-slate-50/50">
           {TABS.map(t => (
             <button
               key={t.key}
               onClick={() => handleTabChange(t.key)}
-              className={`px-5 py-3.5 text-sm font-medium transition border-b-2 -mb-px ${
+              className={`px-6 py-4 text-sm font-semibold transition-all border-b-2 -mb-px ${
                 tab === t.key
-                  ? 'border-blue-600 text-blue-600'
+                  ? 'border-blue-600 text-blue-600 bg-white'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -106,48 +125,31 @@ export default function Reports() {
           ))}
         </div>
 
-        {/* Filters */}
-        <div className="p-4 flex flex-wrap gap-3 items-center border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-600 whitespace-nowrap">Từ ngày:</label>
-            <input
-              type="date"
-              value={filters.from_date}
-              onChange={e => setFilters({ ...filters, from_date: e.target.value })}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-600 whitespace-nowrap">Đến ngày:</label>
-            <input
-              type="date"
-              value={filters.to_date}
-              onChange={e => setFilters({ ...filters, to_date: e.target.value })}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+        {/* Action Bar */}
+        <div className="p-4 bg-white border-b border-slate-100 flex justify-between items-center">
+          <span className="text-sm font-medium text-slate-500">
+            Báo cáo tổng hợp số liệu thực tế từ dữ liệu vận hành chuyến
+          </span>
           <button
             onClick={load}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-md shadow-blue-500/10 transition flex items-center gap-2"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            Xem báo cáo
+            📊 Xuất báo cáo
           </button>
         </div>
 
-        {/* Table */}
-        {error && <div className="p-4"><AlertBox type="error" message={error} /></div>}
+        {/* Table View */}
+        {error && <div className="p-5"><AlertBox type="error" message={error} /></div>}
+        
         {loading ? (
-          <div className="text-center py-16 text-gray-400">Đang tải báo cáo...</div>
+          <div className="text-center py-20 text-slate-400 font-semibold animate-pulse">Đang tính toán số liệu thống kê...</div>
         ) : data.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-50">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-100">
                 <tr>
                   {cols.map(c => (
-                    <th key={c.key + c.label} className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">{c.label}</th>
+                    <th key={c.key} className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{c.label}</th>
                   ))}
                 </tr>
               </thead>
@@ -157,30 +159,34 @@ export default function Reports() {
                     {cols.map(c => {
                       const raw = row[c.key];
                       const val = formatVal(row, c);
-                      if (c.key === 'status' && tab === 'buses') {
+                      
+                      if (c.key === 'status') {
+                        const isBus = tab === 'buses';
+                        const badgeClass = isBus ? busStatusBg[raw] : driverStatusBg[raw];
+                        const text = isBus ? busStatusLabel[raw] : driverStatusLabel[raw];
                         return (
-                          <td key={c.key + c.label} className="px-5 py-4 text-sm">
-                            <span
-                              className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                              style={{ background: (busStatusColor[raw] || '#64748b') + '20', color: busStatusColor[raw] || '#64748b' }}
-                            >
-                              {busStatusLabel[raw] || raw || '—'}
+                          <td key={c.key} className="px-6 py-4">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${badgeClass || 'bg-slate-100 text-slate-700'}`}>
+                              {text || raw || '—'}
                             </span>
                           </td>
                         );
                       }
+                      
                       if (c.key === 'on_time_rate') {
-                        const pct = typeof raw === 'number' ? (raw * 100).toFixed(1) : null;
+                        const pct = typeof raw === 'number' ? (raw * 100).toFixed(1) : parseFloat(raw);
+                        const isGood = !isNaN(pct) && pct >= 80;
                         return (
-                          <td key={c.key} className="px-5 py-4 text-sm">
-                            {pct !== null ? (
-                              <span className={`font-semibold ${parseFloat(pct) >= 80 ? 'text-green-600' : 'text-red-600'}`}>{pct}%</span>
+                          <td key={c.key} className="px-6 py-4 font-bold">
+                            {!isNaN(pct) ? (
+                              <span className={isGood ? 'text-green-600' : 'text-red-600'}>{pct}%</span>
                             ) : '—'}
                           </td>
                         );
                       }
+                      
                       return (
-                        <td key={c.key + c.label} className={`px-5 py-4 text-sm ${getColor(c, raw)}`}>{val}</td>
+                        <td key={c.key} className={`px-6 py-4 font-medium ${getColor(c, raw)}`}>{val}</td>
                       );
                     })}
                   </tr>
@@ -189,10 +195,10 @@ export default function Reports() {
             </table>
           </div>
         ) : hasLoaded ? (
-          <div className="text-center py-16 text-gray-400 text-sm">Không có dữ liệu báo cáo</div>
+          <div className="text-center py-20 text-slate-400 font-semibold">Không tìm thấy dữ liệu vận hành nào phù hợp</div>
         ) : (
-          <div className="text-center py-16 text-gray-400 text-sm">
-            Chọn khoảng thời gian và nhấn <strong>"Xem báo cáo"</strong> để tải dữ liệu
+          <div className="text-center py-20 text-slate-400 font-semibold">
+            Nhấn nút <strong className="text-blue-600">"Xuất báo cáo"</strong> ở trên để tổng hợp dữ liệu thống kê mới nhất
           </div>
         )}
       </div>

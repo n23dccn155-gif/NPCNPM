@@ -1,4 +1,4 @@
-// authController.js: Xử lý nghiệp vụ đăng nhập và hồ sơ cá nhân
+// authController.js: Xử lý nghiệp vụ đăng nhập và hồ sơ cá nhân theo thiết kế mới
 
 const pool = require('../config/database');
 const bcrypt = require('bcrypt');
@@ -17,12 +17,11 @@ const authController = {
         });
       }
 
-      // Tìm user kèm role_name
+      // Tìm user theo username
       const queryText = `
-        SELECT u.id, u.username, u.full_name, u.phone, u.password, u.status, r.role_name 
-        FROM users u 
-        JOIN roles r ON u.role_id = r.id 
-        WHERE u.username = $1
+        SELECT user_id, username, password_hash, full_name, role, status 
+        FROM users 
+        WHERE username = $1
       `;
       const result = await pool.query(queryText, [username]);
 
@@ -44,7 +43,7 @@ const authController = {
       }
 
       // So sánh mật khẩu băm
-      const isPasswordMatch = await bcrypt.compare(password, user.password);
+      const isPasswordMatch = await bcrypt.compare(password, user.password_hash);
       if (!isPasswordMatch) {
         return res.status(401).json({
           success: false,
@@ -52,12 +51,22 @@ const authController = {
         });
       }
 
+      // Nếu là driver, lấy thêm driver_id
+      let driver_id = null;
+      if (user.role === 'driver') {
+        const driverQuery = await pool.query('SELECT driver_id FROM drivers WHERE user_id = $1', [user.user_id]);
+        if (driverQuery.rows.length > 0) {
+          driver_id = driverQuery.rows[0].driver_id;
+        }
+      }
+
       // Tạo JWT token
       const token = jwt.sign(
         {
-          id: user.id,
+          id: user.user_id,
           username: user.username,
-          role: user.role_name,
+          role: user.role,
+          driver_id: driver_id
         },
         process.env.JWT_SECRET || 'supersecretkey123',
         { expiresIn: '24h' }
@@ -68,11 +77,11 @@ const authController = {
         message: 'Đăng nhập thành công.',
         token,
         user: {
-          id: user.id,
+          id: user.user_id,
           username: user.username,
           full_name: user.full_name,
-          phone: user.phone,
-          role: user.role_name,
+          role: user.role,
+          driver_id: driver_id
         },
       });
     } catch (error) {
@@ -86,10 +95,9 @@ const authController = {
       const userId = req.user.id;
 
       const queryText = `
-        SELECT u.id, u.username, u.full_name, u.phone, u.status, r.role_name 
-        FROM users u 
-        JOIN roles r ON u.role_id = r.id 
-        WHERE u.id = $1
+        SELECT user_id, username, full_name, role, status 
+        FROM users 
+        WHERE user_id = $1
       `;
       const result = await pool.query(queryText, [userId]);
 
@@ -102,14 +110,23 @@ const authController = {
 
       const user = result.rows[0];
 
+      // Nếu là driver, lấy thêm driver_id
+      let driver_id = null;
+      if (user.role === 'driver') {
+        const driverQuery = await pool.query('SELECT driver_id FROM drivers WHERE user_id = $1', [user.user_id]);
+        if (driverQuery.rows.length > 0) {
+          driver_id = driverQuery.rows[0].driver_id;
+        }
+      }
+
       res.status(200).json({
         success: true,
         user: {
-          id: user.id,
+          id: user.user_id,
           username: user.username,
           full_name: user.full_name,
-          phone: user.phone,
-          role: user.role_name,
+          role: user.role,
+          driver_id: driver_id
         },
       });
     } catch (error) {

@@ -1,60 +1,68 @@
-// pages/driver/LeaveRequest.jsx — Gửi và xem yêu cầu nghỉ (matching Figma leave-request)
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
-import { PageHeader, StatusBadge, AlertBox, Modal } from '../../components/UI';
+import { PageHeader, AlertBox, Modal } from '../../components/UI';
 import { getMyLeaves, createLeave } from '../../services/leaveService';
-
-const shiftLabel = { morning: 'Ca sáng', afternoon: 'Ca chiều', full_day: 'Cả ngày' };
 
 export default function LeaveRequest() {
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ leave_date: '', shift_type: 'full_day', reason: '' });
+  const [form, setForm] = useState({ leave_date: '', reason: '' });
   const [formError, setFormError] = useState('');
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const load = () => {
+  const loadLeaves = () => {
+    setLoading(true);
     getMyLeaves()
-      .then(res => setLeaves(res.data?.data || []))
+      .then(res => setLeaves(res.data?.data || res.data || []))
       .catch(() => setLeaves([]))
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { loadLeaves(); }, []);
 
   const handleSubmit = async (e) => {
-    e.preventDefault(); setFormError(''); setSaving(true);
+    e.preventDefault();
+    setFormError('');
+    setSaving(true);
     try {
       await createLeave(form);
       setShowModal(false);
-      setSuccess('Đã gửi yêu cầu nghỉ phép thành công!');
+      setSuccess('Đã gửi yêu cầu nghỉ phép thành công! Vui lòng chờ phê duyệt.');
       setTimeout(() => setSuccess(''), 4000);
-      load();
-      setForm({ leave_date: '', shift_type: 'full_day', reason: '' });
+      loadLeaves();
+      setForm({ leave_date: '', reason: '' });
     } catch (err) {
-      setFormError(err.response?.data?.message || 'Không thể gửi yêu cầu');
-    } finally { setSaving(false); }
+      setFormError(err.response?.data?.message || 'Không thể gửi yêu cầu nghỉ phép.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const statusColor = { pending: '#d97706', approved: '#16a34a', rejected: '#dc2626' };
-  const statusLabel2 = { pending: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Từ chối' };
+  const statusLabel = {
+    pending: 'Chờ duyệt',
+    approved: 'Đã duyệt',
+    rejected: 'Bị từ chối'
+  };
+
+  const statusColor = {
+    pending: 'bg-amber-50 text-amber-700 border-amber-100',
+    approved: 'bg-green-50 text-green-700 border-green-100',
+    rejected: 'bg-red-50 text-red-700 border-red-100'
+  };
 
   return (
     <Layout>
       <PageHeader
-        title="Gửi yêu cầu nghỉ phép"
-        subtitle="Đăng ký nghỉ phép với quản lý"
+        title="Đăng ký nghỉ phép"
+        subtitle="Quản lý ngày nghỉ và gửi đơn xin nghỉ phép đến Quản lý vận hành"
         action={
           <button
-            onClick={() => { setForm({ leave_date: '', shift: 'full_day', reason: '' }); setFormError(''); setShowModal(true); }}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2"
+            onClick={() => { setForm({ leave_date: '', reason: '' }); setFormError(''); setShowModal(true); }}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-md shadow-blue-500/10 transition"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Gửi yêu cầu nghỉ
+            + Gửi đơn nghỉ phép
           </button>
         }
       />
@@ -62,102 +70,94 @@ export default function LeaveRequest() {
       {success && <div className="mb-4"><AlertBox type="success" message={success} /></div>}
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="px-6 py-3 border-b border-slate-100 bg-slate-50">
-          <h3 className="text-sm font-medium text-gray-700">Lịch sử yêu cầu nghỉ của tôi</h3>
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+          <h3 className="text-sm font-bold text-gray-700">Lịch sử xin nghỉ phép của tôi</h3>
         </div>
+        
         {loading ? (
-          <div className="text-center py-16 text-gray-400 text-sm">Đang tải...</div>
-        ) : leaves.length === 0 ? (
-          <div className="text-center py-16 text-gray-400 text-sm">Bạn chưa có yêu cầu nghỉ nào</div>
+          <div className="text-center py-16 text-slate-400 font-semibold animate-pulse">Đang tải lịch sử...</div>
         ) : (
-          <table className="w-full">
-            <thead className="border-b border-slate-100">
-              <tr>
-                {['Ngày xin nghỉ', 'Ca nghỉ', 'Lý do', 'Ngày gửi', 'Trạng thái'].map(h => (
-                  <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {leaves.map(l => (
-                <tr key={l.id} className="hover:bg-slate-50 transition">
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{l.leave_date}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{shiftLabel[l.shift_type] || l.shift_type || '—'}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600 max-w-xs">
-                    <span className="line-clamp-1">{l.reason || '—'}</span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {new Date(l.created_at).toLocaleDateString('vi-VN')}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                      style={{
-                        background: (statusColor[l.status] || '#64748b') + '15',
-                        color: statusColor[l.status] || '#64748b',
-                      }}
-                    >
-                      {statusLabel2[l.status] || l.status}
-                    </span>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  {['Ngày nghỉ', 'Lý do chi tiết', 'Trạng thái'].map(h => (
+                    <th key={h} className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {leaves.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="px-6 py-10 text-center text-gray-400">
+                      Bạn chưa gửi đơn xin nghỉ phép nào
+                    </td>
+                  </tr>
+                ) : (
+                  leaves.map(l => (
+                    <tr key={l.leave_id} className="hover:bg-slate-50 transition">
+                      <td className="px-6 py-4 font-bold text-gray-900">
+                        {new Date(l.leave_date).toLocaleDateString('vi-VN')}
+                      </td>
+                      <td className="px-6 py-4 text-gray-600 max-w-xs truncate" title={l.reason}>
+                        {l.reason || '—'}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-2xs font-bold border ${statusColor[l.status]}`}>
+                          {statusLabel[l.status] || l.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      {/* Modal gửi yêu cầu — matching Figma leave-request */}
-      <Modal isOpen={showModal} title="Gửi yêu cầu nghỉ phép" onClose={() => setShowModal(false)}>
+      <Modal isOpen={showModal} title="Đơn xin nghỉ phép mới" onClose={() => setShowModal(false)}>
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && <AlertBox type="error" message={formError} />}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Ngày xin nghỉ *</label>
-              <input
-                type="date"
-                value={form.leave_date}
-                onChange={e => setForm({ ...form, leave_date: e.target.value })}
-                required
-                min={new Date().toISOString().split('T')[0]}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Ca nghỉ *</label>
-              <select
-                value={form.shift_type}
-                onChange={e => setForm({ ...form, shift_type: e.target.value })}
-                required
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="full_day">Cả ngày</option>
-                <option value="morning">Ca sáng</option>
-                <option value="afternoon">Ca chiều</option>
-              </select>
-            </div>
-          </div>
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Lý do *</label>
+            <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wider">Ngày nghỉ *</label>
+            <input
+              type="date"
+              value={form.leave_date}
+              onChange={e => setForm({ ...form, leave_date: e.target.value })}
+              required
+              min={new Date().toISOString().split('T')[0]}
+              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wider">Lý do nghỉ *</label>
             <textarea
               value={form.reason}
               onChange={e => setForm({ ...form, reason: e.target.value })}
               required
               rows={4}
-              placeholder="Nhập lý do xin nghỉ..."
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              placeholder="Nhập lý do chi tiết (VD: Khám bệnh định kỳ, việc gia đình...)"
+              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             />
           </div>
-          <div className="flex gap-3 pt-1">
-            <button type="button" onClick={() => setShowModal(false)} className="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition flex items-center justify-center gap-2">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+
+          <div className="flex gap-3 justify-end pt-3 border-t">
+            <button
+              type="button"
+              onClick={() => setShowModal(false)}
+              className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-slate-50 transition"
+            >
               Hủy
             </button>
-            <button type="submit" disabled={saving} className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl py-2.5 text-sm font-medium transition flex items-center justify-center gap-2">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9 22,2"/>
-              </svg>
-              {saving ? 'Đang gửi...' : 'Gửi yêu cầu'}
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-md shadow-blue-500/10 transition"
+            >
+              {saving ? 'Đang gửi...' : 'Gửi đơn nghỉ phép'}
             </button>
           </div>
         </form>

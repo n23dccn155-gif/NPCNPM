@@ -4,3 +4,6 @@ export const getRoute = (code) => api.get(`/routes/${code}`);
 export const createRoute = (data) => api.post('/routes', data);
 export const updateRoute = (code, data) => api.put(`/routes/${code}`, data);
 export const updateRouteStatus = (code, status) => api.patch(`/routes/${code}/status`, { status });
+export const getRouteDirections = (code) => api.get(`/routes/${code}/directions`);
+export const createRouteDirection = (code, data) => api.post(`/routes/${code}/directions`, data);
+export const updateRouteDirection = (code, directionId, data) => api.put(`/routes/${code}/directions/${directionId}`, data);

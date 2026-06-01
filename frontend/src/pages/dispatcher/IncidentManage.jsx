@@ -1,61 +1,82 @@
-// pages/dispatcher/IncidentManage.jsx — Quản lý sự cố (cải tiến đầy đủ)
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import Layout from '../../components/Layout';
-import { PageHeader, StatusBadge, AlertBox } from '../../components/UI';
-import { getAllIncidents, updateIncidentStatus, getIncidentAffectedTrips } from '../../services/miscService';
+import { PageHeader, AlertBox } from '../../components/UI';
+import { getAllIncidents, updateIncidentStatus, getAffectedGroups } from '../../services/incidentService';
 
 export default function IncidentManage() {
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
-  const [affected, setAffected] = useState({ open: false, trips: [], incidentId: null, incidentBusId: null });
+  const [affected, setAffected] = useState({ open: false, groups: [], incidentId: null, incidentBusId: null });
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
 
   const load = () => {
     const params = filter ? { status: filter } : {};
     getAllIncidents(params)
-      .then(res => setIncidents(res.data?.data || []))
+      .then(res => setIncidents(res.data?.data || res.data || []))
       .catch(() => setIncidents([]))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => { setLoading(true); load(); }, [filter]);
 
-  const handleUpdateStatus = async (id, newStatus, busId) => {
+  const handleUpdateStatus = async (incidentId, newStatus) => {
     try {
-      await updateIncidentStatus(id, newStatus);
-      setSuccess(`Đã cập nhật trạng thái sự cố${newStatus === 'resolved' ? ' (xe đã được đánh dấu hỏng)' : ''}`);
-      setTimeout(() => setSuccess(''), 3000);
+      await updateIncidentStatus(incidentId, newStatus);
+      setSuccess(`Đã cập nhật trạng thái sự cố sang: ${newStatus === 'resolved' ? 'Đã giải quyết' : 'Đang xử lý'}.`);
+      setTimeout(() => setSuccess(''), 4000);
       load();
-    } catch (err) { setError(err.response?.data?.message || 'Lỗi cập nhật'); setTimeout(() => setError(''), 3000); }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Lỗi khi cập nhật trạng thái');
+      setTimeout(() => setError(''), 4000);
+    }
   };
 
   const viewAffected = async (incident) => {
     try {
-      const res = await getIncidentAffectedTrips(incident.id);
-      setAffected({ open: true, trips: res.data?.data || [], incidentId: incident.id, incidentBusId: incident.bus_id });
-    } catch { setAffected({ open: true, trips: [], incidentId: incident.id, incidentBusId: incident.bus_id }); }
+      const res = await getAffectedGroups(incident.incident_id);
+      setAffected({ open: true, groups: res.data?.data || res.data || [], incidentId: incident.incident_id, incidentBusId: incident.bus_id });
+    } catch {
+      setAffected({ open: true, groups: [], incidentId: incident.incident_id, incidentBusId: incident.bus_id });
+    }
   };
 
-  const incidentStatusLabel = { pending: 'Chờ xử lý', in_progress: 'Đang xử lý', resolved: 'Đã xử lý' };
-  const incidentStatusColor = { pending: '#dc2626', in_progress: '#d97706', resolved: '#16a34a' };
+  const incidentTypes = {
+    bus_broken: 'Hỏng xe buýt',
+    delay: 'Trễ chuyến',
+    cancelled: 'Hủy chuyến',
+    other: 'Sự cố khác'
+  };
+
+  const statusLabel = {
+    pending: 'Chờ xử lý',
+    processing: 'Đang xử lý',
+    resolved: 'Đã giải quyết'
+  };
+
+  const statusBg = {
+    pending: 'bg-red-50 text-red-700 border-red-100',
+    processing: 'bg-amber-50 text-amber-700 border-amber-100',
+    resolved: 'bg-green-50 text-green-700 border-green-100'
+  };
 
   return (
     <Layout>
       <PageHeader
-        title="Quản lý sự cố"
-        subtitle="Theo dõi và xử lý sự cố xe buýt"
+        title="Nhật ký báo cáo sự cố"
+        subtitle="Quản lý và cập nhật tiến độ xử lý các sự cố phát sinh trên đường chạy của tài xế"
         action={
           <select
             value={filter}
             onChange={e => setFilter(e.target.value)}
-            className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="border border-slate-200 bg-white rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
           >
             <option value="">Tất cả sự cố</option>
             <option value="pending">Chờ xử lý</option>
-            <option value="in_progress">Đang xử lý</option>
-            <option value="resolved">Đã xử lý</option>
+            <option value="processing">Đang xử lý</option>
+            <option value="resolved">Đã giải quyết</option>
           </select>
         }
       />
@@ -65,125 +86,130 @@ export default function IncidentManage() {
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         {loading ? (
-          <div className="text-center py-16 text-gray-400">Đang tải...</div>
+          <div className="text-center py-16 text-slate-400 font-semibold animate-pulse">Đang tải nhật ký sự cố...</div>
         ) : (
-          <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-100">
-              <tr>
-                {['Tài xế', 'Xe buýt', 'Chuyến', 'Loại sự cố', 'Mô tả sự cố', 'Thời gian', 'Trạng thái', 'Thao tác'].map(h => (
-                  <th key={h} className={`px-4 py-3 text-xs font-medium text-gray-500 uppercase ${h === 'Thao tác' ? 'text-right' : 'text-left'}`}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {incidents.map(i => {
-                const typeLabel = { bus_broken: 'Hỏng xe', traffic_delay: 'Trễ GT', other: 'Khác' };
-                const typeBg = { bus_broken: 'bg-red-50 text-red-600', traffic_delay: 'bg-amber-50 text-amber-600', other: 'bg-slate-50 text-slate-600' };
-                return (
-                <tr key={i.id} className="hover:bg-slate-50 transition">
-                  <td className="px-4 py-4 text-sm font-medium text-gray-900">{i.driver_name || i.driver_code}</td>
-                  <td className="px-4 py-4 text-sm font-mono text-gray-700">{i.bus_id || '—'}</td>
-                  <td className="px-4 py-4 text-sm font-mono text-gray-700">{i.trip_code || '—'}</td>
-                  <td className="px-4 py-4">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${typeBg[i.incident_type] || typeBg.other}`}>
-                      {typeLabel[i.incident_type] || i.incident_type || '—'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4 text-sm text-gray-600 max-w-xs">
-                    <span className="line-clamp-2">{i.description}</span>
-                  </td>
-                  <td className="px-4 py-4 text-sm text-gray-500 whitespace-nowrap">
-                    {new Date(i.report_time).toLocaleString('vi-VN')}
-                  </td>
-                  <td className="px-4 py-4">
-                    <span
-                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                      style={{
-                        background: (incidentStatusColor[i.status] || '#64748b') + '15',
-                        color: incidentStatusColor[i.status] || '#64748b',
-                      }}
-                    >
-                      {incidentStatusLabel[i.status] || i.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4 text-right">
-                    <div className="flex gap-2 justify-end flex-wrap">
-                      <button
-                        onClick={() => viewAffected(i)}
-                        className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-600 px-2.5 py-1.5 rounded-lg font-medium transition"
-                      >
-                        Chuyến bị ảnh hưởng
-                      </button>
-                      {i.status === 'pending' && (
-                        <button
-                          onClick={() => handleUpdateStatus(i.id, 'in_progress', i.bus_id)}
-                          className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-700 px-2.5 py-1.5 rounded-lg font-medium transition"
-                        >
-                          Đang xử lý
-                        </button>
-                      )}
-                      {(i.status === 'pending' || i.status === 'in_progress') && (
-                        <button
-                          onClick={() => handleUpdateStatus(i.id, 'resolved', i.bus_id)}
-                          className="text-xs bg-green-50 hover:bg-green-100 text-green-700 px-2.5 py-1.5 rounded-lg font-medium transition"
-                        >
-                          Đã xử lý
-                        </button>
-                      )}
-                    </div>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  {['Tài xế báo cáo', 'Biển số xe', 'Thứ tự chuyến', 'Loại sự cố', 'Mô tả chi tiết', 'Trạng thái', 'Thao tác'].map(h => (
+                    <th key={h} className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                  ))}
                 </tr>
-              ); })}
-            </tbody>
-          </table>
-        )}
-        {!loading && incidents.length === 0 && (
-          <div className="text-center py-16 text-gray-400 text-sm">Không có sự cố nào</div>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {incidents.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-10 text-center text-gray-400">
+                      Không tìm thấy sự cố nào trong nhật ký
+                    </td>
+                  </tr>
+                ) : (
+                  incidents.map(i => (
+                    <tr key={i.incident_id} className="hover:bg-slate-50 transition">
+                      <td className="px-6 py-4 font-bold text-gray-900">{i.driver_name}</td>
+                      <td className="px-6 py-4 font-mono font-semibold text-slate-700">{i.license_plate || '—'}</td>
+                      <td className="px-6 py-4 font-mono font-semibold text-slate-600">
+                        {i.trip_order ? `Chuyến thứ #${i.trip_order}` : '—'}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex px-2.5 py-0.5 rounded-lg text-xs font-bold ${
+                          i.incident_type === 'bus_broken' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {incidentTypes[i.incident_type] || i.incident_type}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-gray-600 max-w-xs truncate" title={i.description}>
+                        {i.description}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${statusBg[i.status]}`}>
+                          {statusLabel[i.status] || i.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 font-semibold text-xs space-y-1">
+                        <div className="flex gap-2 items-center flex-wrap">
+                          <button
+                            onClick={() => viewAffected(i)}
+                            className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition"
+                          >
+                            Ảnh hưởng
+                          </button>
+                          
+                          {i.status === 'pending' && (
+                            <button
+                              onClick={() => handleUpdateStatus(i.incident_id, 'processing')}
+                              className="bg-amber-50 text-amber-700 hover:bg-amber-100 px-2.5 py-1 rounded-lg transition"
+                            >
+                              Xử lý
+                            </button>
+                          )}
+                          
+                          {i.status !== 'resolved' && (
+                            <button
+                              onClick={() => handleUpdateStatus(i.incident_id, 'resolved')}
+                              className="bg-green-50 text-green-700 hover:bg-green-100 px-2.5 py-1 rounded-lg transition"
+                            >
+                              Giải quyết
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      {/* Affected trips modal */}
+      {/* Affected groups modal */}
       {affected.open && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setAffected({ open: false, trips: [], incidentId: null, incidentBusId: null })}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setAffected({ open: false, groups: [], incidentId: null, incidentBusId: null })}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-5">
+            <div className="flex justify-between items-center mb-5 border-b pb-3">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Chuyến bị ảnh hưởng</h3>
-                {affected.incidentBusId && <p className="text-xs text-gray-500 mt-0.5">Xe: {affected.incidentBusId}</p>}
+                <h3 className="text-lg font-bold text-gray-900">Các nhóm chuyến bị ảnh hưởng</h3>
+                {affected.incidentBusId && <p className="text-xs text-gray-500 font-semibold mt-0.5">Mã xe buýt: ID #{affected.incidentBusId}</p>}
               </div>
-              <button onClick={() => setAffected({ open: false, trips: [], incidentId: null, incidentBusId: null })} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+              <button onClick={() => setAffected({ open: false, groups: [], incidentId: null, incidentBusId: null })} className="text-gray-400 hover:text-gray-600 text-xl font-bold">✕</button>
             </div>
-            {affected.trips.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 text-sm">Không có chuyến nào bị ảnh hưởng</div>
+            {affected.groups.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 font-medium">Không phát hiện nhóm chuyến nào bị ảnh hưởng</div>
             ) : (
-              <div className="space-y-2 max-h-80 overflow-y-auto">
-                {affected.trips.map(t => (
-                  <div key={t.trip_code} className="bg-orange-50 border border-orange-200 rounded-xl p-3">
+              <div className="space-y-3 max-h-80 overflow-y-auto">
+                {affected.groups.map(g => (
+                  <div key={g.group_id} className="bg-red-50/30 border border-red-200 rounded-xl p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <div className="font-mono text-sm font-semibold text-orange-800">Chuyến {t.trip_code}</div>
-                        <div className="text-xs text-orange-600 mt-0.5">{t.trip_date} | {t.scheduled_departure}</div>
-                        {t.driver_code && <div className="text-xs text-orange-600">Tài xế: {t.driver_name || t.driver_code}</div>}
+                        <div className="font-bold text-red-900">{g.group_name}</div>
+                        <div className="text-xs text-red-700 mt-1 font-semibold">Tuyến: {g.route_code} | Tài xế: {g.driver_name}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          Khung giờ: {new Date(g.start_time).toLocaleTimeString('vi-VN')} - {new Date(g.end_time).toLocaleTimeString('vi-VN')}
+                        </div>
                       </div>
-                      <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-lg font-medium">Cần điều chỉnh</span>
+                      <span className="text-xs bg-red-100 text-red-800 px-3 py-1 rounded-full font-bold">Xe gặp sự cố</span>
                     </div>
                   </div>
                 ))}
               </div>
             )}
-            <div className="mt-5 flex justify-end gap-3">
+            <div className="mt-6 flex justify-end gap-3 border-t pt-4">
               <button
-                onClick={() => setAffected({ open: false, trips: [], incidentId: null, incidentBusId: null })}
-                className="px-4 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition"
+                onClick={() => setAffected({ open: false, groups: [], incidentId: null, incidentBusId: null })}
+                className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-slate-50 transition"
               >
                 Đóng
               </button>
-              <a
-                href="/dispatcher/affected-trips"
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition"
-              >
-                Đi đến trang điều chỉnh
-              </a>
+              {affected.groups.length > 0 && (
+                <Link
+                  to="/dispatcher/affected-trips"
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-md shadow-blue-500/10 transition flex items-center"
+                >
+                  Điều phối khẩn cấp
+                </Link>
+              )}
             </div>
           </div>
         </div>

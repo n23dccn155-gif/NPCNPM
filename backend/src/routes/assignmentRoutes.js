@@ -1,14 +1,14 @@
+// assignmentRoutes.js: Các route quản lý phân công nhóm chuyến
 const express = require('express');
 const router = express.Router();
 const assignmentController = require('../controllers/assignmentController');
 const auth = require('../middlewares/authMiddleware');
 const role = require('../middlewares/roleMiddleware');
 
-router.get('/schedule', auth, assignmentController.getSchedule);
-router.get('/my-schedule', auth, role(['driver']), assignmentController.getMySchedule);
-router.post('/check', auth, role(['admin', 'dispatcher']), assignmentController.check);
-router.post('/', auth, role(['admin', 'dispatcher']), assignmentController.create);
-router.post('/:tripCode/replace', auth, role(['admin', 'dispatcher']), assignmentController.replace);
-router.get('/history/:tripCode', auth, assignmentController.getHistory);
+router.get('/', auth, assignmentController.getAll);
+router.post('/assign', auth, role(['dispatcher']), assignmentController.assignGroup);
+router.post('/replace-driver', auth, role(['dispatcher']), assignmentController.replaceDriver);
+router.post('/replace-bus', auth, role(['dispatcher']), assignmentController.replaceBus);
+router.get('/available-resources/:groupId', auth, role(['dispatcher']), assignmentController.getAvailableResources);
 
 module.exports = router;

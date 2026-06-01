@@ -1,131 +1,254 @@
-// tripController.js
+// tripController.js: Nghiệp vụ ghi nhận hành trình chuyến xe (XL10, XL11) theo thiết kế mới
 const pool = require('../config/database');
 const { success, error } = require('../utils/responseHelper');
 
-function timeToMinutes(timeStr) {
-  if (!timeStr) return 0;
-  const parts = timeStr.split(':');
-  const h = parseInt(parts[0], 10);
-  const m = parseInt(parts[1], 10);
-  return h * 60 + m;
-}
-const { calculateDriverSchedule, getConfigForDate } = require('./schedulerController');
-
 const tripController = {
+  // Lấy danh sách chuyến xe (có thể lọc theo plan_id, group_id, date, status, v.v.)
   getAll: async (req, res, next) => {
     try {
-      const { route_code, trip_date_from, trip_date_to, trip_date } = req.query;
-      
-      // Tự động sinh chuyến xe (Auto-Schedule Sync) cho ngày cụ thể hoặc hôm nay nếu chưa có
-      const targetDate = trip_date || new Date().toISOString().split('T')[0];
-      const checkTrips = await pool.query('SELECT COUNT(*) FROM trips WHERE trip_date = $1', [targetDate]);
-      
-      if (parseInt(checkTrips.rows[0].count) < 40) {
-        // Lấy cấu hình cho ngày targetDate
-        const config = await getConfigForDate(targetDate);
-        
-        // Tạo chuyến xe tự động dựa vào Module Time Ring
-        const driverRes = await pool.query("SELECT * FROM drivers WHERE status = 'active'");
-        const busRes = await pool.query("SELECT * FROM buses WHERE status = 'active'");
-        
-        for (const driver of driverRes.rows) {
-          const s = calculateDriverSchedule(driver, targetDate, busRes.rows, config);
-          if (!s.isStandby) {
-            const [baseH, baseM] = s.departureTime.split(':').map(Number);
-            let currentMin = baseH * 60 + baseM;
-
-            for (let i = 0; i < 6; i++) {
-              const direction = i % 2 === 0 ? 'outbound' : 'inbound';
-              const tripCode = `TR${s.route_code}-${targetDate.replace(/-/g,'').substring(4)}-${s.driver_code.substring(3)}-${i+1}`;
-              
-              const hStart = Math.floor(currentMin / 60) % 24;
-              const mStart = currentMin % 60;
-              const depTime = `${String(hStart).padStart(2, '0')}:${String(mStart).padStart(2, '0')}`;
-              
-              const endMin = currentMin + config.trip_duration_minutes;
-              
-              const hEnd = Math.floor(endMin / 60) % 24;
-              const mEnd = endMin % 60;
-              const arrTime = `${String(hEnd).padStart(2, '0')}:${String(mEnd).padStart(2, '0')}`;
-
-              await pool.query(
-                `INSERT INTO trips (trip_code, route_code, trip_date, direction, scheduled_departure, scheduled_arrival, status) 
-                 VALUES ($1, $2, $3, $4, $5, $6, 'assigned') ON CONFLICT DO NOTHING`,
-                [tripCode, s.route_code, targetDate, direction, depTime, arrTime]
-              );
-              await pool.query(
-                `INSERT INTO trip_assignments (trip_code, driver_code, bus_id, dispatcher_id, status) 
-                 VALUES ($1, $2, $3, $4, 'active') ON CONFLICT DO NOTHING`,
-                [tripCode, s.driver_code, s.bus_id, req.user.id]
-              );
-
-              currentMin = endMin + config.min_break_minutes;
-              if (currentMin % config.trip_frequency_minutes !== 0) {
-                currentMin += (config.trip_frequency_minutes - (currentMin % config.trip_frequency_minutes));
-              }
-            }
-          }
-        }
-      }
-
+      const { plan_id, group_id, date, status } = req.query;
       let query = `
-        SELECT t.*, r.route_name,
-          ta.bus_id, ta.driver_code, ta.status AS assignment_status,
-          CEIL(CAST(split_part(t.trip_code, '-', 4) AS FLOAT) / 2.0) AS round_num,
-          MIN(t.scheduled_departure) OVER (PARTITION BY ta.driver_code, CEIL(CAST(split_part(t.trip_code, '-', 4) AS FLOAT) / 2.0)) AS round_start_time
+        SELECT t.*, tg.group_name, rd.route_code, rd.direction_type, rd.start_point, rd.end_point, b.license_plate, d.full_name as driver_name
         FROM trips t
-        JOIN routes r ON t.route_code = r.route_code
-        LEFT JOIN trip_assignments ta ON t.trip_code = ta.trip_code AND ta.status = 'active'
-        WHERE 1=1
+        JOIN trip_groups tg ON t.group_id = tg.group_id
+        JOIN route_directions rd ON t.direction_id = rd.direction_id
+        LEFT JOIN assignments a ON tg.group_id = a.group_id AND a.status = 'active'
+        LEFT JOIN buses b ON a.bus_id = b.bus_id
+        LEFT JOIN drivers d ON a.driver_id = d.driver_id
       `;
       const params = [];
-      if (route_code) { params.push(route_code); query += ` AND t.route_code = $${params.length}`; }
-      if (trip_date) { params.push(trip_date); query += ` AND t.trip_date = $${params.length}`; }
-      if (trip_date_from) { params.push(trip_date_from); query += ` AND t.trip_date >= $${params.length}`; }
-      if (trip_date_to) { params.push(trip_date_to); query += ` AND t.trip_date <= $${params.length}`; }
-      query += ' ORDER BY round_num, round_start_time, ta.driver_code, t.scheduled_departure';
+      const conditions = [];
+
+      if (plan_id) {
+        params.push(plan_id);
+        conditions.push(`t.plan_id = $${params.length}`);
+      }
+      if (group_id) {
+        params.push(group_id);
+        conditions.push(`t.group_id = $${params.length}`);
+      }
+      if (date) {
+        params.push(date);
+        conditions.push(`DATE(t.scheduled_departure) = $${params.length}`);
+      }
+      if (status) {
+        params.push(status);
+        conditions.push(`t.status = $${params.length}`);
+      }
+
+      if (conditions.length > 0) {
+        query += ' WHERE ' + conditions.join(' AND ');
+      }
+      query += ' ORDER BY t.scheduled_departure';
+
       const result = await pool.query(query, params);
       return success(res, result.rows);
     } catch (err) { next(err); }
   },
 
+  // Chi tiết chuyến xe
   getOne: async (req, res, next) => {
     try {
+      const { tripId } = req.params;
       const result = await pool.query(
-        `SELECT t.*, r.route_name FROM trips t JOIN routes r ON t.route_code = r.route_code WHERE t.trip_code = $1`,
-        [req.params.tripCode]
+        `SELECT t.*, tg.group_name, rd.route_code, rd.direction_type, rd.start_point, rd.end_point, b.license_plate, d.full_name as driver_name
+         FROM trips t
+         JOIN trip_groups tg ON t.group_id = tg.group_id
+         JOIN route_directions rd ON t.direction_id = rd.direction_id
+         LEFT JOIN assignments a ON tg.group_id = a.group_id AND a.status = 'active'
+         LEFT JOIN buses b ON a.bus_id = b.bus_id
+         LEFT JOIN drivers d ON a.driver_id = d.driver_id
+         WHERE t.trip_id = $1`,
+        [tripId]
       );
       if (!result.rows.length) return error(res, 'Không tìm thấy chuyến xe', 404);
       return success(res, result.rows[0]);
     } catch (err) { next(err); }
   },
 
-  create: async (req, res, next) => {
+  // Tài xế lấy lịch trình chuyến xe của mình trong ngày
+  getMyTrips: async (req, res, next) => {
     try {
-      const { trip_code, route_code, trip_date, direction, scheduled_departure, scheduled_arrival } = req.body;
-      if (!trip_code || !route_code || !trip_date || !scheduled_departure || !scheduled_arrival)
-        return error(res, 'Thiếu thông tin bắt buộc', 400);
-
-      // Kiểm tra scheduled_arrival > scheduled_departure
-      if (timeToMinutes(scheduled_arrival) <= timeToMinutes(scheduled_departure)) {
-        return error(res, 'Giờ kết thúc dự kiến phải lớn hơn giờ xuất bến dự kiến', 400);
+      // Xác định driver_id liên kết với user
+      const driverRes = await pool.query('SELECT driver_id FROM drivers WHERE user_id = $1', [req.user.id]);
+      if (!driverRes.rows.length) {
+        return error(res, 'Tài khoản này không liên kết với thông tin tài xế', 404);
       }
-
-      // Kiểm tra tuyến đang hoạt động
-      const routeCheck = await pool.query('SELECT status FROM routes WHERE route_code = $1', [route_code]);
-      if (!routeCheck.rows.length) return error(res, 'Tuyến xe không tồn tại', 404);
-      if (routeCheck.rows[0].status !== 'active') return error(res, 'Không thể lập chuyến từ tuyến đã ngưng hoạt động', 400);
+      const driverId = driverRes.rows[0].driver_id;
+      const dateStr = req.query.date || new Date().toISOString().split('T')[0];
 
       const result = await pool.query(
-        `INSERT INTO trips (trip_code, route_code, trip_date, direction, scheduled_departure, scheduled_arrival, status) 
-         VALUES ($1, $2, $3, $4, $5, $6, 'unassigned') RETURNING *`,
-        [trip_code, route_code, trip_date, direction || 'outbound', scheduled_departure, scheduled_arrival]
+        `SELECT t.*, tg.group_name, rd.direction_type, rd.start_point, rd.end_point, b.license_plate
+         FROM trips t
+         JOIN operation_plans p ON t.plan_id = p.plan_id
+         JOIN trip_groups tg ON t.group_id = tg.group_id
+         JOIN assignments a ON tg.group_id = a.group_id AND a.status = 'active'
+         JOIN buses b ON a.bus_id = b.bus_id
+         JOIN route_directions rd ON t.direction_id = rd.direction_id
+         WHERE a.driver_id = $1 AND DATE(t.scheduled_departure) = $2 AND p.status = 'approved'
+         ORDER BY t.scheduled_departure`,
+        [driverId, dateStr]
       );
-      return success(res, result.rows[0], 'Lập chuyến xe thành công', 201);
-    } catch (err) {
-      if (err.code === '23505') return error(res, 'Mã chuyến đã tồn tại', 409);
-      next(err);
-    }
+
+      return success(res, result.rows);
+    } catch (err) { next(err); }
   },
+
+  // Tài xế ghi nhận xuất bến thực tế (Bắt đầu chuyến)
+  startTrip: async (req, res, next) => {
+    try {
+      const { tripId } = req.params;
+      
+      // Lấy thông tin chuyến
+      const tripRes = await pool.query('SELECT * FROM trips WHERE trip_id = $1', [tripId]);
+      if (!tripRes.rows.length) return error(res, 'Không tìm thấy chuyến xe', 404);
+      const trip = tripRes.rows[0];
+
+      if (trip.status !== 'scheduled' && trip.status !== 'assigned') {
+        return error(res, 'Chuyến xe không ở trạng thái sẵn sàng để xuất bến', 400);
+      }
+
+      // Xác nhận tài xế bắt đầu chuyến có đúng là tài xế phân công không
+      const driverRes = await pool.query('SELECT driver_id FROM drivers WHERE user_id = $1', [req.user.id]);
+      if (!driverRes.rows.length) return error(res, 'Không tìm thấy hồ sơ tài xế', 403);
+      const driverId = driverRes.rows[0].driver_id;
+
+      const assignmentRes = await pool.query(
+        "SELECT driver_id FROM assignments WHERE group_id = $1 AND status = 'active'",
+        [trip.group_id]
+      );
+      if (!assignmentRes.rows.length || assignmentRes.rows[0].driver_id !== driverId) {
+        return error(res, 'Bạn không được phân công chạy chuyến xe này', 403);
+      }
+
+      const now = new Date();
+      const scheduledDep = new Date(trip.scheduled_departure);
+      
+      // Tính phút trễ (XL11)
+      const diffMs = now - scheduledDep;
+      const diffMins = Math.floor(diffMs / (1000 * 60));
+      const delayMinutes = diffMins > 0 ? diffMins : 0;
+
+      // Cập nhật trạng thái chuyến
+      // Luôn chuyển sang running khi xuất bến
+      const newStatus = 'running';
+
+      const updateRes = await pool.query(
+        `UPDATE trips 
+         SET actual_departure = $1, delay_minutes = $2, status = $3 
+         WHERE trip_id = $4 
+         RETURNING *`,
+        [now, delayMinutes, newStatus, tripId]
+      );
+
+      // Nếu trễ chuyến, tạo thông báo cho Dispatcher (XL11)
+      if (delayMinutes > 0) {
+        // Lấy điều phối viên đã tạo kế hoạch
+        const planRes = await pool.query(
+          `SELECT p.created_by, p.route_code FROM operation_plans p WHERE p.plan_id = $1`,
+          [trip.plan_id]
+        );
+        if (planRes.rows.length) {
+          const dispatcherId = planRes.rows[0].created_by;
+          const routeCode = planRes.rows[0].route_code;
+          await pool.query(
+            `INSERT INTO notifications (user_id, title, content) 
+             VALUES ($1, 'Cảnh báo trễ chuyến', $2)`,
+            [dispatcherId, `Chuyến thứ ${trip.trip_order} (Tuyến ${routeCode}) xuất bến trễ ${delayMinutes} phút.`]
+          );
+        }
+      }
+
+      return success(res, updateRes.rows[0], 'Bắt đầu chuyến xe thành công');
+    } catch (err) { next(err); }
+  },
+
+  // Tài xế ghi nhận hoàn thành chuyến xe
+  finishTrip: async (req, res, next) => {
+    try {
+      const { tripId } = req.params;
+
+      const tripRes = await pool.query('SELECT * FROM trips WHERE trip_id = $1', [tripId]);
+      if (!tripRes.rows.length) return error(res, 'Không tìm thấy chuyến xe', 404);
+      const trip = tripRes.rows[0];
+
+      if (trip.status !== 'running') {
+        return error(res, 'Chuyến xe chưa bắt đầu hành trình', 400);
+      }
+
+      // Xác nhận tài xế
+      const driverRes = await pool.query('SELECT driver_id FROM drivers WHERE user_id = $1', [req.user.id]);
+      if (!driverRes.rows.length) return error(res, 'Không tìm thấy hồ sơ tài xế', 403);
+      const driverId = driverRes.rows[0].driver_id;
+
+      const assignmentRes = await pool.query(
+        "SELECT driver_id FROM assignments WHERE group_id = $1 AND status = 'active'",
+        [trip.group_id]
+      );
+      if (!assignmentRes.rows.length || assignmentRes.rows[0].driver_id !== driverId) {
+        return error(res, 'Bạn không được phân công chạy chuyến xe này', 403);
+      }
+
+      const now = new Date();
+      const newStatus = 'completed';
+      const updateRes = await pool.query(
+        `UPDATE trips 
+         SET actual_arrival = $1, status = $2 
+         WHERE trip_id = $3 
+         RETURNING *`,
+        [now, newStatus, tripId]
+      );
+
+      return success(res, updateRes.rows[0], 'Hoàn thành chuyến xe thành công');
+    } catch (err) { next(err); }
+  },
+
+  // Hủy chuyến xe (Dispatcher hủy)
+  cancelTrip: async (req, res, next) => {
+    try {
+      const { tripId } = req.params;
+      const { reason } = req.body;
+
+      if (!reason) {
+        return error(res, 'Vui lòng cung cấp lý do hủy chuyến', 400);
+      }
+
+      const tripRes = await pool.query('SELECT * FROM trips WHERE trip_id = $1', [tripId]);
+      if (!tripRes.rows.length) return error(res, 'Không tìm thấy chuyến xe', 404);
+      const trip = tripRes.rows[0];
+
+      if (trip.status === 'completed' || trip.status === 'cancelled') {
+        return error(res, `Không thể hủy chuyến xe ở trạng thái ${trip.status}`, 400);
+      }
+
+      const result = await pool.query(
+        `UPDATE trips 
+         SET status = 'cancelled' 
+         WHERE trip_id = $1 
+         RETURNING *`,
+        [tripId]
+      );
+
+      // Tạo thông báo cho tài xế được phân công (nếu có)
+      const assignmentRes = await pool.query(
+        `SELECT d.user_id 
+         FROM assignments a
+         JOIN drivers d ON a.driver_id = d.driver_id
+         WHERE a.group_id = $1 AND a.status = 'active'`,
+        [trip.group_id]
+      );
+
+      if (assignmentRes.rows.length) {
+        await pool.query(
+          `INSERT INTO notifications (user_id, title, content) 
+           VALUES ($1, 'Hủy chuyến xe', $2)`,
+          [assignmentRes.rows[0].user_id, `Chuyến thứ ${trip.trip_order} trong ca chạy của bạn đã bị hủy. Lý do: ${reason}`]
+        );
+      }
+
+      return success(res, result.rows[0], 'Hủy chuyến xe thành công');
+    } catch (err) { next(err); }
+  }
 };
+
 module.exports = tripController;

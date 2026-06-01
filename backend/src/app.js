@@ -1,17 +1,20 @@
-// app.js: Cấu hình Express App hoàn chỉnh
+// app.js: Cấu hình Express App hoàn chỉnh theo thiết kế mới
 const express = require('express');
 const cors = require('cors');
 
 const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
 const routeRoutes = require('./routes/routeRoutes');
 const busRoutes = require('./routes/busRoutes');
 const driverRoutes = require('./routes/driverRoutes');
+const planRoutes = require('./routes/planRoutes');
 const tripRoutes = require('./routes/tripRoutes');
 const assignmentRoutes = require('./routes/assignmentRoutes');
 const leaveRequestRoutes = require('./routes/leaveRequestRoutes');
 const incidentRoutes = require('./routes/incidentRoutes');
-const schedulerRoutes = require('./routes/schedulerRoutes');
-const miscRoutes = require('./routes/miscRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const reportRoutes = require('./routes/reportRoutes');
+
 const errorMiddleware = require('./middlewares/errorMiddleware');
 
 const app = express();
@@ -24,19 +27,21 @@ app.use((req, res, next) => {
 });
 
 // Health check
-app.get('/', (req, res) => res.json({ message: 'Bus Trip Assignment API - Running', version: '1.0.0' }));
+app.get('/', (req, res) => res.json({ message: 'Bus Trip Assignment API - Running', version: '2.0.0' }));
 
-// Routes
+// Registered Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/routes', routeRoutes);
 app.use('/api/buses', busRoutes);
 app.use('/api/drivers', driverRoutes);
+app.use('/api/plans', planRoutes);
 app.use('/api/trips', tripRoutes);
 app.use('/api/assignments', assignmentRoutes);
 app.use('/api/leave-requests', leaveRequestRoutes);
 app.use('/api/incidents', incidentRoutes);
-app.use('/api/scheduler', schedulerRoutes);
-app.use('/api', miscRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/reports', reportRoutes);
 
 // Error handler (always last)
 app.use(errorMiddleware);

@@ -1,150 +1,176 @@
--- SCHEMA.SQL: Tạo các bảng dữ liệu đầy đủ theo tài liệu thiết kế
+-- SCHEMA.SQL: Tạo các bảng dữ liệu đầy đủ theo tài liệu thiết kế mới (14 bảng)
 
+-- Drop existing tables if they exist.
+-- Nhóm đầu là các bảng thuộc thiết kế cũ, không còn xuất hiện trong tài liệu
+-- 03_Thiet_ke_CSDL_PostgreSQL.docx. Cần drop để database thật không còn rác
+-- khi khởi tạo lại trên một CSDL đã từng chạy phiên bản cũ.
 DROP TABLE IF EXISTS configuration_schedules CASCADE;
 DROP TABLE IF EXISTS configurations CASCADE;
-DROP TABLE IF EXISTS incident_reports CASCADE;
-DROP TABLE IF EXISTS leave_requests CASCADE;
 DROP TABLE IF EXISTS trip_logs CASCADE;
 DROP TABLE IF EXISTS trip_assignments CASCADE;
-DROP TABLE IF EXISTS trips CASCADE;
-DROP TABLE IF EXISTS drivers CASCADE;
-DROP TABLE IF EXISTS buses CASCADE;
-DROP TABLE IF EXISTS routes CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS roles CASCADE;
 
--- 1. Vai trò người dùng
-CREATE TABLE roles (
-    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    role_name VARCHAR(50) NOT NULL UNIQUE
-);
+-- system_configs thuộc phiên bản cấu hình động cũ; vẫn drop để làm sạch DB khi khởi tạo lại.
+DROP TABLE IF EXISTS system_configs CASCADE;
+-- Nhóm dưới là 14 bảng chính của thiết kế hiện tại.
+DROP TABLE IF EXISTS notifications CASCADE;
+DROP TABLE IF EXISTS incident_reports CASCADE;
+DROP TABLE IF EXISTS leave_requests CASCADE;
+DROP TABLE IF EXISTS assignments CASCADE;
+DROP TABLE IF EXISTS trips CASCADE;
+DROP TABLE IF EXISTS trip_groups CASCADE;
+DROP TABLE IF EXISTS operation_plans CASCADE;
+DROP TABLE IF EXISTS route_buses CASCADE;
+DROP TABLE IF EXISTS drivers CASCADE;
+DROP TABLE IF EXISTS buses CASCADE;
+DROP TABLE IF EXISTS bus_stops CASCADE;
+DROP TABLE IF EXISTS route_directions CASCADE;
+DROP TABLE IF EXISTS routes CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
 
--- 2. Người dùng
+-- 1. Bảng users: Lưu tài khoản đăng nhập và vai trò người dùng (không có bảng roles riêng)
 CREATE TABLE users (
-    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    username VARCHAR(50) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL,
-    full_name VARCHAR(100) NOT NULL DEFAULT 'User',
-    phone VARCHAR(20) NULL,
-    role_id INTEGER NOT NULL,
-    status VARCHAR(20) DEFAULT 'active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    user_id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    full_name VARCHAR(100) NOT NULL,
+    role VARCHAR(30) NOT NULL, -- manager, dispatcher, driver
+    status VARCHAR(20) NOT NULL DEFAULT 'active' -- active, locked
 );
 
--- 3. Tuyến xe
+-- 2. Bảng routes: Lưu thông tin tuyến xe và thông tin hoạt động hiện hành của tuyến
 CREATE TABLE routes (
-    route_code VARCHAR(20) PRIMARY KEY,
+    route_code VARCHAR(20) PRIMARY KEY, -- ví dụ: 01, 08
     route_name VARCHAR(255) NOT NULL,
-    start_point VARCHAR(100) NOT NULL DEFAULT 'Bến xe',
-    end_point VARCHAR(100) NOT NULL DEFAULT 'Bến xe',
-    estimated_minutes INTEGER NOT NULL DEFAULT 60 CHECK (estimated_minutes > 0),
-    status VARCHAR(20) DEFAULT 'active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    status VARCHAR(20) NOT NULL DEFAULT 'active', -- active, inactive
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    expected_trips_per_day INT NOT NULL,
+    headway_minutes NUMERIC(6,2) NOT NULL,
+    confirmed_operating_buses INT NOT NULL
 );
 
--- 4. Xe buýt
-CREATE TABLE buses (
-    bus_id VARCHAR(50) PRIMARY KEY,
-    license_plate VARCHAR(20) NOT NULL UNIQUE,
-    capacity INTEGER NOT NULL,
-    status VARCHAR(20) DEFAULT 'active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 5. Tài xế
-CREATE TABLE drivers (
-    driver_code VARCHAR(50) PRIMARY KEY,
-    full_name VARCHAR(255) NOT NULL,
-    user_id INTEGER UNIQUE,
-    route_code VARCHAR(20),
-    base_slot INTEGER DEFAULT 0,
-    license_type VARCHAR(20) NOT NULL DEFAULT 'E',
-    status VARCHAR(20) DEFAULT 'active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 6. Chuyến xe
-CREATE TABLE trips (
-    trip_code VARCHAR(50) PRIMARY KEY,
+-- 3. Bảng route_directions: Lưu thông tin lượt đi và lượt về của tuyến
+CREATE TABLE route_directions (
+    direction_id SERIAL PRIMARY KEY,
     route_code VARCHAR(20) NOT NULL,
-    trip_date DATE NOT NULL,
-    direction VARCHAR(20) NOT NULL DEFAULT 'outbound', -- outbound, inbound
-    scheduled_departure TIME NOT NULL,
-    scheduled_arrival TIME NOT NULL,
-    status VARCHAR(20) DEFAULT 'unassigned', -- unassigned, assigned, in_progress, completed, delayed, cancelled
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    direction_type VARCHAR(20) NOT NULL, -- outbound, inbound
+    start_point VARCHAR(255) NOT NULL,
+    end_point VARCHAR(255) NOT NULL,
+    distance_km NUMERIC(5,2),
+    travel_time_minutes INT NOT NULL,
+    turnaround_time_minutes INT NOT NULL
 );
 
--- 7. Phiếu phân công chuyến
-CREATE TABLE trip_assignments (
-    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    trip_code VARCHAR(50) NOT NULL,
-    bus_id VARCHAR(50) NOT NULL,
-    driver_code VARCHAR(50) NOT NULL,
-    dispatcher_id INTEGER NOT NULL,
-    status VARCHAR(20) DEFAULT 'active', -- active, replaced, cancelled
-    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- 4. Bảng bus_stops: Lưu danh sách điểm dừng theo từng hướng tuyến
+CREATE TABLE bus_stops (
+    stop_id SERIAL PRIMARY KEY,
+    direction_id INT NOT NULL,
+    stop_order INT NOT NULL,
+    stop_name VARCHAR(255) NOT NULL,
+    minute_from_start INT NOT NULL
 );
 
--- 8. Theo dõi thực hiện chuyến
-CREATE TABLE trip_logs (
-    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    trip_code VARCHAR(50) NOT NULL UNIQUE,
-    assignment_id INTEGER NOT NULL,
+-- 5. Bảng buses: Lưu thông tin xe buýt
+CREATE TABLE buses (
+    bus_id SERIAL PRIMARY KEY,
+    license_plate VARCHAR(20) UNIQUE NOT NULL,
+    seat_count INT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'active' -- active, broken, inactive
+);
+
+-- 6. Bảng drivers: Lưu thông tin tài xế
+CREATE TABLE drivers (
+    driver_id SERIAL PRIMARY KEY,
+    user_id INT UNIQUE NOT NULL,
+    full_name VARCHAR(100) NOT NULL,
+    phone VARCHAR(20),
+    license_class VARCHAR(20),
+    status VARCHAR(20) NOT NULL DEFAULT 'working' -- working, on_leave, inactive
+);
+
+-- 7. Bảng route_buses: Lưu thông tin bố trí xe vận doanh và xe dự phòng cho tuyến
+CREATE TABLE route_buses (
+    route_bus_id SERIAL PRIMARY KEY,
+    route_code VARCHAR(20) NOT NULL,
+    bus_id INT NOT NULL,
+    bus_role VARCHAR(20) NOT NULL -- operating, standby
+);
+
+-- 8. Bảng operation_plans: Lưu kế hoạch vận doanh theo tuyến và ngày
+CREATE TABLE operation_plans (
+    plan_id SERIAL PRIMARY KEY,
+    route_code VARCHAR(20) NOT NULL,
+    operation_date DATE NOT NULL,
+    created_by INT NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'draft', -- draft, pending_approval, approved, rejected
+    submitted_by INT,
+    reviewed_by INT,
+    reject_reason TEXT
+);
+
+-- 9. Bảng trip_groups: Lưu nhóm chuyến dùng để phân công xe và tài xế theo khối
+CREATE TABLE trip_groups (
+    group_id SERIAL PRIMARY KEY,
+    plan_id INT NOT NULL,
+    group_name VARCHAR(50),
+    start_time TIMESTAMP NOT NULL,
+    end_time TIMESTAMP NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'unassigned' -- unassigned, assigned
+);
+
+-- 10. Bảng trips: Lưu danh sách chuyến được sinh và thông tin thực tế khi thực hiện
+CREATE TABLE trips (
+    trip_id SERIAL PRIMARY KEY,
+    plan_id INT NOT NULL,
+    direction_id INT NOT NULL,
+    group_id INT,
+    trip_order INT,
+    scheduled_departure TIMESTAMP NOT NULL,
+    scheduled_arrival TIMESTAMP NOT NULL,
     actual_departure TIMESTAMP,
     actual_arrival TIMESTAMP,
-    delay_minutes INTEGER DEFAULT 0,
-    status VARCHAR(20) DEFAULT 'completed', -- in_progress, completed, delayed, cancelled
-    note VARCHAR(255),
-    logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    delay_minutes INT DEFAULT 0,
+    status VARCHAR(30) NOT NULL DEFAULT 'scheduled' -- scheduled, assigned, running, completed, cancelled
 );
 
--- 9. Yêu cầu xin nghỉ
+-- 11. Bảng assignments: Lưu phân công xe và tài xế cho nhóm chuyến
+CREATE TABLE assignments (
+    assignment_id SERIAL PRIMARY KEY,
+    group_id INT NOT NULL,
+    bus_id INT NOT NULL,
+    driver_id INT NOT NULL,
+    assigned_by INT NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'active' -- active, replaced, cancelled
+);
+
+-- 12. Bảng leave_requests: Lưu yêu cầu nghỉ của tài xế
 CREATE TABLE leave_requests (
-    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    driver_code VARCHAR(50) NOT NULL,
+    leave_id SERIAL PRIMARY KEY,
+    driver_id INT NOT NULL,
     leave_date DATE NOT NULL,
-    shift_type VARCHAR(20) NOT NULL DEFAULT 'full_day', -- morning, afternoon, full_day
     reason TEXT,
-    status VARCHAR(20) DEFAULT 'pending', -- pending, approved, rejected
-    reviewed_by INTEGER,
-    reviewed_at TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    status VARCHAR(20) NOT NULL DEFAULT 'pending', -- pending, approved, rejected
+    reviewed_by INT
 );
 
--- 10. Báo sự cố
+-- 13. Bảng incident_reports: Lưu báo cáo sự cố hoặc xe hỏng
 CREATE TABLE incident_reports (
-    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    driver_code VARCHAR(50) NOT NULL,
-    bus_id VARCHAR(50),
-    trip_code VARCHAR(50),
-    incident_type VARCHAR(30) NOT NULL DEFAULT 'other', -- bus_broken, traffic_delay, other
-    description TEXT NOT NULL,
-    status VARCHAR(20) DEFAULT 'pending', -- pending, processing, resolved
-    report_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    incident_id SERIAL PRIMARY KEY,
+    reported_by INT NOT NULL,
+    bus_id INT,
+    trip_id INT,
+    incident_type VARCHAR(30) NOT NULL, -- bus_broken, delay, cancelled, other
+    description TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' -- pending, processing, resolved
 );
 
--- 11. Cấu hình hệ thống
-CREATE TABLE configurations (
-    config_key VARCHAR(100) PRIMARY KEY,
-    config_value VARCHAR(255) NOT NULL,
-    config_data_type VARCHAR(20) NOT NULL DEFAULT 'INT', -- INT, STRING, BOOLEAN
-    description TEXT
-);
-
--- 12. Cấu hình ca làm việc và xếp lịch tự động
-CREATE TABLE configuration_schedules (
-    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    effective_date DATE NOT NULL,
-    morning_shift_start VARCHAR(5) NOT NULL,
-    morning_shift_end VARCHAR(5) NOT NULL,
-    afternoon_shift_start VARCHAR(5) NOT NULL,
-    afternoon_shift_end VARCHAR(5) NOT NULL,
-    standby_percentage INT NOT NULL,
-    min_break_minutes INT NOT NULL,
-    trip_duration_minutes INT NOT NULL,
-    trip_frequency_minutes INT NOT NULL,
+-- 14. Bảng notifications: Lưu thông báo nội bộ dạng chuông
+CREATE TABLE notifications (
+    notification_id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_config_effective_date ON configuration_schedules(effective_date);

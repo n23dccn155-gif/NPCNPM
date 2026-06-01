@@ -86,8 +86,7 @@ export default function Login() {
           {/* Demo accounts hint */}
           <div className="mt-6 p-4 bg-white/5 rounded-xl border border-white/10">
             <p className="text-blue-300 text-xs font-medium mb-2">🔑 Tài khoản demo (mật khẩu: 123456)</p>
-            <div className="grid grid-cols-2 gap-1 text-xs text-blue-200">
-              <span>admin → Admin</span>
+            <div className="grid grid-cols-3 gap-1 text-xs text-blue-200">
               <span>manager1 → Quản lý</span>
               <span>dispatcher1 → Điều phối</span>
               <span>driver1 → Tài xế</span>

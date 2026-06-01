@@ -1,6 +1,6 @@
-# Hệ Thống Phân Công Chuyến Xe Buýt TP.HCM 🚌
+# Hệ Thống Phân Công Chuyến Xe Buýt TP.HCM
 
-Hệ thống quản lý và phân công chuyến xe buýt toàn diện, được thiết kế với kiến trúc Frontend - Backend tách biệt và hỗ trợ phân quyền nhiều vai trò (Role-based access control).
+Hệ thống quản lý và phân công chuyến xe buýt, được thiết kế với kiến trúc Frontend - Backend tách biệt và hỗ trợ phân quyền theo vai trò (Role-based access control).
 
 ## Công nghệ sử dụng
 
@@ -10,12 +10,11 @@ Hệ thống quản lý và phân công chuyến xe buýt toàn diện, được
 
 ## Các vai trò trong hệ thống (Roles)
 
-Hệ thống hỗ trợ 4 vai trò với các quyền hạn khác nhau:
+Hệ thống hỗ trợ 3 vai trò với các quyền hạn khác nhau:
 
-1. **Admin (Quản trị viên):** Quản lý tài khoản người dùng, cấu hình tham số hệ thống.
-2. **Manager (Quản lý):** Quản lý danh mục (tuyến xe, xe buýt, tài xế), duyệt yêu cầu nghỉ phép, xem báo cáo thống kê.
-3. **Dispatcher (Điều phối viên):** Lập chuyến, phân công tài xế/xe buýt, xử lý sự cố, theo dõi quá trình thực hiện chuyến.
-4. **Driver (Tài xế):** Xem lịch làm việc, xin nghỉ phép, báo cáo sự cố trên tuyến.
+1. **Manager (Quản lý vận hành):** Quản lý danh mục tuyến xe, hướng tuyến, xe buýt, tài xế; duyệt yêu cầu nghỉ phép; xem báo cáo thống kê.
+2. **Dispatcher (Nhân viên điều phối):** Lập kế hoạch vận hành, phân công tài xế/xe buýt, xử lý sự cố, theo dõi quá trình thực hiện chuyến.
+3. **Driver (Tài xế):** Xem lịch làm việc, ghi nhận chuyến, xin nghỉ phép, báo cáo sự cố trên tuyến.
 
 ---
 
@@ -74,7 +73,6 @@ Sau khi chạy thành công `npm run db:init`, hệ thống đã có sẵn các 
 
 | Tên đăng nhập | Vai trò                        | Mật khẩu |
 | :---------------- | :------------------------------ | :--------- |
-| `admin`         | Admin (Quản trị viên)        | 123456     |
 | `manager1`      | Manager (Quản lý)             | 123456     |
 | `dispatcher1`   | Dispatcher (Điều phối viên) | 123456     |
 | `driver1`       | Driver (Tài xế)               | 123456     |

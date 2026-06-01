@@ -1,66 +1,97 @@
-// busController.js
+// busController.js: Quản lý danh sách xe buýt theo thiết kế mới
 const pool = require('../config/database');
 const { success, error } = require('../utils/responseHelper');
 
 const busController = {
+  // Lấy danh sách xe buýt
   getAll: async (req, res, next) => {
     try {
       const { status } = req.query;
-      let query = 'SELECT * FROM buses';
+      let query = 'SELECT bus_id, license_plate, seat_count, status FROM buses';
       const params = [];
-      if (status) { query += ' WHERE status = $1'; params.push(status); }
+      if (status) {
+        query += ' WHERE status = $1';
+        params.push(status);
+      }
       query += ' ORDER BY bus_id';
       const result = await pool.query(query, params);
       return success(res, result.rows);
     } catch (err) { next(err); }
   },
 
+  // Lấy chi tiết xe buýt
   getOne: async (req, res, next) => {
     try {
-      const result = await pool.query('SELECT * FROM buses WHERE bus_id = $1', [req.params.busId]);
+      const { busId } = req.params;
+      const result = await pool.query('SELECT bus_id, license_plate, seat_count, status FROM buses WHERE bus_id = $1', [busId]);
       if (!result.rows.length) return error(res, 'Không tìm thấy xe buýt', 404);
       return success(res, result.rows[0]);
     } catch (err) { next(err); }
   },
 
+  // Tạo xe buýt mới (bus_id tự tăng)
   create: async (req, res, next) => {
     try {
-      const { bus_id, license_plate, capacity } = req.body;
-      if (!bus_id || !license_plate || !capacity) return error(res, 'Thiếu thông tin bắt buộc', 400);
+      const { license_plate, seat_count } = req.body;
+      if (!license_plate || !seat_count) {
+        return error(res, 'Thiếu thông tin biển số xe hoặc số chỗ ngồi', 400);
+      }
+
+      const seats = parseInt(seat_count, 10);
+      if (isNaN(seats) || seats <= 0) {
+        return error(res, 'Số chỗ ngồi phải là số nguyên dương', 400);
+      }
+
       const result = await pool.query(
-        'INSERT INTO buses (bus_id, license_plate, capacity) VALUES ($1, $2, $3) RETURNING *',
-        [bus_id, license_plate, capacity]
+        'INSERT INTO buses (license_plate, seat_count, status) VALUES ($1, $2, \'active\') RETURNING bus_id, license_plate, seat_count, status',
+        [license_plate, seats]
       );
       return success(res, result.rows[0], 'Thêm xe buýt thành công', 201);
     } catch (err) {
-      if (err.code === '23505') return error(res, 'Mã xe hoặc biển số đã tồn tại', 409);
+      if (err.code === '23505') return error(res, 'Biển số xe đã tồn tại', 409);
       next(err);
     }
   },
 
+  // Cập nhật thông tin xe buýt
   update: async (req, res, next) => {
     try {
-      const { license_plate, capacity } = req.body;
+      const { busId } = req.params;
+      const { license_plate, seat_count } = req.body;
+      if (!license_plate || !seat_count) {
+        return error(res, 'Thiếu thông tin biển số xe hoặc số chỗ ngồi', 400);
+      }
+
+      const seats = parseInt(seat_count, 10);
+      if (isNaN(seats) || seats <= 0) {
+        return error(res, 'Số chỗ ngồi phải là số nguyên dương', 400);
+      }
+
       const result = await pool.query(
-        'UPDATE buses SET license_plate = $1, capacity = $2 WHERE bus_id = $3 RETURNING *',
-        [license_plate, capacity, req.params.busId]
+        'UPDATE buses SET license_plate = $1, seat_count = $2 WHERE bus_id = $3 RETURNING bus_id, license_plate, seat_count, status',
+        [license_plate, seats, busId]
       );
       if (!result.rows.length) return error(res, 'Không tìm thấy xe buýt', 404);
       return success(res, result.rows[0], 'Cập nhật xe buýt thành công');
     } catch (err) { next(err); }
   },
 
+  // Cập nhật trạng thái xe buýt
   updateStatus: async (req, res, next) => {
     try {
+      const { busId } = req.params;
       const { status } = req.body;
-      if (!['active', 'broken', 'inactive'].includes(status)) return error(res, 'Trạng thái không hợp lệ', 400);
+      if (!['active', 'broken', 'inactive'].includes(status)) {
+        return error(res, 'Trạng thái không hợp lệ', 400);
+      }
       const result = await pool.query(
-        'UPDATE buses SET status = $1 WHERE bus_id = $2 RETURNING *',
-        [status, req.params.busId]
+        'UPDATE buses SET status = $1 WHERE bus_id = $2 RETURNING bus_id, license_plate, seat_count, status',
+        [status, busId]
       );
       if (!result.rows.length) return error(res, 'Không tìm thấy xe buýt', 404);
       return success(res, result.rows[0], 'Cập nhật trạng thái xe buýt thành công');
     } catch (err) { next(err); }
   },
 };
+
 module.exports = busController;

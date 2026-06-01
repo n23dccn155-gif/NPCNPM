@@ -1,8 +1,7 @@
-// pages/dispatcher/TripManage.jsx — Quản lý chuyến xe (riêng biệt khỏi ScheduleOverview)
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
-import { PageHeader, StatusBadge, AlertBox, Modal } from '../../components/UI';
-import { getTrips, createTrip } from '../../services/tripService';
+import { PageHeader, AlertBox, Modal } from '../../components/UI';
+import { getTrips, cancelTrip } from '../../services/tripService';
 import { getRoutes } from '../../services/routeService';
 
 export default function TripManage() {
@@ -11,232 +10,244 @@ export default function TripManage() {
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState('');
   const [filterRoute, setFilterRoute] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ trip_code: '', route_code: '', trip_date: new Date().toISOString().split('T')[0], scheduled_departure: '', direction: 'outbound', scheduled_arrival: '' });
-  const [formError, setFormError] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  
+  const [cancelModal, setCancelModal] = useState({ open: false, trip: null, reason: '' });
+  const [cancelError, setCancelError] = useState('');
   const [success, setSuccess] = useState('');
 
   const load = async () => {
     setLoading(true);
     const params = {};
-    if (filterDate) params.trip_date = filterDate;
+    if (filterDate) params.date = filterDate;
     if (filterRoute) params.route_code = filterRoute;
-    const [tripRes, routeRes] = await Promise.all([
-      getTrips(params).catch(() => ({ data: { data: [] } })),
-      getRoutes({ status: 'active' }).catch(() => ({ data: { data: [] } })),
-    ]);
-    setTrips(tripRes.data?.data || []);
-    setRoutes(routeRes.data?.data || []);
-    setLoading(false);
-  };
+    if (filterStatus) params.status = filterStatus;
 
-  useEffect(() => { load(); }, [filterDate, filterRoute]);
-
-  const handleCreate = async (e) => {
-    e.preventDefault(); setFormError('');
     try {
-      await createTrip(form);
-      setShowModal(false);
-      setSuccess('Lập chuyến thành công!');
-      setTimeout(() => setSuccess(''), 3000);
-      load();
-    } catch (err) { setFormError(err.response?.data?.message || 'Lỗi lập chuyến'); }
+      const [tripRes, routeRes] = await Promise.all([
+        getTrips(params),
+        getRoutes({ status: 'active' }),
+      ]);
+      setTrips(tripRes.data?.data || tripRes.data || []);
+      setRoutes(routeRes.data?.data || routeRes.data || []);
+    } catch (err) {
+      console.error(err);
+      setTrips([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const tripStatusColor = { unassigned: '#ea580c', assigned: '#2563eb', in_progress: '#16a34a', completed: '#64748b', delayed: '#d97706', cancelled: '#dc2626' };
-  const tripStatusLabel = { unassigned: 'Chưa phân công', assigned: 'Đã phân công', in_progress: 'Đang chạy', completed: 'Hoàn thành', delayed: 'Hoàn thành trễ', cancelled: 'Đã hủy' };
+  useEffect(() => { load(); }, [filterDate, filterRoute, filterStatus]);
+
+  const handleCancelClick = (trip) => {
+    setCancelModal({ open: true, trip, reason: '' });
+    setCancelError('');
+  };
+
+  const handleCancelSubmit = async (e) => {
+    e.preventDefault();
+    setCancelError('');
+    if (!cancelModal.reason.trim()) {
+      setCancelError('Vui lòng nhập lý do hủy chuyến');
+      return;
+    }
+    try {
+      await cancelTrip(cancelModal.trip.trip_id, cancelModal.reason);
+      setCancelModal({ open: false, trip: null, reason: '' });
+      setSuccess('Đã hủy chuyến xe thành công.');
+      setTimeout(() => setSuccess(''), 4000);
+      load();
+    } catch (err) {
+      setCancelError(err.response?.data?.message || 'Lỗi khi hủy chuyến xe');
+    }
+  };
+
+  const statusLabel = {
+    scheduled: 'Đã lên lịch',
+    running: 'Đang chạy',
+    completed: 'Hoàn thành',
+    cancelled: 'Đã hủy'
+  };
+
+  const statusColor = {
+    scheduled: 'bg-blue-50 text-blue-700',
+    running: 'bg-green-50 text-green-700',
+    completed: 'bg-slate-50 text-slate-700',
+    cancelled: 'bg-red-50 text-red-700'
+  };
 
   return (
     <Layout>
       <PageHeader
-        title="Chuyến xe"
-        subtitle="Danh sách và quản lý các chuyến xe"
-        action={
-          <button
-            onClick={() => { setForm({ trip_code: '', route_code: '', trip_date: new Date().toISOString().split('T')[0], scheduled_departure: '', direction: 'outbound', scheduled_arrival: '' }); setFormError(''); setShowModal(true); }}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Lập chuyến mới
-          </button>
-        }
+        title="Quản lý chuyến xe thực tế"
+        subtitle="Theo dõi lộ trình, trạng thái, thời gian chạy thực tế và thực hiện hủy chuyến khẩn cấp"
       />
 
       {success && <div className="mb-4"><AlertBox type="success" message={success} /></div>}
 
-      {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mb-4 flex flex-wrap gap-3 items-center">
+      {/* Filters and search */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 mb-6 flex flex-wrap gap-4 items-center">
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600 font-medium whitespace-nowrap">Ngày chạy:</label>
+          <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Ngày chạy:</label>
           <input
             type="date"
             value={filterDate}
             onChange={e => setFilterDate(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="border border-slate-200 bg-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600 font-medium whitespace-nowrap">Tuyến xe:</label>
+          <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Tuyến xe:</label>
           <select
             value={filterRoute}
             onChange={e => setFilterRoute(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="border border-slate-200 bg-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Tất cả tuyến</option>
-            {routes.map(r => <option key={r.route_code} value={r.route_code}>{r.route_code} - {r.route_name}</option>)}
+            {routes.map(r => <option key={r.route_code} value={r.route_code}>Tuyến {r.route_code} - {r.route_name}</option>)}
           </select>
         </div>
-        {(filterDate || filterRoute) && (
-          <button
-            onClick={() => { setFilterDate(''); setFilterRoute(''); }}
-            className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Trạng thái:</label>
+          <select
+            value={filterStatus}
+            onChange={e => setFilterStatus(e.target.value)}
+            className="border border-slate-200 bg-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
+            <option value="">Tất cả trạng thái</option>
+            <option value="scheduled">Đã lên lịch</option>
+            <option value="running">Đang chạy</option>
+            <option value="completed">Hoàn thành</option>
+            <option value="cancelled">Đã hủy</option>
+          </select>
+        </div>
+        
+        {(filterDate || filterRoute || filterStatus) && (
+          <button
+            onClick={() => { setFilterDate(''); setFilterRoute(''); setFilterStatus(''); }}
+            className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition"
+          >
             Xóa bộ lọc
           </button>
         )}
-        <div className="ml-auto text-sm text-gray-500">{trips.length} chuyến</div>
+        
+        <div className="ml-auto text-xs font-bold text-slate-400">
+          Tìm thấy {trips.length} chuyến xe
+        </div>
       </div>
 
-      {/* Table */}
+      {/* Trips list */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         {loading ? (
-          <div className="text-center py-16 text-gray-400">Đang tải...</div>
+          <div className="text-center py-16 text-slate-400 font-semibold animate-pulse">Đang tải danh sách chuyến...</div>
         ) : (
-          <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-100">
-              <tr>
-                {['Mã chuyến', 'Tuyến xe', 'Chiều chạy', 'Ngày chạy', 'Giờ chạy dự kiến', 'Trạng thái'].map(h => (
-                  <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {trips.map(t => (
-                <tr key={t.trip_code} className="hover:bg-slate-50 transition">
-                  <td className="px-6 py-4 font-mono text-sm font-semibold text-gray-900">{t.trip_code}</td>
-                  <td className="px-6 py-4 text-sm text-gray-700">{t.route_code} - {t.route_name}</td>
-                  <td className="px-6 py-4 text-sm text-gray-700">
-                    <span className={`px-2 py-0.5 rounded text-xs ${t.direction === 'outbound' ? 'bg-indigo-50 text-indigo-600' : 'bg-pink-50 text-pink-600'}`}>
-                      {t.direction === 'outbound' ? 'Chiều đi' : 'Chiều về'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-700">{new Date(t.trip_date).toLocaleDateString('vi-VN')}</td>
-                  <td className="px-6 py-4 text-sm text-gray-700 font-mono">{t.scheduled_departure.substring(0, 5)} - {t.scheduled_arrival?.substring(0, 5) || '—'}</td>
-                  <td className="px-6 py-4">
-                    <span
-                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                      style={{
-                        background: (tripStatusColor[t.status] || '#64748b') + '15',
-                        color: tripStatusColor[t.status] || '#64748b',
-                      }}
-                    >
-                      {tripStatusLabel[t.status] || t.status}
-                    </span>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  {['STT Chuyến', 'Nhóm chuyến', 'Hướng chạy', 'Xuất phát KH', 'Đến KH', 'Xe & Tài xế', 'Trạng thái', 'Thao tác'].map(h => (
+                    <th key={h} className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {!loading && trips.length === 0 && (
-          <div className="text-center py-16 text-gray-400 text-sm">Không có chuyến xe nào</div>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {trips.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-10 text-center text-gray-400">
+                      Không tìm thấy chuyến xe nào phù hợp
+                    </td>
+                  </tr>
+                ) : (
+                  trips.map(t => (
+                    <tr key={t.trip_id} className="hover:bg-slate-50 transition">
+                      <td className="px-6 py-4 font-mono font-bold text-gray-900">#{t.trip_order}</td>
+                      <td className="px-6 py-4 font-bold text-slate-700">{t.group_name}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-0.5 rounded-lg text-xs font-semibold ${t.direction_type === 'outbound' ? 'bg-indigo-50 text-indigo-700' : 'bg-pink-50 text-pink-700'}`}>
+                          {t.direction_type === 'outbound' ? 'Chiều đi' : 'Chiều về'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-gray-600 font-semibold">
+                        {new Date(t.scheduled_departure).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                        {t.actual_departure && (
+                          <div className="text-2xs text-green-600 font-normal">Thực tế: {new Date(t.actual_departure).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-gray-600 font-semibold">
+                        {new Date(t.scheduled_arrival).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                        {t.actual_arrival && (
+                          <div className="text-2xs text-green-600 font-normal">Thực tế: {new Date(t.actual_arrival).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-xs">
+                        <div className="font-bold text-slate-800">Xe: {t.license_plate || '—'}</div>
+                        <div className="text-slate-500 font-medium mt-0.5">Tài xế: {t.driver_name || '—'}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-2xs font-bold ${statusColor[t.status] || 'bg-slate-100 text-slate-700'}`}>
+                          {statusLabel[t.status] || t.status}
+                          {t.delay_minutes > 0 && ` (Trễ ${t.delay_minutes}p)`}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-xs font-bold">
+                        {t.status !== 'completed' && t.status !== 'cancelled' ? (
+                          <button
+                            onClick={() => handleCancelClick(t)}
+                            className="text-red-600 hover:text-red-800 transition"
+                          >
+                            Hủy chuyến
+                          </button>
+                        ) : '—'}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      {/* Modal lập chuyến - matching Figma trip-form */}
-      <Modal isOpen={showModal} title="Lập chuyến xe" onClose={() => setShowModal(false)}>
-        <form onSubmit={handleCreate} className="space-y-4">
-          {formError && <AlertBox type="error" message={formError} />}
-          
-          <div className="grid grid-cols-2 gap-4">
+      {/* Cancel Trip Modal */}
+      <Modal isOpen={cancelModal.open} title="Hủy chuyến xe khẩn cấp" onClose={() => setCancelModal({ open: false, trip: null, reason: '' })}>
+        {cancelModal.trip && (
+          <form onSubmit={handleCancelSubmit} className="space-y-4">
+            {cancelError && <AlertBox type="error" message={cancelError} />}
+            
+            <div className="bg-red-50 border border-red-200 text-red-700 text-2xs font-semibold rounded-xl p-3.5 leading-relaxed">
+              ⚠️ CẢNH BÁO: Thao tác này sẽ hủy bỏ chuyến xe thứ #{cancelModal.trip.trip_order} thuộc nhóm "{cancelModal.trip.group_name}". Một thông báo khẩn sẽ được gửi đến tài xế được phân công chạy chuyến này.
+            </div>
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Tuyến xe *</label>
-              <select
-                value={form.route_code}
-                onChange={e => setForm({ ...form, route_code: e.target.value })}
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wider">Lý do hủy chuyến *</label>
+              <textarea
+                value={cancelModal.reason}
+                onChange={e => setCancelModal({ ...cancelModal, reason: e.target.value })}
                 required
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                rows={3}
+                placeholder="Nhập lý do chi tiết hủy chuyến (VD: Xe hỏng đột xuất, tắc đường nghiêm trọng...)"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+              />
+            </div>
+
+            <div className="flex gap-3 justify-end pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setCancelModal({ open: false, trip: null, reason: '' })}
+                className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-slate-50 transition"
               >
-                <option value="">-- Chọn tuyến --</option>
-                {routes.map(r => <option key={r.route_code} value={r.route_code}>{r.route_code} - {r.route_name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Ngày chạy *</label>
-              <input
-                type="date"
-                value={form.trip_date}
-                onChange={e => setForm({ ...form, trip_date: e.target.value })}
-                required
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Mã chuyến *</label>
-              <input
-                value={form.trip_code}
-                onChange={e => setForm({ ...form, trip_code: e.target.value })}
-                required
-                placeholder="VD: CX001"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Hướng chạy *</label>
-              <select
-                value={form.direction}
-                onChange={e => setForm({ ...form, direction: e.target.value })}
-                required
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                Hủy bỏ
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold shadow-md shadow-red-500/10 transition"
               >
-                <option value="outbound">Chiều đi (Outbound)</option>
-                <option value="inbound">Chiều về (Inbound)</option>
-              </select>
+                Xác nhận hủy chuyến
+              </button>
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Giờ xuất bến dự kiến *</label>
-              <input
-                type="time"
-                value={form.scheduled_departure}
-                onChange={e => setForm({ ...form, scheduled_departure: e.target.value })}
-                required
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Giờ kết thúc dự kiến *</label>
-              <input
-                type="time"
-                value={form.scheduled_arrival}
-                onChange={e => setForm({ ...form, scheduled_arrival: e.target.value })}
-                required
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <div className="flex gap-3 justify-end pt-2">
-            <button type="button" onClick={() => setShowModal(false)} className="px-5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition flex items-center gap-2">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              Hủy
-            </button>
-            <button type="submit" className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition flex items-center gap-2">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg>
-              Lưu chuyến
-            </button>
-          </div>
-        </form>
+          </form>
+        )}
       </Modal>
     </Layout>
   );

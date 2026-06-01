@@ -1,13 +1,14 @@
+// leaveRequestRoutes.js: Các route quản lý xin nghỉ phép của tài xế
 const express = require('express');
 const router = express.Router();
 const leaveRequestController = require('../controllers/leaveRequestController');
 const auth = require('../middlewares/authMiddleware');
 const role = require('../middlewares/roleMiddleware');
 
+router.get('/', auth, role(['manager', 'dispatcher']), leaveRequestController.getAll);
 router.get('/my', auth, role(['driver']), leaveRequestController.getMy);
 router.post('/', auth, role(['driver']), leaveRequestController.create);
-router.get('/', auth, role(['admin', 'manager', 'dispatcher']), leaveRequestController.getAll);
-router.patch('/:requestId/review', auth, role(['admin', 'manager']), leaveRequestController.review);
-router.get('/:requestId/affected-trips', auth, role(['admin', 'dispatcher']), leaveRequestController.getAffectedTrips);
+router.post('/:requestId/review', auth, role(['manager']), leaveRequestController.review);
+router.get('/:requestId/affected-groups', auth, role(['manager', 'dispatcher']), leaveRequestController.getAffectedGroups);
 
 module.exports = router;

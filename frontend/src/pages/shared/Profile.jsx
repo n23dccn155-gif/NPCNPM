@@ -2,11 +2,10 @@ import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import { PageHeader, AlertBox } from '../../components/UI';
 import { useAuth } from '../../context/AuthContext';
-import { changePassword, updateProfile } from '../../services/miscService';
+import { changePassword, updateProfile } from '../../services/authService';
 
-const roleLabel = { admin: 'Quản trị viên', manager: 'Quản lý', dispatcher: 'Điều phối viên', driver: 'Tài xế' };
+const roleLabel = { manager: 'Quản lý vận hành', dispatcher: 'Điều phối viên', driver: 'Tài xế' };
 const roleColor = {
-  admin: { bg: '#7c3aed15', text: '#7c3aed' },
   manager: { bg: '#16a34a15', text: '#16a34a' },
   dispatcher: { bg: '#2563eb15', text: '#2563eb' },
   driver: { bg: '#ea580c15', text: '#ea580c' },

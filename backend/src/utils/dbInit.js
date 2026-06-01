@@ -15,6 +15,7 @@ async function runSqlFile(filePath) {
     console.log(`[Thành công] ${filePath}`);
   } catch (error) {
     console.error(`[Lỗi] khi chạy ${filePath}:`, error.message);
+    throw error;
   }
 }
 

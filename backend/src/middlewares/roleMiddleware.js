@@ -2,7 +2,7 @@
 
 /**
  * Cho phép các vai trò được chỉ định đi qua, chặn các vai trò khác
- * @param {Array<string>} allowedRoles - Danh sách tên vai trò được phép (ví dụ: ['admin', 'manager'])
+ * @param {Array<string>} allowedRoles - Danh sách tên vai trò được phép (ví dụ: ['manager', 'dispatcher'])
  */
 const roleMiddleware = (allowedRoles) => {
   return (req, res, next) => {

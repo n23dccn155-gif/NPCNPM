@@ -1,22 +1,21 @@
-// pages/manager/LeaveApproval.jsx — Duyệt nghỉ (cải tiến theo Figma leave-approval)
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import { PageHeader, AlertBox } from '../../components/UI';
-import { getAllLeaves, reviewLeave, getAffectedTrips } from '../../services/leaveService';
+import { getAllLeaves, reviewLeave, getAffectedGroups } from '../../services/leaveService';
 
 export default function LeaveApproval() {
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
   const [confirm, setConfirm] = useState({ open: false, id: null, action: '', driverName: '' });
-  const [affected, setAffected] = useState({ open: false, trips: [], requestId: null });
+  const [affected, setAffected] = useState({ open: false, groups: [], requestId: null });
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
 
   const load = () => {
     const params = filter ? { status: filter } : {};
     getAllLeaves(params)
-      .then(res => setLeaves(res.data?.data || []))
+      .then(res => setLeaves(res.data?.data || res.data || []))
       .catch(() => setLeaves([]))
       .finally(() => setLoading(false));
   };
@@ -27,38 +26,40 @@ export default function LeaveApproval() {
     try {
       await reviewLeave(confirm.id, confirm.action);
       setConfirm({ open: false, id: null, action: '', driverName: '' });
-      setSuccess(confirm.action === 'approved' ? 'Đã duyệt yêu cầu nghỉ phép.' : 'Đã từ chối yêu cầu nghỉ phép.');
+      setSuccess(confirm.action === 'approved' ? 'Đã duyệt yêu cầu nghỉ phép thành công.' : 'Đã từ chối yêu cầu nghỉ phép.');
       setTimeout(() => setSuccess(''), 3000);
       load();
     } catch (err) {
-      setError(err.response?.data?.message || 'Lỗi xử lý'); setTimeout(() => setError(''), 3000);
+      setError(err.response?.data?.message || 'Lỗi xử lý');
+      setTimeout(() => setError(''), 3000);
     }
   };
 
   const viewAffected = async (leave) => {
     try {
-      const res = await getAffectedTrips(leave.id);
-      setAffected({ open: true, trips: res.data?.data || [], requestId: leave.id });
-    } catch { setAffected({ open: true, trips: [], requestId: leave.id }); }
+      const res = await getAffectedGroups(leave.leave_id);
+      setAffected({ open: true, groups: res.data?.data || res.data || [], requestId: leave.leave_id });
+    } catch {
+      setAffected({ open: true, groups: [], requestId: leave.leave_id });
+    }
   };
 
   const statusColor = { pending: '#d97706', approved: '#16a34a', rejected: '#dc2626' };
   const statusBg = { pending: '#fef3c7', approved: '#dcfce7', rejected: '#fee2e2' };
   const statusLabel = { pending: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Từ chối' };
-  const shiftLabel = { morning: 'Ca sáng', afternoon: 'Ca chiều', full_day: 'Cả ngày' };
 
   return (
     <Layout>
       <PageHeader
         title="Duyệt yêu cầu nghỉ phép"
-        subtitle="Xem xét và phê duyệt yêu cầu nghỉ phép của tài xế"
+        subtitle="Xem xét và phê duyệt yêu cầu xin nghỉ phép của tài xế"
         action={
           <select
             value={filter}
             onChange={e => setFilter(e.target.value)}
-            className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="border border-slate-200 bg-white rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
           >
-            <option value="">Tất cả</option>
+            <option value="">Tất cả trạng thái</option>
             <option value="pending">Chờ duyệt</option>
             <option value="approved">Đã duyệt</option>
             <option value="rejected">Từ chối</option>
@@ -71,78 +72,85 @@ export default function LeaveApproval() {
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         {loading ? (
-          <div className="text-center py-16 text-gray-400">Đang tải...</div>
+          <div className="text-center py-16 text-gray-400 font-semibold animate-pulse">Đang tải danh sách...</div>
         ) : (
-          <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-100">
-              <tr>
-                {['Mã YC', 'Tài xế', 'Ngày nghỉ', 'Ca nghỉ', 'Lý do', 'Trạng thái', 'Thao tác'].map(h => (
-                  <th key={h} className={`px-5 py-3 text-xs font-medium text-gray-500 uppercase ${h === 'Thao tác' ? 'text-right' : 'text-left'}`}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {leaves.map(l => (
-                <tr key={l.id} className="hover:bg-slate-50 transition">
-                  <td className="px-5 py-4 font-mono text-sm font-medium text-gray-700">LR{String(l.id).padStart(3, '0')}</td>
-                  <td className="px-5 py-4 text-sm font-medium text-gray-900">{l.driver_name}</td>
-                  <td className="px-5 py-4 text-sm text-gray-700">{l.leave_date}</td>
-                  <td className="px-5 py-4 text-sm text-gray-600">{shiftLabel[l.shift_type] || l.shift_type || 'Cả ngày'}</td>
-                  <td className="px-5 py-4 text-sm text-gray-600 max-w-xs">
-                    <span className="line-clamp-1">{l.reason || '—'}</span>
-                  </td>
-                  <td className="px-5 py-4">
-                    <div>
-                      <span
-                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                        style={{ background: statusBg[l.status], color: statusColor[l.status] }}
-                      >
-                        {statusLabel[l.status] || l.status}
-                      </span>
-                      {l.status === 'approved' && (
-                        <div className="text-xs text-amber-600 mt-0.5 cursor-pointer hover:underline" onClick={() => viewAffected(l)}>
-                          ⚠️ Có chuyến bị ảnh hưởng
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-5 py-4 text-right">
-                    <div className="flex gap-2 justify-end">
-                      {l.status === 'pending' && (
-                        <>
-                          <button
-                            onClick={() => setConfirm({ open: true, id: l.id, action: 'approved', driverName: l.driver_name })}
-                            className="text-xs bg-green-50 hover:bg-green-100 text-green-700 px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1"
-                          >
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20,6 9,17 4,12"/></svg>
-                            Duyệt
-                          </button>
-                          <button
-                            onClick={() => setConfirm({ open: true, id: l.id, action: 'rejected', driverName: l.driver_name })}
-                            className="text-xs bg-red-50 hover:bg-red-100 text-red-700 px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1"
-                          >
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                            Từ chối
-                          </button>
-                        </>
-                      )}
-                      {l.status === 'approved' && (
-                        <button
-                          onClick={() => viewAffected(l)}
-                          className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-1.5 rounded-lg font-medium transition"
-                        >
-                          Xem chuyến bị ảnh hưởng
-                        </button>
-                      )}
-                    </div>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  {['Mã đơn', 'Tài xế', 'Ngày nghỉ', 'Lý do xin nghỉ', 'Trạng thái', 'Thao tác'].map(h => (
+                    <th key={h} className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {!loading && leaves.length === 0 && (
-          <div className="text-center py-16 text-gray-400 text-sm">Không có yêu cầu nghỉ nào</div>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {leaves.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-10 text-center text-gray-400">
+                      Không có yêu cầu nghỉ phép nào
+                    </td>
+                  </tr>
+                ) : (
+                  leaves.map(l => (
+                    <tr key={l.leave_id} className="hover:bg-slate-50 transition">
+                      <td className="px-6 py-4 font-mono font-semibold text-slate-500">#LR-{l.leave_id}</td>
+                      <td className="px-6 py-4 text-gray-900 font-bold">{l.driver_name}</td>
+                      <td className="px-6 py-4 text-gray-700 font-semibold">
+                        {new Date(l.leave_date).toLocaleDateString('vi-VN')}
+                      </td>
+                      <td className="px-6 py-4 text-gray-600 max-w-xs truncate">{l.reason || '—'}</td>
+                      <td className="px-6 py-4">
+                        <div>
+                          <span
+                            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold"
+                            style={{ background: statusBg[l.status], color: statusColor[l.status] }}
+                          >
+                            {statusLabel[l.status] || l.status}
+                          </span>
+                          {l.status === 'approved' && (
+                            <button
+                              onClick={() => viewAffected(l)}
+                              className="block text-xs text-amber-600 hover:text-amber-800 font-semibold mt-1 hover:underline text-left"
+                            >
+                              ⚠️ Nhấp để xem các nhóm chuyến bị ảnh hưởng
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm font-semibold">
+                        <div className="flex gap-2">
+                          {l.status === 'pending' && (
+                            <>
+                              <button
+                                onClick={() => setConfirm({ open: true, id: l.leave_id, action: 'approved', driverName: l.driver_name })}
+                                className="bg-green-50 hover:bg-green-100 text-green-700 px-3 py-1.5 rounded-xl font-semibold transition flex items-center gap-1"
+                              >
+                                Duyệt nghỉ
+                              </button>
+                              <button
+                                onClick={() => setConfirm({ open: true, id: l.leave_id, action: 'rejected', driverName: l.driver_name })}
+                                className="bg-red-50 hover:bg-red-100 text-red-700 px-3 py-1.5 rounded-xl font-semibold transition flex items-center gap-1"
+                              >
+                                Từ chối
+                              </button>
+                            </>
+                          )}
+                          {l.status === 'approved' && (
+                            <button
+                              onClick={() => viewAffected(l)}
+                              className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-1.5 rounded-xl font-semibold transition"
+                            >
+                              Chuyến bị ảnh hưởng
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -150,25 +158,25 @@ export default function LeaveApproval() {
       {confirm.open && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              {confirm.action === 'approved' ? '✅ Duyệt yêu cầu nghỉ?' : '❌ Từ chối yêu cầu nghỉ?'}
+            <h3 className="text-lg font-bold text-gray-900 mb-2">
+              {confirm.action === 'approved' ? 'Phê duyệt nghỉ phép?' : 'Từ chối nghỉ phép?'}
             </h3>
-            <p className="text-gray-600 text-sm mb-6">
-              Bạn có chắc muốn <strong>{confirm.action === 'approved' ? 'duyệt' : 'từ chối'}</strong> yêu cầu nghỉ của tài xế <strong>{confirm.driverName}</strong>?
+            <p className="text-gray-600 text-sm mb-6 leading-relaxed">
+              Bạn có chắc chắn muốn <strong>{confirm.action === 'approved' ? 'phê duyệt' : 'từ chối'}</strong> yêu cầu nghỉ phép của tài xế <strong>{confirm.driverName}</strong>?
               {confirm.action === 'approved' && (
-                <span className="block mt-2 text-amber-600 text-xs">⚠️ Các chuyến của tài xế này trong ngày nghỉ sẽ cần được điều chỉnh.</span>
+                <span className="block mt-2 text-amber-600 font-semibold">⚠️ Các nhóm chuyến phân công cho tài xế này trong ngày đó sẽ bị trống tài xế và cần điều phối viên phân công lại.</span>
               )}
             </p>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setConfirm({ open: false, id: null, action: '', driverName: '' })}
-                className="px-4 py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 text-sm font-medium transition"
+                className="px-4 py-2.5 border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-semibold rounded-xl transition"
               >
                 Hủy
               </button>
               <button
                 onClick={handleReview}
-                className={`px-4 py-2 rounded-xl text-white text-sm font-medium transition ${confirm.action === 'approved' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}
+                className={`px-5 py-2.5 text-white text-sm font-semibold rounded-xl transition ${confirm.action === 'approved' ? 'bg-green-600 hover:bg-green-700 shadow-md shadow-green-500/10' : 'bg-red-600 hover:bg-red-700 shadow-md shadow-red-500/10'}`}
               >
                 {confirm.action === 'approved' ? 'Duyệt' : 'Từ chối'}
               </button>
@@ -177,35 +185,41 @@ export default function LeaveApproval() {
         </div>
       )}
 
-      {/* Affected trips */}
+      {/* Affected groups modal */}
       {affected.open && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setAffected({ open: false, trips: [], requestId: null })}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setAffected({ open: false, groups: [], requestId: null })}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-5">
-              <h3 className="text-lg font-semibold text-gray-900">Chuyến bị ảnh hưởng</h3>
-              <button onClick={() => setAffected({ open: false, trips: [], requestId: null })} className="text-gray-400 hover:text-gray-600">✕</button>
+              <h3 className="text-lg font-bold text-gray-900">Các nhóm chuyến bị ảnh hưởng</h3>
+              <button onClick={() => setAffected({ open: false, groups: [], requestId: null })} className="text-gray-400 hover:text-gray-600 text-xl font-bold">✕</button>
             </div>
-            {affected.trips.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 text-sm">Không có chuyến nào bị ảnh hưởng</div>
+            {affected.groups.length === 0 ? (
+              <div className="text-center py-8 text-slate-400 font-medium">Không có nhóm chuyến nào bị ảnh hưởng do quyết định này</div>
             ) : (
-              <div className="space-y-2 max-h-72 overflow-y-auto">
-                {affected.trips.map(t => (
-                  <div key={t.trip_code} className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+              <div className="space-y-3 max-h-72 overflow-y-auto">
+                {affected.groups.map(g => (
+                  <div key={g.group_id} className="bg-amber-50 border border-amber-200 rounded-xl p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <span className="font-mono text-sm font-semibold text-amber-800">Chuyến {t.trip_code}</span>
-                        <div className="text-xs text-amber-600 mt-0.5">{t.trip_date} | {t.scheduled_departure}</div>
-                        <div className="text-xs text-amber-600">{t.route_name || t.route_code}</div>
+                        <div className="font-bold text-amber-900">{g.group_name}</div>
+                        <div className="text-xs text-amber-700 mt-1 font-semibold">Tuyến: {g.route_code} | Xe: {g.license_plate}</div>
+                        <div className="text-xs text-amber-600 mt-0.5">
+                          Thời gian: {new Date(g.start_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - {new Date(g.end_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
                       </div>
-                      <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-lg font-medium">Cần điều chỉnh</span>
+                      <span className="text-xs bg-amber-100 text-amber-800 px-3 py-1 rounded-full font-bold">Trống tài xế</span>
                     </div>
                   </div>
                 ))}
               </div>
             )}
-            <div className="mt-5 flex justify-end gap-3">
-              <button onClick={() => setAffected({ open: false, trips: [], requestId: null })} className="px-4 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition">Đóng</button>
-              <a href="/dispatcher/affected-trips" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition">Đi đến trang điều chỉnh</a>
+            <div className="mt-6 flex justify-end gap-3 border-t pt-4">
+              <button
+                onClick={() => setAffected({ open: false, groups: [], requestId: null })}
+                className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-slate-50 transition"
+              >
+                Đóng
+              </button>
             </div>
           </div>
         </div>

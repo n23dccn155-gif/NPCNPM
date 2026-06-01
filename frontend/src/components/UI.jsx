@@ -15,7 +15,6 @@ const colors = {
   in_progress: 'bg-blue-100 text-blue-700',
   assigned: 'bg-indigo-100 text-indigo-700',
   unassigned: 'bg-gray-100 text-gray-500',
-  delayed: 'bg-orange-100 text-orange-700',
 };
 const labels = {
   active: 'Hoạt động', inactive: 'Ngưng', broken: 'Hỏng',
@@ -23,7 +22,7 @@ const labels = {
   pending: 'Chờ duyệt', approved: 'Đã duyệt',
   rejected: 'Từ chối', replaced: 'Đã thay', completed: 'Hoàn thành',
   cancelled: 'Hủy', in_progress: 'Đang chạy', assigned: 'Đã phân công',
-  unassigned: 'Chưa phân công', delayed: 'Trễ',
+  unassigned: 'Chưa phân công',
 };
 
 export function StatusBadge({ status }) {
