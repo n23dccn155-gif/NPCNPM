@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
-import { PageHeader, AlertBox } from '../../components/UI';
+import { PageHeader, AlertBox, ConfirmDialog } from '../../components/UI';
 import { getMyTrips, startTrip, finishTrip } from '../../services/tripService';
 import { useAuth } from '../../context/AuthContext';
 
@@ -11,6 +11,8 @@ export default function MyAssignmentsPage() {
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [confirm, setConfirm] = useState({ open: false, type: '', trip: null });
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   const loadMyTrips = async () => {
     setLoading(true);
@@ -30,10 +32,17 @@ export default function MyAssignmentsPage() {
     loadMyTrips();
   }, [filterDate]);
 
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 10000); // refresh every 10s
+    return () => clearInterval(timer);
+  }, []);
+
   const handleStartTrip = async (tripId) => {
     try {
       const res = await startTrip(tripId);
-      setSuccessMsg(res.data?.message || 'Đã ghi nhận bắt đầu hành trình xuất bến!');
+      setSuccessMsg(res.data?.message || 'Đã ghi nhận bắt đầu hành trình xuất bến thành công!');
       setTimeout(() => setSuccessMsg(''), 4000);
       loadMyTrips();
     } catch (err) {
@@ -45,7 +54,7 @@ export default function MyAssignmentsPage() {
   const handleFinishTrip = async (tripId) => {
     try {
       const res = await finishTrip(tripId);
-      setSuccessMsg(res.data?.message || 'Đã ghi nhận hoàn thành chuyến xe!');
+      setSuccessMsg(res.data?.message || 'Đã ghi nhận hoàn thành chuyến xe thành công!');
       setTimeout(() => setSuccessMsg(''), 4000);
       loadMyTrips();
     } catch (err) {
@@ -54,8 +63,21 @@ export default function MyAssignmentsPage() {
     }
   };
 
+  const handleConfirmAction = async () => {
+    const { type, trip } = confirm;
+    setConfirm({ open: false, type: '', trip: null });
+    if (!trip) return;
+
+    if (type === 'start') {
+      await handleStartTrip(trip.trip_id);
+    } else if (type === 'finish') {
+      await handleFinishTrip(trip.trip_id);
+    }
+  };
+
   const getStatusText = (status) => {
     switch (status) {
+      case 'assigned':
       case 'scheduled': return 'Chờ xuất bến';
       case 'running': return 'Đang chạy';
       case 'completed': return 'Đã hoàn thành';
@@ -66,6 +88,7 @@ export default function MyAssignmentsPage() {
 
   const getStatusColor = (status) => {
     switch (status) {
+      case 'assigned':
       case 'scheduled': return 'bg-blue-50 text-blue-700 border-blue-100';
       case 'running': return 'bg-green-50 text-green-700 border-green-100';
       case 'completed': return 'bg-slate-50 text-slate-700 border-slate-200';
@@ -107,7 +130,7 @@ export default function MyAssignmentsPage() {
             {/* Header info for driver's current bus */}
             <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
-                <h3 className="font-bold text-slate-800 text-lg">Ca chạy hôm nay</h3>
+                <h3 className="font-bold text-slate-800 text-lg font-sans">Ca chạy hôm nay</h3>
                 <p className="text-xs font-semibold text-slate-500 mt-0.5">Nhóm chuyến: {trips[0]?.group_name}</p>
               </div>
               <div className="bg-blue-600 text-white font-mono font-bold text-lg px-4 py-2 rounded-xl shadow-md shadow-blue-500/10">
@@ -115,101 +138,137 @@ export default function MyAssignmentsPage() {
               </div>
             </div>
 
-            {/* List of individual trips for this driver */}
+            {/* Table of individual trips for this driver */}
             <div className="space-y-4">
               <h4 className="font-bold text-slate-900 text-sm tracking-wide uppercase">Lộ trình các chuyến</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {trips.map((t) => {
-                  const isScheduled = t.status === 'scheduled' || t.status === 'assigned';
-                  const isRunning = t.status === 'running';
-                  
-                  return (
-                    <div key={t.trip_id} className="border border-slate-100 rounded-xl p-5 bg-white hover:shadow-sm transition flex flex-col justify-between gap-4">
-                      <div>
-                        <div className="flex justify-between items-center">
-                          <span className="font-mono font-bold text-sm text-slate-800">CHUYẾN #{t.trip_order}</span>
-                          <span className={`px-2.5 py-0.5 rounded-full text-2xs font-bold border ${getStatusColor(t.status)}`}>
-                            {getStatusText(t.status)}
-                          </span>
-                        </div>
-                        
-                        <div className="mt-3 space-y-2 text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                            <span className="text-slate-400 font-semibold">Điểm đi:</span>
-                            <span className="font-bold text-slate-700">{t.start_point}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
-                            <span className="text-slate-400 font-semibold">Điểm đến:</span>
-                            <span className="font-bold text-slate-700">{t.end_point}</span>
-                          </div>
-                        </div>
+              
+              <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100">
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Chuyến</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Lộ trình</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Xuất bến KH</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Cập bến KH</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Xuất bến Thực tế</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Cập bến Thực tế</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Trạng thái</th>
+                      <th className="px-5 py-3.5 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Hành động</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {trips.map((t) => {
+                      const isScheduled = t.status === 'scheduled' || t.status === 'assigned';
+                      const isRunning = t.status === 'running';
+                      const scheduledDep = new Date(t.scheduled_departure);
+                      const canStart = currentTime >= scheduledDep;
 
-                        <div className="mt-4 pt-4 border-t grid grid-cols-2 gap-4 text-2xs">
-                          <div>
-                            <div className="text-slate-400 font-semibold">Xuất bến KH:</div>
-                            <div className="font-mono font-bold text-slate-700 text-sm mt-0.5">
-                              {new Date(t.scheduled_departure).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                      return (
+                        <tr key={t.trip_id} className="hover:bg-slate-50/50 transition">
+                          <td className="px-5 py-4 font-mono font-bold text-slate-800">
+                            Chuyến #{t.trip_order}
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="font-bold text-slate-800 text-sm">
+                              {t.start_point} &rarr; {t.end_point}
                             </div>
-                            {t.actual_departure && (
-                              <div className="text-green-600 font-semibold mt-1">
-                                Thực tế: {new Date(t.actual_departure).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                            <div className="text-3xs font-semibold text-slate-400 mt-0.5">
+                              {t.direction_type === 'outbound' ? 'Lượt đi' : 'Lượt về'}
+                            </div>
+                          </td>
+                          <td className="px-5 py-4 font-mono font-semibold text-slate-600 text-sm">
+                            {new Date(t.scheduled_departure).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td className="px-5 py-4 font-mono font-semibold text-slate-600 text-sm">
+                            {new Date(t.scheduled_arrival).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td className="px-5 py-4 font-mono text-sm">
+                            {t.actual_departure ? (
+                              <span className="text-green-600 font-bold">
+                                {new Date(t.actual_departure).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300 font-bold">&mdash;&mdash;</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-4 font-mono text-sm">
+                            {t.actual_arrival ? (
+                              <span className="text-green-600 font-bold">
+                                {new Date(t.actual_arrival).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300 font-bold">&mdash;&mdash;</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-4">
+                            <span className={`inline-flex px-2.5 py-0.5 rounded-lg text-2xs font-bold border ${getStatusColor(t.status)}`}>
+                              {getStatusText(t.status)}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 text-right">
+                            {isScheduled && (
+                              <div className="inline-flex flex-col items-end">
+                                <button
+                                  onClick={() => setConfirm({ open: true, type: 'start', trip: t })}
+                                  disabled={!canStart}
+                                  className={`font-bold px-3 py-1.5 rounded-lg text-2xs transition border ${
+                                    canStart
+                                      ? 'bg-blue-600 hover:bg-blue-700 text-white border-transparent shadow-md shadow-blue-500/10 cursor-pointer'
+                                      : 'bg-slate-100 text-slate-400 border-slate-200 shadow-none cursor-not-allowed'
+                                  }`}
+                                >
+                                  Xuất bến
+                                </button>
+                                {!canStart && (
+                                  <span className="text-4xs text-amber-600 font-bold mt-1 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">
+                                    Chờ đến {new Date(t.scheduled_departure).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                )}
                               </div>
                             )}
-                          </div>
-                          <div>
-                            <div className="text-slate-400 font-semibold">Cập bến KH:</div>
-                            <div className="font-mono font-bold text-slate-700 text-sm mt-0.5">
-                              {new Date(t.scheduled_arrival).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                            {t.actual_arrival && (
-                              <div className="text-green-600 font-semibold mt-1">
-                                Thực tế: {new Date(t.actual_arrival).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                              </div>
+                            {isRunning && (
+                              <button
+                                onClick={() => setConfirm({ open: true, type: 'finish', trip: t })}
+                                className="bg-green-600 hover:bg-green-700 text-white font-bold px-3 py-1.5 rounded-lg text-2xs transition shadow-md shadow-green-500/10 border border-transparent"
+                              >
+                                Cập bến
+                              </button>
                             )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Driver Action Button */}
-                      <div>
-                        {isScheduled && (
-                          <button
-                            onClick={() => handleStartTrip(t.trip_id)}
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-md shadow-blue-500/10"
-                          >
-                            🛫 Ghi nhận xuất bến
-                          </button>
-                        )}
-                        {isRunning && (
-                          <button
-                            onClick={() => handleFinishTrip(t.trip_id)}
-                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-md shadow-green-500/10"
-                          >
-                            🛬 Ghi nhận cập bến
-                          </button>
-                        )}
-                        {t.status === 'completed' && (
-                          <div className="text-center text-xs font-bold text-slate-400 py-2.5 bg-slate-50 rounded-xl">
-                            ✓ Hoàn tất {t.delay_minutes > 0 && `(Trễ ${t.delay_minutes}p)`}
-                          </div>
-                        )}
-
-                        {t.status === 'cancelled' && (
-                          <div className="text-center text-xs font-bold text-red-400 py-2.5 bg-red-50/50 rounded-xl border border-red-100">
-                            ✕ Chuyến đi đã hủy
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                            {t.status === 'completed' && (
+                              <span className="text-xs font-bold text-slate-400">
+                                Hoàn thành {t.delay_minutes > 0 && `(Trễ ${t.delay_minutes}p)`}
+                              </span>
+                            )}
+                            {t.status === 'cancelled' && (
+                              <span className="text-xs font-bold text-red-500">
+                                Đã hủy
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
         )}
       </div>
+
+      {/* Action Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={confirm.open}
+        title={confirm.type === 'start' ? 'Ghi nhận xuất bến' : 'Ghi nhận cập bến'}
+        message={
+          confirm.type === 'start'
+            ? `Bạn có chắc chắn muốn ghi nhận xuất bến cho Chuyến #${confirm.trip?.trip_order} không? Hành động này sẽ bắt đầu chuyến xe.`
+            : `Bạn có chắc chắn muốn ghi nhận hoàn thành cập bến cho Chuyến #${confirm.trip?.trip_order} không?`
+        }
+        onConfirm={handleConfirmAction}
+        onCancel={() => setConfirm({ open: false, type: '', trip: null })}
+        danger={false}
+      />
     </Layout>
   );
 }

@@ -128,7 +128,7 @@ export default function RouteList() {
     setFormError('');
     const calculatedHeadway = calculateHeadway(form.start_time, form.end_time, form.expected_trips_per_day);
     if (calculatedHeadway === null) {
-      setFormError('Giờ hoạt động hoặc số lượt xuất bến dự kiến mỗi chiều không hợp lệ');
+      setFormError('Giờ hoạt động hoặc số lượt xuất bến mỗi chiều không hợp lệ');
       return;
     }
     if (Number(form.headway_minutes) > calculatedHeadway) {
@@ -219,11 +219,9 @@ export default function RouteList() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tên tuyến</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Giờ hoạt động</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lượt/chiều</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Giãn cách tối đa</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Giãn cách chốt</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Giãn cách</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vòng xe</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Xe gợi ý</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Xe xác nhận</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Xe vận doanh</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Xe dự phòng</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trạng thái</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Thao tác</th>
@@ -236,11 +234,19 @@ export default function RouteList() {
                   <td className="px-6 py-4 text-gray-700">{r.route_name}</td>
                   <td className="px-6 py-4 text-gray-600 text-sm">{toTimeInput(r.start_time, '--:--')} - {toTimeInput(r.end_time, '--:--')}</td>
                   <td className="px-6 py-4 text-gray-600 text-sm">{r.expected_trips_per_day}</td>
-                  <td className="px-6 py-4 text-gray-600 text-sm">{formatMinutes(r.calculated_headway_minutes)}</td>
-                  <td className="px-6 py-4 text-gray-600 text-sm">{formatMinutes(r.headway_minutes)}</td>
+                  <td className="px-6 py-4 text-gray-600 text-sm">
+                    {formatMinutes(r.headway_minutes)}
+                    {r.calculated_headway_minutes && Math.abs(r.calculated_headway_minutes - r.headway_minutes) > 0.01 && (
+                      <span className="text-xs text-gray-400 block">(Tối đa: {formatMinutes(r.calculated_headway_minutes)})</span>
+                    )}
+                  </td>
                   <td className="px-6 py-4 text-gray-600 text-sm">{r.round_trip_time_minutes ? `${r.round_trip_time_minutes} phút` : 'Chưa đủ dữ liệu'}</td>
-                  <td className="px-6 py-4 text-gray-600 text-sm">{r.suggested_operating_buses || 'Chưa đủ dữ liệu'}</td>
-                  <td className="px-6 py-4 text-gray-600 text-sm">{r.confirmed_operating_buses}</td>
+                  <td className="px-6 py-4 text-gray-600 text-sm">
+                    {r.confirmed_operating_buses} xe
+                    {r.suggested_operating_buses && r.suggested_operating_buses !== r.confirmed_operating_buses && (
+                      <span className="text-xs text-gray-400 block">(Gợi ý: {r.suggested_operating_buses} xe)</span>
+                    )}
+                  </td>
                   <td className="px-6 py-4 text-gray-600 text-sm">{r.standby_buses_count ?? 0}</td>
                   <td className="px-6 py-4"><StatusBadge status={r.status} /></td>
                   <td className="px-6 py-4 text-right whitespace-nowrap">
@@ -294,32 +300,32 @@ export default function RouteList() {
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">Điểm đầu - cuối</label>
                   <div className="flex gap-2">
-                    <input 
-                      value={form.outbound_start_point} 
-                      onChange={e => setForm({...form, outbound_start_point: e.target.value, inbound_end_point: e.target.value})} 
-                      placeholder="Bến A" 
-                      className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" 
+                    <input
+                      value={form.outbound_start_point}
+                      onChange={e => setForm({ ...form, outbound_start_point: e.target.value, inbound_end_point: e.target.value })}
+                      placeholder="Bến A"
+                      className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none"
                     />
-                    <input 
-                      value={form.outbound_end_point} 
-                      onChange={e => setForm({...form, outbound_end_point: e.target.value, inbound_start_point: e.target.value})} 
-                      placeholder="Bến B" 
-                      className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" 
+                    <input
+                      value={form.outbound_end_point}
+                      onChange={e => setForm({ ...form, outbound_end_point: e.target.value, inbound_start_point: e.target.value })}
+                      placeholder="Bến B"
+                      className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none"
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <label className="block text-[11px] text-gray-500 mb-1" title="Cự ly (km)">Cự ly (km)</label>
-                    <input type="number" step="0.1" value={form.outbound_distance} onChange={e => setForm({...form, outbound_distance: e.target.value, inbound_distance: e.target.value})} className="w-full border rounded px-2 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
+                <div className="space-y-3 mt-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <label className="text-xs font-medium text-gray-700 w-1/3">Cự ly (km) *</label>
+                    <input type="number" step="0.1" value={form.outbound_distance} onChange={e => setForm({ ...form, outbound_distance: e.target.value, inbound_distance: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
-                  <div>
-                    <label className="block text-[11px] text-gray-500 mb-1" title="Thời gian chạy">TG chạy (p)</label>
-                    <input type="number" min="1" value={form.outbound_travel} onChange={e => setForm({...form, outbound_travel: e.target.value})} className="w-full border rounded px-2 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
+                  <div className="flex items-center justify-between gap-4">
+                    <label className="text-xs font-medium text-gray-700 w-1/3">Thời gian hành trình (phút) *</label>
+                    <input type="number" min="1" value={form.outbound_travel} onChange={e => setForm({ ...form, outbound_travel: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
-                  <div>
-                    <label className="block text-[11px] text-gray-500 mb-1" title="Nghỉ quay đầu">Nghỉ (p)</label>
-                    <input type="number" min="0" value={form.outbound_turnaround} onChange={e => setForm({...form, outbound_turnaround: e.target.value})} className="w-full border rounded px-2 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
+                  <div className="flex items-center justify-between gap-4">
+                    <label className="text-xs font-medium text-gray-700 w-1/3">Thời gian quay đầu (phút) *</label>
+                    <input type="number" min="0" value={form.outbound_turnaround} onChange={e => setForm({ ...form, outbound_turnaround: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                 </div>
               </div>
@@ -330,22 +336,22 @@ export default function RouteList() {
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">Điểm đầu - cuối</label>
                   <div className="flex gap-2">
-                    <input value={form.inbound_start_point} onChange={e => setForm({...form, inbound_start_point: e.target.value})} placeholder="Bến B" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
-                    <input value={form.inbound_end_point} onChange={e => setForm({...form, inbound_end_point: e.target.value})} placeholder="Bến A" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
+                    <input value={form.inbound_start_point} onChange={e => setForm({ ...form, inbound_start_point: e.target.value })} placeholder="Bến B" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
+                    <input value={form.inbound_end_point} onChange={e => setForm({ ...form, inbound_end_point: e.target.value })} placeholder="Bến A" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <label className="block text-[11px] text-gray-500 mb-1" title="Cự ly (km)">Cự ly (km)</label>
-                    <input type="number" step="0.1" value={form.inbound_distance} onChange={e => setForm({...form, inbound_distance: e.target.value})} className="w-full border rounded px-2 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
+                <div className="space-y-3 mt-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <label className="text-xs font-medium text-gray-700 w-1/3">Cự ly (km) *</label>
+                    <input type="number" step="0.1" value={form.inbound_distance} onChange={e => setForm({ ...form, inbound_distance: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
-                  <div>
-                    <label className="block text-[11px] text-gray-500 mb-1" title="Thời gian chạy">TG chạy (p)</label>
-                    <input type="number" min="1" value={form.inbound_travel} onChange={e => setForm({...form, inbound_travel: e.target.value})} className="w-full border rounded px-2 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
+                  <div className="flex items-center justify-between gap-4">
+                    <label className="text-xs font-medium text-gray-700 w-1/3">Thời gian hành trình (phút) *</label>
+                    <input type="number" min="1" value={form.inbound_travel} onChange={e => setForm({ ...form, inbound_travel: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
-                  <div>
-                    <label className="block text-[11px] text-gray-500 mb-1" title="Nghỉ quay đầu">Nghỉ (p)</label>
-                    <input type="number" min="0" value={form.inbound_turnaround} onChange={e => setForm({...form, inbound_turnaround: e.target.value})} className="w-full border rounded px-2 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
+                  <div className="flex items-center justify-between gap-4">
+                    <label className="text-xs font-medium text-gray-700 w-1/3">Thời gian quay đầu (phút) *</label>
+                    <input type="number" min="0" value={form.inbound_turnaround} onChange={e => setForm({ ...form, inbound_turnaround: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                 </div>
               </div>
@@ -375,62 +381,72 @@ export default function RouteList() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Số lượt xuất bến dự kiến mỗi chiều *</label>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <label className="text-sm font-medium text-gray-700 w-1/3">Số lượt xuất bến mỗi chiều *</label>
               <input
                 type="number"
                 value={form.expected_trips_per_day}
                 onChange={(e) => setForm({ ...form, expected_trips_per_day: e.target.value })}
                 required
                 min="2"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-2/3 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Giãn cách khai thác đã chốt *</label>
-              <input
-                type="number"
-                value={form.headway_minutes}
-                onChange={(e) => setForm({ ...form, headway_minutes: e.target.value })}
-                onFocus={() => {
-                  if (calculatedFormHeadway) {
-                    setForm({ ...form, headway_minutes: Number(calculatedFormHeadway.toFixed(2)) });
-                  }
-                }}
-                required
-                min="1"
-                max={calculatedFormHeadway ? Number(calculatedFormHeadway.toFixed(2)) : undefined}
-                step="0.01"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-amber-600 font-medium mt-1">
-                Tối đa: {formatMinutes(calculatedFormHeadway)}. Có thể giảm để tăng mật độ chuyến.
-              </p>
+              <div className="flex items-center justify-between gap-4">
+                <label className="text-sm font-medium text-gray-700 w-1/3">Thời gian giãn cách chuyến *</label>
+                <input
+                  type="number"
+                  value={form.headway_minutes}
+                  onChange={(e) => setForm({ ...form, headway_minutes: e.target.value })}
+                  onFocus={() => {
+                    if (calculatedFormHeadway) {
+                      setForm({ ...form, headway_minutes: Number(calculatedFormHeadway.toFixed(2)) });
+                    }
+                  }}
+                  required
+                  min="1"
+                  max={calculatedFormHeadway ? Number(calculatedFormHeadway.toFixed(2)) : undefined}
+                  step="0.01"
+                  className="w-2/3 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="flex justify-end mt-1">
+                <div className="w-2/3 text-xs text-amber-600 font-medium">
+                  Tối đa: {formatMinutes(calculatedFormHeadway)}. Có thể giảm để tăng mật độ chuyến.
+                </div>
+              </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Số xe vận doanh xác nhận *</label>
-              <input
-                type="number"
-                value={form.confirmed_operating_buses}
-                onChange={(e) => setForm({ ...form, confirmed_operating_buses: e.target.value })}
-                required
-                min={editingSuggestedBuses || 1}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <div className="flex items-center justify-between gap-4">
+                <label className="text-sm font-medium text-gray-700 w-1/3">Số xe vận doanh *</label>
+                <input
+                  type="number"
+                  value={form.confirmed_operating_buses}
+                  onChange={(e) => setForm({ ...form, confirmed_operating_buses: e.target.value })}
+                  required
+                  min={editingSuggestedBuses || 1}
+                  className="w-2/3 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
               {editingSuggestedBuses && (
-                <p className="text-xs text-amber-600 font-medium mt-1">Tối thiểu gợi ý: {editingSuggestedBuses} xe</p>
+                <div className="flex justify-end mt-1">
+                  <div className="w-2/3 text-xs text-amber-600 font-medium">
+                    Tối thiểu gợi ý: {editingSuggestedBuses} xe
+                  </div>
+                </div>
               )}
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Trạng thái *</label>
+          <div className="flex items-center justify-between gap-4">
+            <label className="text-sm font-medium text-gray-700 w-1/3">Trạng thái *</label>
             <select
               value={form.status}
               onChange={(e) => setForm({ ...form, status: e.target.value })}
               required
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-2/3 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="active">Đang hoạt động</option>
               <option value="inactive">Ngưng hoạt động</option>
