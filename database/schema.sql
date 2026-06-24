@@ -47,7 +47,15 @@ CREATE TABLE routes (
     end_time TIME NOT NULL,
     expected_trips_per_day INT NOT NULL,
     headway_minutes NUMERIC(6,2) NOT NULL,
-    confirmed_operating_buses INT NOT NULL
+    confirmed_operating_buses INT NOT NULL,
+    travel_time_minutes INT DEFAULT 0,
+    short_layover_minutes INT DEFAULT 0,
+    long_layover_minutes INT DEFAULT 0,
+    max_driving_minutes INT DEFAULT 240,
+    standby_ratio NUMERIC(4,2) DEFAULT 0.1,
+    inbound_start_time TIME,
+    backup_bus_ratio NUMERIC(4,2) DEFAULT 0.20,
+    min_rest_time_minutes INT DEFAULT 60
 );
 
 -- 3. Bảng route_directions: Lưu thông tin lượt đi và lượt về của tuyến

@@ -181,6 +181,7 @@ export default function MyAssignmentsPage() {
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-100">
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Chuyến</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Xe Buýt</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Lộ trình</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Xuất bến KH</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Cập bến KH</th>
@@ -201,6 +202,11 @@ export default function MyAssignmentsPage() {
                         <tr key={t.trip_id} className="hover:bg-slate-50/50 transition">
                           <td className="px-5 py-4 font-mono font-bold text-slate-800">
                             Chuyến #{t.trip_order}
+                          </td>
+                          <td className="px-5 py-4">
+                            <span className="inline-flex px-2 py-1 bg-slate-100 text-slate-700 text-xs font-bold rounded-md font-mono border border-slate-200">
+                              {t.license_plate || 'Chưa xếp'}
+                            </span>
                           </td>
                           <td className="px-5 py-4">
                             <div className="font-bold text-slate-800 text-sm">

@@ -64,9 +64,21 @@ function addRouteMetrics(route) {
   ].every(Number.isFinite)
     ? outboundTravel + outboundTurnaround + inboundTravel + inboundTurnaround
     : null;
-  const suggestedOperatingBuses = Number.isFinite(headway) && headway > 0 && roundTripTimeMinutes
-    ? Math.ceil(roundTripTimeMinutes / headway)
-    : null;
+  let suggestedOperatingBuses = null;
+  let requiredRecoveryBuses = null;
+  let requiredBackupBuses = null;
+  let requiredTotalBuses = null;
+
+  if (Number.isFinite(headway) && headway > 0 && roundTripTimeMinutes) {
+    const baseBuses = Math.ceil(roundTripTimeMinutes / headway);
+    const minRestTime = route.min_rest_time_minutes ? Number(route.min_rest_time_minutes) : 60;
+    const backupRatio = route.backup_bus_ratio ? Number(route.backup_bus_ratio) : 0.20;
+    
+    requiredRecoveryBuses = Math.ceil(minRestTime / headway);
+    suggestedOperatingBuses = baseBuses + requiredRecoveryBuses;
+    requiredBackupBuses = Math.ceil(suggestedOperatingBuses * backupRatio);
+    requiredTotalBuses = suggestedOperatingBuses + requiredBackupBuses;
+  }
 
   return {
     ...route,
@@ -75,7 +87,10 @@ function addRouteMetrics(route) {
     average_headway_minutes: route.headway_minutes !== undefined ? Number(headway.toFixed(2)) : null,
     headway_minutes: route.headway_minutes !== undefined ? Number(headway.toFixed(2)) : null,
     round_trip_time_minutes: roundTripTimeMinutes,
-    suggested_operating_buses: suggestedOperatingBuses
+    suggested_operating_buses: suggestedOperatingBuses,
+    required_recovery_buses: requiredRecoveryBuses,
+    required_backup_buses: requiredBackupBuses,
+    required_total_buses: requiredTotalBuses
   };
 }
 
@@ -227,7 +242,9 @@ const routeController = {
         long_layover_minutes = 15,
         max_driving_minutes = 240,
         standby_ratio = 0.15,
-        inbound_start_time = '05:30:00'
+        inbound_start_time = '05:30:00',
+        backup_bus_ratio = 0.20,
+        min_rest_time_minutes = 60
       } = req.body;
 
       if (!route_code || !route_name) {
@@ -265,9 +282,11 @@ const routeController = {
              long_layover_minutes,
              max_driving_minutes,
              standby_ratio,
-             inbound_start_time
+             inbound_start_time,
+             backup_bus_ratio,
+             min_rest_time_minutes
            )
-           VALUES ($1, $2, 'active', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+           VALUES ($1, $2, 'active', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
            RETURNING *`,
           [
             route_code,
@@ -282,7 +301,9 @@ const routeController = {
             long_layover_minutes,
             max_driving_minutes,
             standby_ratio,
-            inbound_start_time
+            inbound_start_time,
+            backup_bus_ratio,
+            min_rest_time_minutes
           ]
         );
 
@@ -331,7 +352,10 @@ const routeController = {
         short_layover_minutes = 10,
         long_layover_minutes = 15,
         max_driving_minutes = 240,
-        standby_ratio = 0.15
+        standby_ratio = 0.15,
+        inbound_start_time,
+        backup_bus_ratio = 0.20,
+        min_rest_time_minutes = 60
       } = req.body;
 
       if (!route_name) {
@@ -379,7 +403,9 @@ const routeController = {
                long_layover_minutes = $10,
                max_driving_minutes = $11,
                standby_ratio = $12,
-               inbound_start_time = $13
+               inbound_start_time = $13,
+               backup_bus_ratio = $14,
+               min_rest_time_minutes = $15
            WHERE route_code = $7
            RETURNING *`,
           [
@@ -395,7 +421,9 @@ const routeController = {
             long_layover_minutes,
             max_driving_minutes,
             standby_ratio,
-            inbound_start_time
+            inbound_start_time,
+            backup_bus_ratio,
+            min_rest_time_minutes
           ]
         );
 

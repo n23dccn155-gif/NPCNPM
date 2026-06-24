@@ -495,10 +495,13 @@ const assignmentController = {
          return error(res, `Tuyến không đủ tài xế để xoay vòng ca (đảm bảo nghỉ 1 ngày/tuần). Yêu cầu tối thiểu ${minWeeklyDrivers} tài xế, nhưng tuyến chỉ có ${totalRouteDrivers}.`, 400);
       }
 
+      const routeRow = await client.query('SELECT min_rest_time_minutes FROM routes WHERE route_code = $1', [plan.route_code]);
+      const minRestTime = routeRow.rows[0]?.min_rest_time_minutes || 60;
+
       const busesRes = await client.query(
         `SELECT b.bus_id FROM buses b
          JOIN route_buses rb ON b.bus_id = rb.bus_id
-         WHERE rb.route_code = $1 AND rb.bus_role = 'operating' AND b.status = 'active'`,
+         WHERE rb.route_code = $1 AND b.status = 'active'`,
         [plan.route_code]
       );
       const availableBuses = busesRes.rows.map(b => b.bus_id);
@@ -545,7 +548,7 @@ const assignmentController = {
 
       if (availableBuses.length < requiredBuses) {
          await client.query('ROLLBACK');
-         return error(res, `Tuyến thiếu xe vận doanh. Yêu cầu ${requiredBuses}, hiện có ${availableBuses.length}`, 400);
+         return error(res, `Tuyến thiếu xe. Yêu cầu tối thiểu ${requiredBuses} xe vận doanh, hiện có ${availableBuses.length} tổng xe.`, 400);
       }
       if (availableDrivers.length < totalDriversNeeded) {
          await client.query('ROLLBACK');
@@ -555,17 +558,46 @@ const assignmentController = {
       const workingDrivers = availableDrivers.slice(0, totalDriversNeeded);
 
       const assignmentsToMake = [];
-      let busIdx = 0;
-      for (const [baseName, subGroups] of Object.entries(vehicleGroupsMap)) {
-         const bus_id = availableBuses[busIdx++];
-         for (const sg of subGroups) {
-            assignmentsToMake.push({
-               type: 'main',
-               group_id: sg.group_id,
-               bus_id: bus_id,
-               start_time: sg.start_time
-            });
-         }
+      
+      const busState = availableBuses.map(bus_id => ({
+          bus_id,
+          availableTime: 0,
+          shiftCount: 0
+      }));
+
+      function timeToMinutes(dateObj) {
+          if (!dateObj) return 0;
+          return dateObj.getHours() * 60 + dateObj.getMinutes();
+      }
+
+      // Sort groups by start_time
+      const sortedGroups = [...groups].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+
+      for (const g of sortedGroups) {
+          const startMin = timeToMinutes(new Date(g.start_time));
+          const endMin = timeToMinutes(new Date(g.end_time));
+
+          let candidateBuses = busState.filter(b => b.availableTime <= startMin);
+          if (candidateBuses.length === 0) {
+              candidateBuses = busState; // Fallback: Take the one that will be available soonest
+          }
+
+          candidateBuses.sort((a, b) => {
+              if (a.availableTime !== b.availableTime) return a.availableTime - b.availableTime;
+              return a.shiftCount - b.shiftCount;
+          });
+
+          const selectedBus = candidateBuses[0];
+
+          assignmentsToMake.push({
+             type: 'main',
+             group_id: g.group_id,
+             bus_id: selectedBus.bus_id,
+             start_time: g.start_time
+          });
+
+          selectedBus.shiftCount += 1;
+          selectedBus.availableTime = endMin + minRestTime;
       }
 
       const baseDateStr = plan.operation_date instanceof Date 
