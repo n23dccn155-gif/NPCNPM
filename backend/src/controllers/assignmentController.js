@@ -199,6 +199,42 @@ const assignmentController = {
     }
   },
 
+  // Xóa tài xế khỏi phân công (khi nghỉ phép hoặc muốn trống)
+  clearDriver: async (req, res, next) => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const { groupId } = req.params;
+
+      const activeRes = await client.query(
+        "SELECT * FROM assignments WHERE group_id = $1 AND status = 'active'",
+        [groupId]
+      );
+      
+      if (!activeRes.rows.length) {
+        await client.query('ROLLBACK');
+        return error(res, 'Nhóm chuyến này chưa có phân công nào để gỡ', 404);
+      }
+
+      await client.query(
+        "UPDATE assignments SET status = 'replaced' WHERE assignment_id = $1",
+        [activeRes.rows[0].assignment_id]
+      );
+
+      // Cập nhật group status thành unassigned
+      await client.query("UPDATE trip_groups SET status = 'unassigned' WHERE group_id = $1", [groupId]);
+      await client.query("UPDATE trips SET status = 'scheduled' WHERE group_id = $1", [groupId]);
+
+      await client.query('COMMIT');
+      return success(res, null, 'Đã gỡ tài xế khỏi nhóm chuyến thành công');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      next(err);
+    } finally {
+      client.release();
+    }
+  },
+
   // Thay tài xế khác khi tài xế nghỉ phép (XL13)
   replaceDriver: async (req, res, next) => {
     const client = await pool.connect();
@@ -209,89 +245,51 @@ const assignmentController = {
 
       if (!group_id || !new_driver_id) {
         await client.query('ROLLBACK');
-        return error(res, 'Vui lòng cung cấp group_id và tài xế thay thế', 400);
+        return res.status(400).json({ success: false, message: 'Vui lòng cung cấp group_id và tài xế thay thế' });
       }
 
-      // Lấy phân công active hiện tại
-      const activeRes = await client.query(
-        "SELECT * FROM assignments WHERE group_id = $1 AND status = 'active'",
-        [group_id]
-      );
-      if (!activeRes.rows.length) {
-        await client.query('ROLLBACK');
-        return error(res, 'Nhóm chuyến này chưa có phân công nào trước đó để thay thế', 404);
-      }
-      const oldAssignment = activeRes.rows[0];
+      const activeRes = await client.query("SELECT * FROM assignments WHERE group_id = $1 AND status = 'active'", [group_id]);
+      let oldAssignment = null;
+      let bus_id_to_assign = null;
+      let plan_id_to_assign = null;
 
-      // Kiểm tra xem có chuyến nào chưa bắt đầu không. Chỉ thay thế khi còn chuyến chưa chạy.
-      const affectedTrips = await client.query(
-        `SELECT trip_id FROM trips 
-         WHERE group_id = $1 AND actual_departure IS NULL 
-           AND status NOT IN ('completed', 'cancelled')`,
-        [group_id]
-      );
-      if (!affectedTrips.rows.length) {
-        await client.query('ROLLBACK');
-        return error(res, 'Không có chuyến chưa bắt đầu nào cần thay tài xế', 400);
+      if (activeRes.rows.length) {
+        oldAssignment = activeRes.rows[0];
+        bus_id_to_assign = oldAssignment.bus_id;
+        plan_id_to_assign = oldAssignment.plan_id;
+      } else {
+        const groupRes = await client.query("SELECT plan_id FROM trip_groups WHERE group_id = $1", [group_id]);
+        if (!groupRes.rows.length) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ success: false, message: 'Nhóm chuyến không tồn tại' });
+        }
+        plan_id_to_assign = groupRes.rows[0].plan_id;
+        const lastAssign = await client.query("SELECT bus_id FROM assignments WHERE group_id = $1 ORDER BY assignment_id DESC LIMIT 1", [group_id]);
+        if (lastAssign.rows.length) {
+          bus_id_to_assign = lastAssign.rows[0].bus_id;
+        } else {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ success: false, message: 'Nhóm chuyến này chưa từng phân công' });
+        }
       }
 
-      // Kiểm tra điều kiện cho tài xế mới
-      const check = await checkGroupAssignmentConditions(group_id, oldAssignment.bus_id, new_driver_id, oldAssignment.assignment_id, true);
+      const check = await checkGroupAssignmentConditions(group_id, bus_id_to_assign, new_driver_id, oldAssignment ? oldAssignment.assignment_id : null, true);
       if (!check.valid) {
         await client.query('ROLLBACK');
         return res.status(400).json({ success: false, message: 'Tài xế thay thế không hợp lệ', issues: check.issues });
       }
 
-      // Chuyển trạng thái phân công cũ thành replaced
-      await client.query(
-        "UPDATE assignments SET status = 'replaced' WHERE assignment_id = $1",
-        [oldAssignment.assignment_id]
-      );
-
-      // Tạo phân công mới
-      const result = await client.query(
-        `INSERT INTO assignments (group_id, bus_id, driver_id, assigned_by, status) 
-         VALUES ($1, $2, $3, $4, 'active') RETURNING *`,
-        [group_id, oldAssignment.bus_id, new_driver_id, dispatcher_id]
-      );
-
-      // Gửi thông báo cho tài xế mới và cũ
-      const planRes = await client.query(
-        `SELECT p.operation_date, p.route_code FROM trip_groups g JOIN operation_plans p ON g.plan_id = p.plan_id WHERE g.group_id = $1`,
-        [group_id]
-      );
-      const dateStr = planRes.rows[0].operation_date.toISOString().split('T')[0];
-
-      const oldDriverUser = await client.query("SELECT user_id FROM drivers WHERE driver_id = $1", [oldAssignment.driver_id]);
-      const newDriverUser = await client.query("SELECT user_id FROM drivers WHERE driver_id = $1", [new_driver_id]);
-
-      if (oldDriverUser.rows.length) {
-        await client.query(
-          `INSERT INTO notifications (user_id, title, content) 
-           VALUES ($1, 'Thay đổi lịch phân công', $2)`,
-          [oldDriverUser.rows[0].user_id, `Lịch phân công ngày ${dateStr} của bạn đã được chuyển cho tài xế khác.`]
-        );
-      }
-      if (newDriverUser.rows.length) {
-        await client.query(
-          `INSERT INTO notifications (user_id, title, content) 
-           VALUES ($1, 'Lịch phân công thay thế', $2)`,
-          [newDriverUser.rows[0].user_id, `Bạn được phân công thay thế cho ngày ${dateStr}.`]
-        );
+      if (oldAssignment) {
+        await client.query("UPDATE assignments SET status = 'replaced' WHERE assignment_id = $1", [oldAssignment.assignment_id]);
       }
 
-      // Gửi thông báo cho Quản lý vận hành
-      const managers = await client.query("SELECT user_id FROM users WHERE role = 'manager' AND status = 'active'");
-      for (let mgr of managers.rows) {
-        await client.query(
-          `INSERT INTO notifications (user_id, title, content) 
-           VALUES ($1, 'Thay đổi tài xế', $2)`,
-          [mgr.user_id, `Điều phối đã thay đổi tài xế cho nhóm chuyến ${check.group.group_name} ngày ${dateStr}.`]
-        );
-      }
+      await client.query("UPDATE assignments SET status = 'replaced' WHERE driver_id = $1 AND plan_id = $2 AND status = 'active' AND assignment_type LIKE 'standby%'", [new_driver_id, plan_id_to_assign]);
 
+      const result = await client.query("INSERT INTO assignments (plan_id, group_id, bus_id, driver_id, assignment_type, assigned_by, status) VALUES ($1, $2, $3, $4, 'main', $5, 'active') RETURNING *", [plan_id_to_assign, group_id, bus_id_to_assign, new_driver_id, dispatcher_id]);
+      await client.query("UPDATE trip_groups SET status = 'assigned' WHERE group_id = $1", [group_id]);
+      await client.query("UPDATE trips SET status = 'assigned' WHERE group_id = $1", [group_id]);
       await client.query('COMMIT');
-      return success(res, result.rows[0], 'Thay thế tài xế thành công');
+      return res.status(200).json({ success: true, data: result.rows[0], message: 'Thay thế tài xế thành công' });
     } catch (err) {
       await client.query('ROLLBACK');
       next(err);
@@ -300,7 +298,7 @@ const assignmentController = {
     }
   },
 
-  // Thay xe khi xe hong: uu tien xe standby, co the chon xe operating con ranh trong tuyen.
+  // Thay xe
   replaceBus: async (req, res, next) => {
     const client = await pool.connect();
     try {
@@ -310,67 +308,27 @@ const assignmentController = {
 
       if (!group_id || !new_bus_id) {
         await client.query('ROLLBACK');
-        return error(res, 'Vui lòng cung cấp group_id và xe thay thế', 400);
+        return res.status(400).json({ success: false, message: 'Vui lòng cung cấp group_id và xe thay thế' });
       }
 
-      // Lấy phân công active hiện tại
-      const activeRes = await client.query(
-        "SELECT * FROM assignments WHERE group_id = $1 AND status = 'active'",
-        [group_id]
-      );
+      const activeRes = await client.query("SELECT * FROM assignments WHERE group_id = $1 AND status = 'active'", [group_id]);
       if (!activeRes.rows.length) {
         await client.query('ROLLBACK');
-        return error(res, 'Nhóm chuyến này chưa có phân công nào trước đó để thay thế', 404);
+        return res.status(404).json({ success: false, message: 'Chưa có phân công nào' });
       }
       const oldAssignment = activeRes.rows[0];
 
-      // Kiểm tra xe thay thế có hợp lệ không
       const check = await checkGroupAssignmentConditions(group_id, new_bus_id, oldAssignment.driver_id, oldAssignment.assignment_id, true);
       if (!check.valid) {
         await client.query('ROLLBACK');
         return res.status(400).json({ success: false, message: 'Xe thay thế không hợp lệ', issues: check.issues });
       }
 
-      // Chuyển phân công cũ sang replaced
-      await client.query(
-        "UPDATE assignments SET status = 'replaced' WHERE assignment_id = $1",
-        [oldAssignment.assignment_id]
-      );
-
-      // Tạo phân công mới
-      const result = await client.query(
-        `INSERT INTO assignments (group_id, bus_id, driver_id, assigned_by, status) 
-         VALUES ($1, $2, $3, $4, 'active') RETURNING *`,
-        [group_id, new_bus_id, oldAssignment.driver_id, dispatcher_id]
-      );
-
-      // Gửi thông báo cho tài xế và Quản lý
-      const planRes = await client.query(
-        `SELECT p.operation_date, p.route_code FROM trip_groups g JOIN operation_plans p ON g.plan_id = p.plan_id WHERE g.group_id = $1`,
-        [group_id]
-      );
-      const dateStr = planRes.rows[0].operation_date.toISOString().split('T')[0];
-
-      const driverUser = await client.query("SELECT user_id FROM drivers WHERE driver_id = $1", [oldAssignment.driver_id]);
-      if (driverUser.rows.length) {
-        await client.query(
-          `INSERT INTO notifications (user_id, title, content) 
-           VALUES ($1, 'Thay đổi xe phân công', $2)`,
-          [driverUser.rows[0].user_id, `Xe phân công ngày ${dateStr} của bạn đã được đổi sang xe khác do sự cố.`]
-        );
-      }
-
-      const managers = await client.query("SELECT user_id FROM users WHERE role = 'manager' AND status = 'active'");
-      for (let mgr of managers.rows) {
-        await client.query(
-          `INSERT INTO notifications (user_id, title, content) 
-           VALUES ($1, 'Thay đổi xe vận hành', $2)`,
-          [mgr.user_id, `Điều phối đã thay đổi xe vận doanh cho nhóm chuyến ${check.group.group_name} ngày ${dateStr}.`]
-        );
-      }
-
+      await client.query("UPDATE assignments SET status = 'replaced' WHERE assignment_id = $1", [oldAssignment.assignment_id]);
+      const result = await client.query("INSERT INTO assignments (plan_id, group_id, bus_id, driver_id, assignment_type, assigned_by, status) VALUES ($1, $2, $3, $4, 'main', $5, 'active') RETURNING *", [oldAssignment.plan_id, group_id, new_bus_id, oldAssignment.driver_id, dispatcher_id]);
+      
       await client.query('COMMIT');
-      return success(res, result.rows[0], 'Thay thế xe thành công');
+      return res.status(200).json({ success: true, data: result.rows[0], message: 'Thay thế xe thành công' });
     } catch (err) {
       await client.query('ROLLBACK');
       next(err);
@@ -378,7 +336,6 @@ const assignmentController = {
       client.release();
     }
   },
-
   // Tìm danh sách xe và tài xế khả dụng (không bị trùng lịch và đủ điều kiện) cho nhóm chuyến
   getAvailableResources: async (req, res, next) => {
     try {
@@ -468,6 +425,202 @@ const assignmentController = {
 
       return success(res, { buses: availableBuses, drivers: availableDrivers });
     } catch (err) { next(err); }
+  },
+
+  autoAssignPlan: async (req, res, next) => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const { planId } = req.params;
+      console.log('autoAssignPlan req keys:', Object.keys(req));
+      console.log('autoAssignPlan req.body:', req.body);
+      const { standbyRatio = 0.15 } = req.body || {};
+      const dispatcherId = req.user.id;
+
+      const planRes = await client.query('SELECT * FROM operation_plans WHERE plan_id = $1', [planId]);
+      if (!planRes.rows.length) {
+        await client.query('ROLLBACK');
+        return error(res, 'Không tìm thấy kế hoạch', 404);
+      }
+      const plan = planRes.rows[0];
+
+      const groupsRes = await client.query(
+        "SELECT * FROM trip_groups WHERE plan_id = $1 AND status = 'unassigned' ORDER BY group_name, start_time",
+        [planId]
+      );
+      if (!groupsRes.rows.length) {
+        await client.query('ROLLBACK');
+        return error(res, 'Không có nhóm chuyến nào cần phân công (hoặc đã phân công hết)', 400);
+      }
+      const groups = groupsRes.rows;
+
+      const vehicleGroupsMap = {};
+      groups.forEach(g => {
+         const baseName = g.group_name.split(' - ')[0];
+         if(!vehicleGroupsMap[baseName]) vehicleGroupsMap[baseName] = [];
+         vehicleGroupsMap[baseName].push(g);
+      });
+
+      const requiredBuses = Object.keys(vehicleGroupsMap).length;
+      const requiredMainDrivers = groups.length;
+      const requiredStandbyDrivers = Math.ceil(requiredMainDrivers * standbyRatio);
+      const totalDriversNeeded = requiredMainDrivers + requiredStandbyDrivers;
+      const minWeeklyDrivers = Math.ceil((totalDriversNeeded * 7) / 6);
+
+      // Check total route drivers first (Validation for rotation policy)
+      const totalRouteDriversRes = await client.query(
+        `SELECT COUNT(rd.driver_id) FROM route_drivers rd
+         JOIN drivers d ON rd.driver_id = d.driver_id
+         WHERE rd.route_code = $1 AND rd.status = 'active' AND d.status = 'working'`,
+        [plan.route_code]
+      );
+      const totalRouteDrivers = parseInt(totalRouteDriversRes.rows[0].count);
+
+      if (totalRouteDrivers < minWeeklyDrivers) {
+         await client.query('ROLLBACK');
+         return error(res, `Tuyến không đủ tài xế để xoay vòng ca (đảm bảo nghỉ 1 ngày/tuần). Yêu cầu tối thiểu ${minWeeklyDrivers} tài xế, nhưng tuyến chỉ có ${totalRouteDrivers}.`, 400);
+      }
+
+      const busesRes = await client.query(
+        `SELECT b.bus_id FROM buses b
+         JOIN route_buses rb ON b.bus_id = rb.bus_id
+         WHERE rb.route_code = $1 AND rb.bus_role = 'operating' AND b.status = 'active'`,
+        [plan.route_code]
+      );
+      const availableBuses = busesRes.rows.map(b => b.bus_id);
+
+      const driversRes = await client.query(
+        `SELECT rd.driver_id,
+
+                COALESCE(
+                  (SELECT ($2::date - dDate::date) - 1
+                   FROM generate_series($2::date - INTERVAL '30 days', $2::date - INTERVAL '1 day', '1 day') AS dDate
+                   WHERE NOT EXISTS (
+                     SELECT 1 FROM assignments a 
+                     JOIN operation_plans p ON a.plan_id = p.plan_id
+                     WHERE a.driver_id = rd.driver_id AND p.operation_date = dDate::date AND a.status = 'active'
+                   )
+                   ORDER BY dDate DESC LIMIT 1), 
+                  30
+                ) AS consecutive_shifts
+         FROM route_drivers rd
+         JOIN drivers d ON rd.driver_id = d.driver_id
+         WHERE rd.route_code = $1 
+           AND rd.status = 'active'
+           AND d.status = 'working'
+           AND NOT EXISTS (
+             SELECT 1 FROM leave_requests l 
+             WHERE l.driver_id = d.driver_id AND l.leave_date = $2 AND l.status = 'approved'
+           )
+         ORDER BY consecutive_shifts ASC, 
+                  ((rd.driver_id + (SELECT extract(epoch FROM $2::date)/86400/7)::int) % (SELECT COUNT(*) FROM route_drivers WHERE route_code=$1 AND status='active')) ASC`,
+        [plan.route_code, plan.operation_date]
+      );
+      
+      const availableDrivers = [];
+      for (const d of driversRes.rows) {
+        const overlap = await client.query(
+          `SELECT 1 FROM assignments a
+           WHERE a.driver_id = $1 AND a.status = 'active' AND a.plan_id = $2`,
+          [d.driver_id, plan.plan_id]
+        );
+        if (overlap.rows.length === 0) {
+          availableDrivers.push(d.driver_id);
+        }
+      }
+
+      if (availableBuses.length < requiredBuses) {
+         await client.query('ROLLBACK');
+         return error(res, `Tuyến thiếu xe vận doanh. Yêu cầu ${requiredBuses}, hiện có ${availableBuses.length}`, 400);
+      }
+      if (availableDrivers.length < totalDriversNeeded) {
+         await client.query('ROLLBACK');
+         return error(res, `Tuyến thiếu tài xế. Yêu cầu ${totalDriversNeeded} (Chính: ${requiredMainDrivers}, Dự bị: ${requiredStandbyDrivers}), hiện có ${availableDrivers.length}`, 400);
+      }
+
+      const workingDrivers = availableDrivers.slice(0, totalDriversNeeded);
+
+      const assignmentsToMake = [];
+      let busIdx = 0;
+      for (const [baseName, subGroups] of Object.entries(vehicleGroupsMap)) {
+         const bus_id = availableBuses[busIdx++];
+         for (const sg of subGroups) {
+            assignmentsToMake.push({
+               type: 'main',
+               group_id: sg.group_id,
+               bus_id: bus_id,
+               start_time: sg.start_time
+            });
+         }
+      }
+
+      const baseDateStr = plan.operation_date instanceof Date 
+            ? plan.operation_date.toISOString().split('T')[0] 
+            : new Date(plan.operation_date).toISOString().split('T')[0];
+
+      let earliestMainTime = new Date();
+      if (assignmentsToMake.length > 0) {
+         let earliest = assignmentsToMake[0].start_time;
+         for (const a of assignmentsToMake) {
+             if (a.start_time < earliest) earliest = a.start_time;
+         }
+         earliestMainTime = earliest;
+      }
+
+      for (let i = 0; i < requiredStandbyDrivers; i++) {
+          const type = i < requiredStandbyDrivers / 2 ? 'standby_morning' : 'standby_afternoon';
+          let st = new Date(earliestMainTime.getTime());
+          if (type === 'standby_afternoon') {
+              st = new Date(st.getTime() + 9 * 60 * 60 * 1000); // 9 hours after morning
+          }
+          assignmentsToMake.push({
+              type: type,
+              group_id: null,
+              bus_id: null,
+              start_time: st
+          });
+      }
+
+      // Sort assignments by start_time ASC so drivers progress from Early -> Late over their streak
+      assignmentsToMake.sort((a, b) => {
+         const timeA = a.start_time ? a.start_time.getTime() : Infinity;
+         const timeB = b.start_time ? b.start_time.getTime() : Infinity;
+         return timeA - timeB;
+      });
+
+      if (plan.operation_date === '2026-07-04' || new Date(plan.operation_date).toISOString().startsWith('2026-07-04')) {
+         console.log('--- DEBUG 2026-07-04 ---');
+         console.log('assignmentsToMake:', assignmentsToMake.map(a => `${a.type} ${a.start_time.toISOString()}`));
+      }
+
+
+
+      for (let i = 0; i < assignmentsToMake.length; i++) {
+          const driver_id = workingDrivers[i];
+          const assignment = assignmentsToMake[i];
+          
+          await client.query(
+             `INSERT INTO assignments (plan_id, group_id, bus_id, driver_id, assignment_type, assigned_by, status)
+              VALUES ($1, $2, $3, $4, $5, $6, 'active')`,
+             [plan.plan_id, assignment.group_id, assignment.bus_id, driver_id, assignment.type, dispatcherId]
+          );
+
+          if (assignment.group_id) {
+             await client.query(
+               `UPDATE trip_groups SET status = 'assigned' WHERE group_id = $1`,
+               [assignment.group_id]
+             );
+          }
+      }
+
+      await client.query('COMMIT');
+      return success(res, null, 'Phân công tự động thành công (Thuật toán Công Bằng & Dự bị)!');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      next(err);
+    } finally {
+      client.release();
+    }
   }
 };
 

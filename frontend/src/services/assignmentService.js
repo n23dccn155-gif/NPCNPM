@@ -11,3 +11,4 @@ export const replaceBus = (data) => api.post('/assignments/replace-bus', {
   new_bus_id: data.new_bus_id ?? data.bus_id
 });
 export const getAvailableResources = (groupId, isReplacement = false) => api.get(`/assignments/available-resources/${groupId}?is_replacement=${isReplacement}`);
+export const clearDriver = (groupId) => api.post(`/assignments/clear-driver/${groupId}`);

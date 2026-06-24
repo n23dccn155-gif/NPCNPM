@@ -34,6 +34,13 @@ const leaveRequestController = {
         return error(res, 'Vui lòng cung cấp ngày muốn nghỉ phép', 400);
       }
 
+      const today = new Date();
+      const reqDate = new Date(leave_date);
+      const diffTime = reqDate.setHours(0,0,0,0) - today.setHours(0,0,0,0);
+      if (diffTime <= 0) {
+        return error(res, 'Phải gửi đơn xin nghỉ trước ít nhất 1 ngày', 400);
+      }
+
       // Kiểm tra đơn nghỉ phép bị trùng ngày đã gửi trước đó
       const existingRes = await pool.query(
         "SELECT leave_id FROM leave_requests WHERE driver_id = $1 AND leave_date = $2 AND status != 'rejected'",

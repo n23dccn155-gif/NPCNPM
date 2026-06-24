@@ -17,6 +17,7 @@ export default function PlanApproval() {
   const [reviewDecision, setReviewDecision] = useState('approve');
   const [rejectReason, setRejectReason] = useState('');
   const [reviewError, setReviewError] = useState('');
+  const [highlightedDriver, setHighlightedDriver] = useState(null);
 
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -229,7 +230,15 @@ export default function PlanApproval() {
                 ) : (
                   <div className="space-y-3">
                     {planDetail.groups.map(g => (
-                      <div key={g.group_id} className="border border-slate-100 bg-white rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                      <div 
+                        key={g.group_id} 
+                        className={`border border-slate-100 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 cursor-pointer transition ${highlightedDriver && g.driver_name === highlightedDriver ? 'bg-yellow-100 border-yellow-300' : 'bg-white'}`}
+                        onClick={() => {
+                          if (g.driver_name) {
+                            setHighlightedDriver(g.driver_name === highlightedDriver ? null : g.driver_name);
+                          }
+                        }}
+                      >
                         <div>
                           <div className="font-bold text-slate-800 text-sm">{g.group_name}</div>
                           <div className="text-2xs font-semibold text-gray-500 mt-1 font-mono">
@@ -263,22 +272,33 @@ export default function PlanApproval() {
                   <div className="text-center py-6 bg-slate-50 rounded-xl text-slate-400 text-xs">Không có lịch chuyến</div>
                 ) : (
                   <div className="max-h-60 overflow-y-auto border border-slate-100 rounded-xl divide-y">
-                    {planDetail.trips.map(t => (
-                      <div key={t.trip_id} className="px-4 py-3 flex justify-between items-center text-xs hover:bg-slate-50 transition">
-                        <div>
-                          <span className="font-bold font-mono text-slate-700">Chuyến #{t.trip_order}</span>
-                          <span className="text-slate-400 ml-2">({t.direction_type === 'outbound' ? 'Chiều đi' : 'Chiều về'})</span>
-                          {t.group_name && (
-                            <span className="ml-3 px-2 py-0.5 rounded-lg text-3xs font-semibold bg-blue-50 text-blue-600 border border-blue-100">
-                              {t.group_name}
-                            </span>
-                          )}
+                    {planDetail.trips.map(t => {
+                      const group = planDetail.groups?.find(g => g.group_id === t.group_id);
+                      return (
+                        <div 
+                          key={t.trip_id} 
+                          className={`px-4 py-3 flex justify-between items-center text-xs hover:bg-slate-50 transition cursor-pointer ${highlightedDriver && group?.driver_name === highlightedDriver ? 'bg-yellow-100' : ''}`}
+                          onClick={() => {
+                            if (group?.driver_name) {
+                              setHighlightedDriver(group.driver_name === highlightedDriver ? null : group.driver_name);
+                            }
+                          }}
+                        >
+                          <div>
+                            <span className="font-bold font-mono text-slate-700">Chuyến #{t.trip_order}</span>
+                            <span className="text-slate-400 ml-2">({t.direction_type === 'outbound' ? 'Chiều đi' : 'Chiều về'})</span>
+                            {t.group_name && (
+                              <span className="ml-3 px-2 py-0.5 rounded-lg text-3xs font-semibold bg-blue-50 text-blue-600 border border-blue-100">
+                                {t.group_name}
+                              </span>
+                            )}
+                          </div>
+                          <div className="font-semibold text-slate-800">
+                            {new Date(t.scheduled_departure).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} – {new Date(t.scheduled_arrival).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                          </div>
                         </div>
-                        <div className="font-semibold text-slate-800">
-                          {new Date(t.scheduled_departure).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} – {new Date(t.scheduled_arrival).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

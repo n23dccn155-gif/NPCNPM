@@ -97,6 +97,14 @@ CREATE TABLE route_buses (
     bus_role VARCHAR(20) NOT NULL -- operating, standby
 );
 
+-- 7b. Bảng route_drivers: Lưu thông tin tài xế thuộc tuyến
+CREATE TABLE route_drivers (
+    route_driver_id SERIAL PRIMARY KEY,
+    route_code VARCHAR(20) NOT NULL,
+    driver_id INT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'active'
+);
+
 -- 8. Bảng operation_plans: Lưu kế hoạch vận doanh theo tuyến và ngày
 CREATE TABLE operation_plans (
     plan_id SERIAL PRIMARY KEY,
@@ -137,9 +145,11 @@ CREATE TABLE trips (
 -- 11. Bảng assignments: Lưu phân công xe và tài xế cho nhóm chuyến
 CREATE TABLE assignments (
     assignment_id SERIAL PRIMARY KEY,
-    group_id INT NOT NULL,
-    bus_id INT NOT NULL,
+    plan_id INT NOT NULL,
+    group_id INT,
+    bus_id INT,
     driver_id INT NOT NULL,
+    assignment_type VARCHAR(20) NOT NULL DEFAULT 'main', -- main, standby_morning, standby_afternoon
     assigned_by INT NOT NULL,
     status VARCHAR(30) NOT NULL DEFAULT 'active' -- active, replaced, cancelled
 );

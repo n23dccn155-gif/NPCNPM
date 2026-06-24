@@ -221,7 +221,13 @@ const routeController = {
         end_time = '21:00:00',
         expected_trips_per_day = 60,
         headway_minutes,
-        confirmed_operating_buses = 10
+        confirmed_operating_buses = 10,
+        travel_time_minutes = 80,
+        short_layover_minutes = 10,
+        long_layover_minutes = 15,
+        max_driving_minutes = 240,
+        standby_ratio = 0.15,
+        inbound_start_time = '05:30:00'
       } = req.body;
 
       if (!route_code || !route_name) {
@@ -253,9 +259,15 @@ const routeController = {
              end_time,
              expected_trips_per_day,
              headway_minutes,
-             confirmed_operating_buses
+             confirmed_operating_buses,
+             travel_time_minutes,
+             short_layover_minutes,
+             long_layover_minutes,
+             max_driving_minutes,
+             standby_ratio,
+             inbound_start_time
            )
-           VALUES ($1, $2, 'active', $3, $4, $5, $6, $7)
+           VALUES ($1, $2, 'active', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
            RETURNING *`,
           [
             route_code,
@@ -264,7 +276,13 @@ const routeController = {
             end_time,
             expected_trips_per_day,
             routeHeadway,
-            confirmed_operating_buses
+            confirmed_operating_buses,
+            travel_time_minutes,
+            short_layover_minutes,
+            long_layover_minutes,
+            max_driving_minutes,
+            standby_ratio,
+            inbound_start_time
           ]
         );
 
@@ -272,14 +290,14 @@ const routeController = {
           await client.query(
             `INSERT INTO route_directions (route_code, direction_type, start_point, end_point, distance_km, travel_time_minutes, turnaround_time_minutes)
              VALUES ($1, 'outbound', $2, $3, $4, $5, $6)`,
-            [route_code, req.body.outbound_start_point, req.body.outbound_end_point, req.body.outbound_distance || null, req.body.outbound_travel, req.body.outbound_turnaround]
+            [route_code, req.body.outbound_start_point, req.body.outbound_end_point, req.body.outbound_distance || null, travel_time_minutes, short_layover_minutes]
           );
         }
         if (req.body.inbound_start_point) {
           await client.query(
             `INSERT INTO route_directions (route_code, direction_type, start_point, end_point, distance_km, travel_time_minutes, turnaround_time_minutes)
              VALUES ($1, 'inbound', $2, $3, $4, $5, $6)`,
-            [route_code, req.body.inbound_start_point, req.body.inbound_end_point, req.body.inbound_distance || null, req.body.inbound_travel, req.body.inbound_turnaround]
+            [route_code, req.body.inbound_start_point, req.body.inbound_end_point, req.body.inbound_distance || null, travel_time_minutes, short_layover_minutes]
           );
         }
 
@@ -308,7 +326,12 @@ const routeController = {
         end_time = '21:00:00',
         expected_trips_per_day = 60,
         headway_minutes,
-        confirmed_operating_buses = 10
+        confirmed_operating_buses = 10,
+        travel_time_minutes = 80,
+        short_layover_minutes = 10,
+        long_layover_minutes = 15,
+        max_driving_minutes = 240,
+        standby_ratio = 0.15
       } = req.body;
 
       if (!route_name) {
@@ -350,7 +373,13 @@ const routeController = {
                end_time = $3,
                expected_trips_per_day = $4,
                headway_minutes = $5,
-               confirmed_operating_buses = $6
+               confirmed_operating_buses = $6,
+               travel_time_minutes = $8,
+               short_layover_minutes = $9,
+               long_layover_minutes = $10,
+               max_driving_minutes = $11,
+               standby_ratio = $12,
+               inbound_start_time = $13
            WHERE route_code = $7
            RETURNING *`,
           [
@@ -360,7 +389,13 @@ const routeController = {
             expected_trips_per_day,
             routeHeadway,
             confirmed_operating_buses,
-            routeCode
+            routeCode,
+            travel_time_minutes,
+            short_layover_minutes,
+            long_layover_minutes,
+            max_driving_minutes,
+            standby_ratio,
+            inbound_start_time
           ]
         );
 
@@ -375,7 +410,7 @@ const routeController = {
              VALUES ($1, 'outbound', $2, $3, $4, $5, $6)
              ON CONFLICT (route_code, direction_type)
              DO UPDATE SET start_point = EXCLUDED.start_point, end_point = EXCLUDED.end_point, distance_km = EXCLUDED.distance_km, travel_time_minutes = EXCLUDED.travel_time_minutes, turnaround_time_minutes = EXCLUDED.turnaround_time_minutes`,
-            [routeCode, req.body.outbound_start_point, req.body.outbound_end_point, req.body.outbound_distance || null, req.body.outbound_travel, req.body.outbound_turnaround]
+            [routeCode, req.body.outbound_start_point, req.body.outbound_end_point, req.body.outbound_distance || null, travel_time_minutes, short_layover_minutes]
           );
         }
         if (req.body.inbound_start_point) {
@@ -384,7 +419,7 @@ const routeController = {
              VALUES ($1, 'inbound', $2, $3, $4, $5, $6)
              ON CONFLICT (route_code, direction_type)
              DO UPDATE SET start_point = EXCLUDED.start_point, end_point = EXCLUDED.end_point, distance_km = EXCLUDED.distance_km, travel_time_minutes = EXCLUDED.travel_time_minutes, turnaround_time_minutes = EXCLUDED.turnaround_time_minutes`,
-            [routeCode, req.body.inbound_start_point, req.body.inbound_end_point, req.body.inbound_distance || null, req.body.inbound_travel, req.body.inbound_turnaround]
+            [routeCode, req.body.inbound_start_point, req.body.inbound_end_point, req.body.inbound_distance || null, travel_time_minutes, short_layover_minutes]
           );
         }
 
@@ -418,12 +453,43 @@ const routeController = {
       if (!result.rows.length) {
         return error(res, 'Khong tim thay tuyen xe', 404);
       }
-
-      return success(res, result.rows[0], 'Cap nhat trang thai tuyen xe thanh cong');
+      return success(res, result.rows[0], 'Cap nhat trang thai thanh cong');
     } catch (err) {
       next(err);
     }
   },
+
+  deleteRoute: async (req, res, next) => {
+    const client = await pool.connect();
+    try {
+      const { routeCode } = req.params;
+      await client.query('BEGIN');
+      
+      // Manual cascade delete because no ON DELETE CASCADE constraints
+      await client.query('DELETE FROM assignments WHERE group_id IN (SELECT group_id FROM trip_groups WHERE plan_id IN (SELECT plan_id FROM operation_plans WHERE route_code = $1))', [routeCode]);
+      await client.query('DELETE FROM trips WHERE plan_id IN (SELECT plan_id FROM operation_plans WHERE route_code = $1)', [routeCode]);
+      await client.query('DELETE FROM trip_groups WHERE plan_id IN (SELECT plan_id FROM operation_plans WHERE route_code = $1)', [routeCode]);
+      await client.query('DELETE FROM operation_plans WHERE route_code = $1', [routeCode]);
+      await client.query('DELETE FROM route_buses WHERE route_code = $1', [routeCode]);
+      await client.query('DELETE FROM bus_stops WHERE direction_id IN (SELECT direction_id FROM route_directions WHERE route_code = $1)', [routeCode]);
+      await client.query('DELETE FROM route_directions WHERE route_code = $1', [routeCode]);
+      
+      const result = await client.query('DELETE FROM routes WHERE route_code = $1 RETURNING *', [routeCode]);
+      
+      if (!result.rows.length) {
+        await client.query('ROLLBACK');
+        return error(res, 'Không tìm thấy tuyến xe', 404);
+      }
+      await client.query('COMMIT');
+      return success(res, null, 'Xóa tuyến xe vĩnh viễn thành công');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      next(err);
+    } finally {
+      client.release();
+    }
+  },
+
 
   getDirectionsByRoute: async (req, res, next) => {
     try {
@@ -698,6 +764,72 @@ const routeController = {
       }
 
       return success(res, null, 'Go xe khoi tuyen thanh cong');
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  addDriverToRoute: async (req, res, next) => {
+    try {
+      const { routeCode } = req.params;
+      const { driver_id } = req.body;
+
+      if (!driver_id) {
+        return error(res, 'Vui long cung cap driver_id', 400);
+      }
+
+      const driverRes = await pool.query('SELECT * FROM drivers WHERE driver_id = $1 AND status = $2', [driver_id, 'working']);
+      if (!driverRes.rows.length) {
+        return error(res, 'Tai xe khong ton tai hoac khong hoat dong', 400);
+      }
+
+      const exist = await pool.query('SELECT * FROM route_drivers WHERE route_code = $1 AND driver_id = $2', [routeCode, driver_id]);
+      if (exist.rows.length) {
+        return error(res, 'Tai xe da thuoc tuyen nay', 400);
+      }
+
+      const result = await pool.query(
+        `INSERT INTO route_drivers (route_code, driver_id, status)
+         VALUES ($1, $2, 'active') RETURNING *`,
+        [routeCode, driver_id]
+      );
+
+      return success(res, result.rows[0], 'Them tai xe vao tuyen thanh cong', 201);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  getRouteDrivers: async (req, res, next) => {
+    try {
+      const { routeCode } = req.params;
+      const result = await pool.query(
+        `SELECT rd.*, d.full_name, d.phone, d.license_class, u.username
+         FROM route_drivers rd
+         JOIN drivers d ON rd.driver_id = d.driver_id
+         JOIN users u ON d.user_id = u.user_id
+         WHERE rd.route_code = $1`,
+        [routeCode]
+      );
+      return success(res, result.rows);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  removeDriverFromRoute: async (req, res, next) => {
+    try {
+      const { routeCode, driverId } = req.params;
+      const result = await pool.query(
+        'DELETE FROM route_drivers WHERE route_code = $1 AND driver_id = $2 RETURNING *',
+        [routeCode, driverId]
+      );
+
+      if (!result.rows.length) {
+        return error(res, 'Khong tim thay tai xe trong tuyen nay', 404);
+      }
+
+      return success(res, null, 'Go tai xe khoi tuyen thanh cong');
     } catch (err) {
       next(err);
     }

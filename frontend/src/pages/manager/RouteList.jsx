@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import { PageHeader, StatusBadge, ConfirmDialog, Modal, AlertBox } from '../../components/UI';
-import { getRoutes, createRoute, updateRoute, updateRouteStatus } from '../../services/routeService';
+import { getRoutes, createRoute, updateRoute, updateRouteStatus, deleteRoute } from '../../services/routeService';
 
 const emptyForm = {
   route_code: '',
@@ -15,13 +15,15 @@ const emptyForm = {
   outbound_start_point: '',
   outbound_end_point: '',
   outbound_distance: '',
-  outbound_travel: 45,
-  outbound_turnaround: 15,
   inbound_start_point: '',
   inbound_end_point: '',
   inbound_distance: '',
-  inbound_travel: 45,
-  inbound_turnaround: 15
+  travel_time_minutes: 80,
+  short_layover_minutes: 10,
+  long_layover_minutes: 15,
+  max_driving_minutes: 240,
+  standby_ratio: 0.15,
+  inbound_start_time: '05:30'
 };
 
 const toTimeInput = (value, fallback) => value?.slice(0, 5) || fallback;
@@ -92,13 +94,15 @@ export default function RouteList() {
       outbound_start_point: r.outbound_start_point || '',
       outbound_end_point: r.outbound_end_point || '',
       outbound_distance: r.outbound_distance_km || '',
-      outbound_travel: r.outbound_travel_time_minutes ?? 45,
-      outbound_turnaround: r.outbound_turnaround_time_minutes ?? 15,
       inbound_start_point: r.inbound_start_point || '',
       inbound_end_point: r.inbound_end_point || '',
-      inbound_distance: r.inbound_distance_km || '',
-      inbound_travel: r.inbound_travel_time_minutes ?? 45,
-      inbound_turnaround: r.inbound_turnaround_time_minutes ?? 15
+      inbound_distance: r.inbound_distance_km ?? '',
+      travel_time_minutes: r.travel_time_minutes ?? 80,
+      short_layover_minutes: r.short_layover_minutes ?? 10,
+      long_layover_minutes: r.long_layover_minutes ?? 15,
+      max_driving_minutes: r.max_driving_minutes ?? 240,
+      standby_ratio: r.standby_ratio ?? 0.15,
+      inbound_start_time: r.inbound_start_time?.slice(0, 5) || '05:30',
     });
     setFormError('');
     setShowModal(true);
@@ -108,31 +112,26 @@ export default function RouteList() {
     route_name: form.route_name.trim(),
     start_time: form.start_time,
     end_time: form.end_time,
-    expected_trips_per_day: Number(form.expected_trips_per_day),
+    expected_trips_per_day: Math.floor((timeToMinutes(form.end_time) - timeToMinutes(form.start_time)) / Number(form.headway_minutes)) + 1,
     headway_minutes: Number(form.headway_minutes),
     confirmed_operating_buses: Number(form.confirmed_operating_buses),
     outbound_start_point: form.outbound_start_point.trim(),
     outbound_end_point: form.outbound_end_point.trim(),
     outbound_distance: form.outbound_distance ? Number(form.outbound_distance) : null,
-    outbound_travel: Number(form.outbound_travel),
-    outbound_turnaround: Number(form.outbound_turnaround),
     inbound_start_point: form.inbound_start_point.trim(),
     inbound_end_point: form.inbound_end_point.trim(),
-    inbound_distance: form.inbound_distance ? Number(form.inbound_distance) : null,
-    inbound_travel: Number(form.inbound_travel),
-    inbound_turnaround: Number(form.inbound_turnaround)
+    inbound_distance: form.inbound_distance ? Number(form.inbound_distance) : null
   });
 
   const handleSave = async (e) => {
     e.preventDefault();
     setFormError('');
-    const calculatedHeadway = calculateHeadway(form.start_time, form.end_time, form.expected_trips_per_day);
-    if (calculatedHeadway === null) {
-      setFormError('Giờ hoạt động hoặc số lượt xuất bến mỗi chiều không hợp lệ');
+    if (timeToMinutes(form.end_time) <= timeToMinutes(form.start_time)) {
+      setFormError('Giờ kết thúc hoạt động phải sau giờ bắt đầu hoạt động');
       return;
     }
-    if (Number(form.headway_minutes) > calculatedHeadway) {
-      setFormError(`Giãn cách khai thác không được lớn hơn ${Number(calculatedHeadway.toFixed(2))} phút`);
+    if (Number(form.headway_minutes) <= 0) {
+      setFormError('Giãn cách khai thác phải lớn hơn 0');
       return;
     }
     if (editingSuggestedBuses && Number(form.confirmed_operating_buses) < editingSuggestedBuses) {
@@ -160,11 +159,15 @@ export default function RouteList() {
 
   const handleStatusChange = async () => {
     try {
-      await updateRouteStatus(confirm.route.route_code, confirm.newStatus);
+      if (confirm.newStatus === 'delete') {
+        await deleteRoute(confirm.route.route_code);
+      } else {
+        await updateRouteStatus(confirm.route.route_code, confirm.newStatus);
+      }
       setConfirm({ open: false, route: null, newStatus: '' });
       load();
     } catch (err) {
-      alert(err.response?.data?.message || 'Lỗi khi cập nhật trạng thái');
+      alert(err.response?.data?.message || 'Lỗi khi thực hiện thao tác');
     }
   };
 
@@ -175,9 +178,14 @@ export default function RouteList() {
     const matchStatus = !filterStatus || r.status === filterStatus;
     return matchSearch && matchStatus;
   });
-  const calculatedFormHeadway = calculateHeadway(form.start_time, form.end_time, form.expected_trips_per_day);
-  const rtt = Number(form.outbound_travel) + Number(form.outbound_turnaround) + Number(form.inbound_travel) + Number(form.inbound_turnaround);
+  const rtt = Number(form.travel_time_minutes) * 2 + Number(form.short_layover_minutes) * 2;
   const editingSuggestedBuses = (Number(form.headway_minutes) > 0 && rtt > 0) ? Math.ceil(rtt / Number(form.headway_minutes)) : null;
+
+  const operatingBuses = Number(form.confirmed_operating_buses) || 0;
+  const mainShifts = operatingBuses * 2;
+  const standbyCount = Math.ceil(mainShifts * (Number(form.standby_ratio) || 0));
+  const dailyDrivers = mainShifts + standbyCount;
+  const weeklyDrivers = Math.ceil(dailyDrivers * 7 / 6);
 
   return (
     <Layout>
@@ -253,9 +261,15 @@ export default function RouteList() {
                     <button onClick={() => openEdit(r)} className="text-blue-600 hover:text-blue-800 text-sm mr-3">Sửa</button>
                     <button
                       onClick={() => setConfirm({ open: true, route: r, newStatus: r.status === 'active' ? 'inactive' : 'active' })}
-                      className={`text-sm ${r.status === 'active' ? 'text-red-500 hover:text-red-700' : 'text-green-600 hover:text-green-800'}`}
+                      className={`text-sm mr-3 ${r.status === 'active' ? 'text-orange-500 hover:text-orange-700' : 'text-green-600 hover:text-green-800'}`}
                     >
                       {r.status === 'active' ? 'Ngưng' : 'Kích hoạt'}
+                    </button>
+                    <button
+                      onClick={() => setConfirm({ open: true, route: r, newStatus: 'delete' })}
+                      className="text-red-600 hover:text-red-800 text-sm"
+                    >
+                      Xóa
                     </button>
                   </td>
                 </tr>
@@ -319,14 +333,6 @@ export default function RouteList() {
                     <label className="text-xs font-medium text-gray-700 w-1/3">Cự ly (km) *</label>
                     <input type="number" step="0.1" value={form.outbound_distance} onChange={e => setForm({ ...form, outbound_distance: e.target.value, inbound_distance: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <label className="text-xs font-medium text-gray-700 w-1/3">Thời gian hành trình (phút) *</label>
-                    <input type="number" min="1" value={form.outbound_travel} onChange={e => setForm({ ...form, outbound_travel: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <label className="text-xs font-medium text-gray-700 w-1/3">Thời gian quay đầu (phút) *</label>
-                    <input type="number" min="0" value={form.outbound_turnaround} onChange={e => setForm({ ...form, outbound_turnaround: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  </div>
                 </div>
               </div>
             </div>
@@ -345,26 +351,28 @@ export default function RouteList() {
                     <label className="text-xs font-medium text-gray-700 w-1/3">Cự ly (km) *</label>
                     <input type="number" step="0.1" value={form.inbound_distance} onChange={e => setForm({ ...form, inbound_distance: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <label className="text-xs font-medium text-gray-700 w-1/3">Thời gian hành trình (phút) *</label>
-                    <input type="number" min="1" value={form.inbound_travel} onChange={e => setForm({ ...form, inbound_travel: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <label className="text-xs font-medium text-gray-700 w-1/3">Thời gian quay đầu (phút) *</label>
-                    <input type="number" min="0" value={form.inbound_turnaround} onChange={e => setForm({ ...form, inbound_turnaround: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Giờ bắt đầu hoạt động *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Xuất phát Bến A (Outbound) *</label>
               <input
                 type="time"
                 value={form.start_time}
                 onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+                required
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Xuất phát Bến B (Inbound) *</label>
+              <input
+                type="time"
+                value={form.inbound_start_time}
+                onChange={(e) => setForm({ ...form, inbound_start_time: e.target.value })}
                 required
                 className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
@@ -381,44 +389,31 @@ export default function RouteList() {
             </div>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-4 mt-6">
             <div className="flex items-center justify-between gap-4">
-              <label className="text-sm font-medium text-gray-700 w-1/3">Số lượt xuất bến mỗi chiều *</label>
-              <input
-                type="number"
-                value={form.expected_trips_per_day}
-                onChange={(e) => setForm({ ...form, expected_trips_per_day: e.target.value })}
-                required
-                min="2"
-                className="w-2/3 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <div className="flex items-center justify-between gap-4">
-                <label className="text-sm font-medium text-gray-700 w-1/3">Thời gian giãn cách chuyến *</label>
+              <label className="text-sm font-medium text-gray-700 w-1/3">Thời gian giãn cách chuyến *</label>
+              <div className="w-2/3 flex items-center gap-2">
                 <input
                   type="number"
                   value={form.headway_minutes}
                   onChange={(e) => setForm({ ...form, headway_minutes: e.target.value })}
-                  onFocus={() => {
-                    if (calculatedFormHeadway) {
-                      setForm({ ...form, headway_minutes: Number(calculatedFormHeadway.toFixed(2)) });
-                    }
-                  }}
                   required
                   min="1"
-                  max={calculatedFormHeadway ? Number(calculatedFormHeadway.toFixed(2)) : undefined}
-                  step="0.01"
-                  className="w-2/3 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  step="1"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-              </div>
-              <div className="flex justify-end mt-1">
-                <div className="w-2/3 text-xs text-amber-600 font-medium">
-                  Tối đa: {formatMinutes(calculatedFormHeadway)}. Có thể giảm để tăng mật độ chuyến.
-                </div>
+                <span className="text-sm text-gray-500 whitespace-nowrap">phút</span>
               </div>
             </div>
-            <div>
+            {form.start_time && form.end_time && form.headway_minutes > 0 && (
+              <div className="flex justify-end mt-1">
+                <div className="w-2/3 text-xs text-blue-600 font-medium">
+                  Hệ thống tự tính: Khoảng {Math.floor((timeToMinutes(form.end_time) - timeToMinutes(form.start_time)) / Number(form.headway_minutes)) + 1} lượt mỗi chiều mỗi ngày.
+                </div>
+              </div>
+            )}
+          </div>
+          <div>
               <div className="flex items-center justify-between gap-4">
                 <label className="text-sm font-medium text-gray-700 w-1/3">Số xe vận doanh *</label>
                 <input
@@ -438,7 +433,6 @@ export default function RouteList() {
                 </div>
               )}
             </div>
-          </div>
 
           <div className="flex items-center justify-between gap-4">
             <label className="text-sm font-medium text-gray-700 w-1/3">Trạng thái *</label>
@@ -453,6 +447,52 @@ export default function RouteList() {
             </select>
           </div>
 
+          {/* Scheduling Parameters */}
+          <div className="grid grid-cols-2 gap-4 mt-6 border-t pt-4">
+            <h4 className="col-span-2 text-sm font-semibold text-gray-700">Tham số lập lịch nâng cao</h4>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Thời gian chạy (phút)</label>
+              <input type="number" value={form.travel_time_minutes} onChange={e => setForm({...form, travel_time_minutes: e.target.value})} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nghỉ ngắn tại bến (phút)</label>
+              <input type="number" value={form.short_layover_minutes} onChange={e => setForm({...form, short_layover_minutes: e.target.value})} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nghỉ dài / Đổi ca (phút)</label>
+              <input type="number" value={form.long_layover_minutes} onChange={e => setForm({...form, long_layover_minutes: e.target.value})} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Giới hạn lái liên tục (phút)</label>
+              <input type="number" value={form.max_driving_minutes} onChange={e => setForm({...form, max_driving_minutes: e.target.value})} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tỉ lệ dự bị (Ví dụ: 0.15)</label>
+              <input type="number" step="0.01" value={form.standby_ratio} onChange={e => setForm({...form, standby_ratio: e.target.value})} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
+            </div>
+          </div>
+
+          <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-100 flex items-center justify-between">
+            <div>
+              <h4 className="font-semibold text-blue-800">Nhu cầu Tài xế (Tính toán tự động)</h4>
+              <p className="text-sm text-blue-600 mt-1">
+                Số ca (Main): <span className="font-bold">{mainShifts}</span> | 
+                Dự bị (Standby): <span className="font-bold">{standbyCount}</span>
+              </p>
+            </div>
+            <div className="flex gap-4 text-center">
+              <div className="bg-white px-4 py-2 rounded shadow-sm border border-blue-200">
+                <div className="text-xs text-gray-500">Cần cho 1 Ngày</div>
+                <div className="text-xl font-bold text-blue-700">{dailyDrivers}</div>
+              </div>
+              <div className="bg-white px-4 py-2 rounded shadow-sm border border-blue-200">
+                <div className="text-xs text-gray-500">Cần cho 1 Tuần</div>
+                <div className="text-xl font-bold text-blue-700">{weeklyDrivers}</div>
+              </div>
+            </div>
+          </div>
+
           <div className="flex gap-3 justify-end pt-2">
             <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 border rounded-xl text-sm text-gray-600 hover:bg-gray-50">Hủy</button>
             <button type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium">Lưu</button>
@@ -462,11 +502,11 @@ export default function RouteList() {
 
       <ConfirmDialog
         isOpen={confirm.open}
-        title={confirm.newStatus === 'inactive' ? 'Ngưng hoạt động tuyến?' : 'Kích hoạt tuyến?'}
-        message={`Bạn có chắc muốn ${confirm.newStatus === 'inactive' ? 'ngưng hoạt động' : 'kích hoạt'} tuyến "${confirm.route?.route_name}" không?`}
+        title={confirm.newStatus === 'delete' ? 'Xóa tuyến xe vĩnh viễn?' : confirm.newStatus === 'inactive' ? 'Ngưng hoạt động tuyến?' : 'Kích hoạt tuyến?'}
+        message={confirm.newStatus === 'delete' ? `Hành động này sẽ XÓA VĨNH VIỄN tuyến "${confirm.route?.route_name}" cùng với tất cả chuyến xe, kế hoạch, trạm dừng và phân công liên quan. Bạn có chắc chắn không?` : `Bạn có chắc muốn ${confirm.newStatus === 'inactive' ? 'ngưng hoạt động' : 'kích hoạt'} tuyến "${confirm.route?.route_name}" không?`}
         onConfirm={handleStatusChange}
         onCancel={() => setConfirm({ open: false, route: null, newStatus: '' })}
-        danger={confirm.newStatus === 'inactive'}
+        danger={confirm.newStatus === 'inactive' || confirm.newStatus === 'delete'}
       />
     </Layout>
   );

@@ -7,3 +7,5 @@ export const updateRouteStatus = (code, status) => api.patch(`/routes/${code}/st
 export const getRouteDirections = (code) => api.get(`/routes/${code}/directions`);
 export const createRouteDirection = (code, data) => api.post(`/routes/${code}/directions`, data);
 export const updateRouteDirection = (code, directionId, data) => api.put(`/routes/${code}/directions/${directionId}`, data);
+export const deleteRoute = (code) => api.delete(`/routes/${code}`);
+export const generateSchedule = (code) => api.post(`/routes/${code}/generate-schedule`);

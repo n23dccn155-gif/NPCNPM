@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 export default function MyAssignmentsPage() {
   const { user } = useAuth();
   const [trips, setTrips] = useState([]);
+  const [assignmentType, setAssignmentType] = useState('off');
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
   const [successMsg, setSuccessMsg] = useState('');
@@ -19,7 +20,14 @@ export default function MyAssignmentsPage() {
     setErrorMsg('');
     try {
       const res = await getMyTrips(filterDate);
-      setTrips(res.data?.data || res.data || []);
+      const data = res.data?.data || res.data;
+      if (Array.isArray(data)) {
+        setTrips(data);
+        setAssignmentType(data.length > 0 ? 'main' : 'off');
+      } else {
+        setTrips(data?.trips || []);
+        setAssignmentType(data?.assignment_type || 'off');
+      }
     } catch (err) {
       console.error(err);
       setErrorMsg(err.response?.data?.message || 'Không thể tải lịch trình. Vui lòng thử lại.');
@@ -121,6 +129,32 @@ export default function MyAssignmentsPage() {
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
         {loading ? (
           <div className="text-center py-16 text-slate-400 font-semibold animate-pulse">Đang nạp ca chạy...</div>
+        ) : assignmentType === 'standby_morning' ? (
+          <div className="text-center py-20 bg-yellow-50 rounded-2xl border border-yellow-100">
+            <span className="text-4xl block mb-4">☀️</span>
+            <p className="text-yellow-700 font-medium text-lg">Sẵn sàng hỗ trợ!</p>
+            <p className="text-yellow-800 font-bold text-2xl mt-2">Hôm nay bạn trực DỰ BỊ SÁNG</p>
+          </div>
+        ) : assignmentType === 'standby_afternoon' ? (
+          <div className="text-center py-20 bg-orange-50 rounded-2xl border border-orange-100">
+            <span className="text-4xl block mb-4">🌇</span>
+            <p className="text-orange-700 font-medium text-lg">Sẵn sàng hỗ trợ!</p>
+            <p className="text-orange-800 font-bold text-2xl mt-2">Hôm nay bạn trực DỰ BỊ CHIỀU</p>
+          </div>
+        ) : assignmentType === 'leave' ? (
+          <div className="text-center py-20 bg-red-50 rounded-2xl border border-red-100 shadow-inner">
+            <span className="text-4xl block mb-4 animate-bounce">🏖️</span>
+            <p className="text-red-700 font-medium text-lg">Đã duyệt nghỉ phép!</p>
+            <p className="text-red-800 font-bold text-2xl mt-2">Ngày hôm nay bạn ĐÃ XIN NGHỈ</p>
+            <p className="text-red-600 font-medium mt-2">Hãy tận hưởng ngày nghỉ của mình nhé!</p>
+          </div>
+        ) : assignmentType === 'off' ? (
+          <div className="text-center py-20 bg-green-50 rounded-2xl border border-green-100">
+            <span className="text-4xl block mb-4">🎉</span>
+            <p className="text-green-700 font-medium text-lg">Chúc mừng!</p>
+            <p className="text-green-800 font-bold text-2xl mt-2">Hôm nay bạn ĐƯỢC NGHỈ</p>
+            <p className="text-green-600 font-medium mt-2">Hãy dành thời gian nạp lại năng lượng nhé!</p>
+          </div>
         ) : trips.length === 0 ? (
           <div className="text-center py-20 text-slate-400 font-medium">
             📭 Bạn không có ca chạy nào được phân công trong ngày {new Date(filterDate).toLocaleDateString('vi-VN')}.
