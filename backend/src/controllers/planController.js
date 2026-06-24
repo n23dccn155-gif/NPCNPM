@@ -184,6 +184,16 @@ const planController = {
       );
       const leaves = leaveRes.rows;
 
+      const incidentRes = await pool.query(
+        `SELECT ir.*, u.full_name as reported_by_name, b.license_plate
+         FROM incident_reports ir
+         JOIN users u ON ir.reported_by = u.user_id
+         LEFT JOIN buses b ON ir.bus_id = b.bus_id
+         WHERE DATE(ir.created_at) = $1`,
+        [plan.operation_date]
+      );
+      plan.incidents = incidentRes.rows;
+
       // Enhance leaves with replacement info for this specific plan
       for (let l of leaves) {
         // Was this driver replaced or cleared in this plan?

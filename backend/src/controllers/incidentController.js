@@ -29,23 +29,91 @@ const incidentController = {
 
       // Nếu loại sự cố là hỏng xe (bus_broken), cập nhật trạng thái xe thành 'broken'
       if (incident_type === 'bus_broken' && bus_id) {
-        await client.query("UPDATE buses SET status = 'broken' WHERE bus_id = $1", [bus_id]);
-      }
+        await client.query("UPDATE buses SET status = 'maintenance' WHERE bus_id = $1", [bus_id]);
+        
+        if (trip_id) {
+          // Tách nhóm chuyến (trip_group)
+          const tripRes = await client.query("SELECT plan_id, group_id, scheduled_departure FROM trips WHERE trip_id = $1", [trip_id]);
+          if (tripRes.rows.length > 0) {
+            const brokenTrip = tripRes.rows[0];
+            const groupId = brokenTrip.group_id;
+            
+            if (groupId) {
+              // Cập nhật trạng thái chuyến bị hỏng thành 'cancelled' (hủy chuyến)
+              await client.query("UPDATE trips SET status = 'cancelled' WHERE trip_id = $1", [trip_id]);
 
-      // Tạo thông báo cho các điều phối viên (dispatcher) để xử lý khẩn cấp
-      const dispatchers = await client.query("SELECT user_id FROM users WHERE role = 'dispatcher' AND status = 'active'");
-      const content = `Tài xế ${driver.full_name} đã báo cáo sự cố loại "${incident_type}" ở xe ${bus_id || 'chưa rõ'}. Mô tả: ${description}`;
+              const oldGroupRes = await client.query("SELECT * FROM trip_groups WHERE group_id = $1", [groupId]);
+              if (oldGroupRes.rows.length > 0) {
+                const oldGroup = oldGroupRes.rows[0];
+                
+                // Lấy các chuyến còn lại SAU chuyến bị hỏng
+                const remainingTripsRes = await client.query(
+                  "SELECT trip_id, scheduled_departure, scheduled_arrival FROM trips WHERE group_id = $1 AND scheduled_departure > $2 ORDER BY scheduled_departure ASC",
+                  [groupId, brokenTrip.scheduled_departure]
+                );
+                
+                if (remainingTripsRes.rows.length > 0) {
+                  // Tạo nhóm mới
+                  const firstRemaining = remainingTripsRes.rows[0];
+                  const lastRemaining = remainingTripsRes.rows[remainingTripsRes.rows.length - 1];
+                  const newGroupRes = await client.query(
+                    `INSERT INTO trip_groups (plan_id, group_name, start_time, end_time, status)
+                     VALUES ($1, $2, $3, $4, 'unassigned') RETURNING group_id`,
+                    [oldGroup.plan_id, oldGroup.group_name + ' (Tách)', firstRemaining.scheduled_departure, lastRemaining.scheduled_arrival]
+                  );
+                  const newGroupId = newGroupRes.rows[0].group_id;
+                  
+                  // Cập nhật group_id cho các chuyến còn lại
+                  const remainingTripIds = remainingTripsRes.rows.map(t => t.trip_id);
+                  await client.query("UPDATE trips SET group_id = $1 WHERE trip_id = ANY($2::int[])", [newGroupId, remainingTripIds]);
+                  
+                  // Cập nhật end_time cho nhóm cũ
+                  const pastTripsRes = await client.query("SELECT scheduled_arrival FROM trips WHERE group_id = $1 ORDER BY scheduled_arrival DESC LIMIT 1", [groupId]);
+                  if (pastTripsRes.rows.length > 0) {
+                    await client.query("UPDATE trip_groups SET end_time = $1 WHERE group_id = $2", [pastTripsRes.rows[0].scheduled_arrival, groupId]);
+                  }
+                  
+                  // Tạo assignment mới (trống tài xế, trống xe để autoReallocateBuses tự điền) cho nhóm mới
+                  const oldAssignRes = await client.query("SELECT * FROM assignments WHERE group_id = $1 AND status = 'active'", [groupId]);
+                  if (oldAssignRes.rows.length > 0) {
+                    const oldAssign = oldAssignRes.rows[0];
+                    await client.query(
+                      `INSERT INTO assignments (plan_id, group_id, bus_id, driver_id, assignment_type, assigned_by, status)
+                       VALUES ($1, $2, NULL, NULL, $3, $4, 'active')`,
+                      [oldAssign.plan_id, newGroupId, oldAssign.assignment_type, oldAssign.assigned_by]
+                    );
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
       
-      for (let disp of dispatchers.rows) {
-        await client.query(
-          `INSERT INTO notifications (user_id, title, content) 
-           VALUES ($1, 'Sự cố khẩn cấp', $2)`,
-          [disp.user_id, content]
-        );
-      }
+      // ...
+        // Tạo thông báo cho các điều phối viên
+        const dispatchers = await client.query("SELECT user_id FROM users WHERE role = 'dispatcher' AND status = 'active'");
+        const content = `Tài xế ${driver.full_name} đã báo cáo sự cố loại "${incident_type}" ở xe ${bus_id || 'chưa rõ'}. Mô tả: ${description}`;
+        
+        for (let disp of dispatchers.rows) {
+          await client.query(
+            `INSERT INTO notifications (user_id, title, content) 
+             VALUES ($1, 'Sự cố khẩn cấp', $2)`,
+            [disp.user_id, content]
+          );
+        }
 
-      await client.query('COMMIT');
-      return success(res, result.rows[0], 'Gửi báo cáo sự cố thành công', 201);
+        await client.query('COMMIT');
+        
+        // Kích hoạt thuật toán dồn toa SAU KHI ĐÃ COMMIT để transaction khác nhìn thấy data
+        const assignmentController = require('./assignmentController');
+        const rbRes = await client.query("SELECT route_code FROM route_buses WHERE bus_id = $1", [bus_id]);
+        if (rbRes.rows.length > 0) {
+           const routeCode = rbRes.rows[0].route_code;
+           await assignmentController.autoReallocateBuses(routeCode, bus_id).catch(e => console.error(e));
+        }
+
+        return success(res, result.rows[0], 'Gửi báo cáo sự cố thành công', 201);
     } catch (err) {
       await client.query('ROLLBACK');
       next(err);

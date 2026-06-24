@@ -156,7 +156,7 @@ CREATE TABLE assignments (
     plan_id INT NOT NULL,
     group_id INT,
     bus_id INT,
-    driver_id INT NOT NULL,
+    driver_id INT,
     assignment_type VARCHAR(20) NOT NULL DEFAULT 'main', -- main, standby_morning, standby_afternoon
     assigned_by INT NOT NULL,
     status VARCHAR(30) NOT NULL DEFAULT 'active' -- active, replaced, cancelled
@@ -180,7 +180,8 @@ CREATE TABLE incident_reports (
     trip_id INT,
     incident_type VARCHAR(30) NOT NULL, -- bus_broken, delay, cancelled, other
     description TEXT,
-    status VARCHAR(20) NOT NULL DEFAULT 'pending' -- pending, processing, resolved
+    status VARCHAR(20) NOT NULL DEFAULT 'pending', -- pending, processing, resolved
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 14. Bảng notifications: Lưu thông báo nội bộ dạng chuông

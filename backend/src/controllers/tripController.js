@@ -100,7 +100,7 @@ const tripController = {
       }
 
       const result = await pool.query(
-        `SELECT t.*, tg.group_name, rd.direction_type, rd.start_point, rd.end_point, b.license_plate
+        `SELECT t.*, tg.group_name, rd.direction_type, rd.start_point, rd.end_point, b.bus_id, b.license_plate
          FROM trips t
          JOIN operation_plans p ON t.plan_id = p.plan_id
          JOIN trip_groups tg ON t.group_id = tg.group_id

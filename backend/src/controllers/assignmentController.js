@@ -89,7 +89,7 @@ async function checkGroupAssignmentConditions(group_id, bus_id, driver_id, exclu
     SELECT tg.group_id, tg.group_name, tg.start_time, tg.end_time 
     FROM assignments a
     JOIN trip_groups tg ON a.group_id = tg.group_id
-    WHERE a.driver_id = $1 AND a.status = 'active' AND tg.group_id != $2
+    WHERE a.driver_id = $1 AND a.status = 'active' AND tg.group_id != $2 AND a.assignment_type != 'standby_morning' AND a.assignment_type != 'standby_afternoon'
   `;
   const driverOverlapParams = [driver_id, group_id];
   if (excluded_assignment_id) {
@@ -667,6 +667,160 @@ const assignmentController = {
     } finally {
       client.release();
     }
+  },
+
+  autoReallocateBuses: async (routeCode, brokenBusId, currentTime = new Date(), skipToday = false) => {
+      const client = await pool.connect();
+      try {
+          await client.query('BEGIN');
+          const todayStr = new Date(currentTime.getTime() - currentTime.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+          
+          let dateCondition = "operation_date >= $2";
+          if (skipToday) {
+              dateCondition = "operation_date > $2"; // Only tomorrow and onwards
+          }
+
+          // 1. Find all plans for the route from the relevant date onwards
+          const plansRes = await client.query(
+              `SELECT plan_id, operation_date FROM operation_plans 
+               WHERE route_code = $1 AND ${dateCondition} AND status = 'approved'
+               ORDER BY operation_date ASC`,
+              [routeCode, todayStr]
+          );
+
+          if (plansRes.rows.length === 0) {
+              await client.query('ROLLBACK');
+              return;
+          }
+
+          const minRestTimeRes = await client.query(`SELECT min_rest_time_minutes FROM routes WHERE route_code = $1`, [routeCode]);
+          const minRestTime = minRestTimeRes.rows[0]?.min_rest_time_minutes || 15;
+
+          // Active pool
+          const busesRes = await client.query(
+              `SELECT b.bus_id FROM buses b 
+               JOIN route_buses rb ON b.bus_id = rb.bus_id
+               WHERE rb.route_code = $1 AND b.status = 'active' AND b.bus_id != $2`,
+              [routeCode, brokenBusId]
+          );
+          const activeBuses = busesRes.rows.map(b => b.bus_id);
+
+          for (const plan of plansRes.rows) {
+              const planDate = new Date(plan.operation_date);
+              const planDateStr = new Date(planDate.getTime() - planDate.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+              const isToday = planDateStr === todayStr;
+              console.log(`[autoReallocate] plan_id=${plan.plan_id}, planDateStr=${planDateStr}, todayStr=${todayStr}, isToday=${isToday}`);
+
+              // Fetch all main assignments for the plan
+              const assignRes = await client.query(
+                  `SELECT a.assignment_id, a.group_id, a.bus_id, tg.start_time, tg.end_time 
+                   FROM assignments a
+                   JOIN trip_groups tg ON a.group_id = tg.group_id
+                   WHERE a.plan_id = $1 AND a.assignment_type = 'main' AND a.status = 'active'
+                   ORDER BY tg.start_time ASC`,
+                  [plan.plan_id]
+              );
+
+              if (assignRes.rows.length === 0) continue;
+
+              const assignments = assignRes.rows;
+
+              if (isToday) {
+                  // PHASE 1: Cascade Reallocation for Today
+                  const runningAssignments = [];
+                  const unstartedAssignments = [];
+
+                  for (const a of assignments) {
+                      if (a.bus_id === null) {
+                          unstartedAssignments.push(a);
+                      } else if (new Date(a.start_time) <= currentTime) {
+                          runningAssignments.push(a);
+                      } else {
+                          unstartedAssignments.push(a);
+                      }
+                  }
+
+                  const busState = {};
+                  for (const b of activeBuses) {
+                      busState[b] = { bus_id: b, availableTime: 0, shiftCount: 0 };
+                  }
+
+                  // Initialize busState with running assignments
+                  for (const a of runningAssignments) {
+                      if (a.bus_id === brokenBusId) continue; // broken bus is ignored in pool
+                      if (!busState[a.bus_id]) {
+                          busState[a.bus_id] = { bus_id: a.bus_id, availableTime: 0, shiftCount: 0 };
+                      }
+                      const endMin = new Date(a.end_time).getHours() * 60 + new Date(a.end_time).getMinutes();
+                      busState[a.bus_id].availableTime = Math.max(busState[a.bus_id].availableTime, endMin + minRestTime);
+                      busState[a.bus_id].shiftCount += 1;
+                  }
+
+                  // Reallocate for unstarted assignments
+                  const busStateArr = Object.values(busState);
+                  for (const a of unstartedAssignments) {
+                      const startMin = new Date(a.start_time).getHours() * 60 + new Date(a.start_time).getMinutes();
+                      const endMin = new Date(a.end_time).getHours() * 60 + new Date(a.end_time).getMinutes();
+
+                      let candidateBuses = busStateArr.filter(b => b.availableTime <= startMin);
+                      if (candidateBuses.length === 0) candidateBuses = busStateArr;
+
+                      candidateBuses.sort((b1, b2) => {
+                          if (b1.availableTime !== b2.availableTime) return b1.availableTime - b2.availableTime;
+                          return b1.shiftCount - b2.shiftCount;
+                      });
+
+                      const selectedBus = candidateBuses[0];
+                      if (a.bus_id !== selectedBus.bus_id) {
+                          await client.query(
+                              `UPDATE assignments SET bus_id = $1 WHERE assignment_id = $2`,
+                              [selectedBus.bus_id, a.assignment_id]
+                          );
+                      }
+                      selectedBus.shiftCount += 1;
+                      selectedBus.availableTime = Math.max(selectedBus.availableTime, endMin + minRestTime);
+                  }
+
+              } else {
+                  // PHASE 2: Tomorrow onwards (Simple Patching)
+                  const busState = {};
+                  for (const b of activeBuses) {
+                      busState[b] = { bus_id: b, availableTime: 0, shiftCount: 0 };
+                  }
+                  const busStateArr = Object.values(busState);
+
+                  for (const a of assignments) {
+                      const startMin = new Date(a.start_time).getHours() * 60 + new Date(a.start_time).getMinutes();
+                      const endMin = new Date(a.end_time).getHours() * 60 + new Date(a.end_time).getMinutes();
+
+                      let candidateBuses = busStateArr.filter(b => b.availableTime <= startMin);
+                      if (candidateBuses.length === 0) candidateBuses = busStateArr;
+
+                      candidateBuses.sort((b1, b2) => {
+                          if (b1.availableTime !== b2.availableTime) return b1.availableTime - b2.availableTime;
+                          return b1.shiftCount - b2.shiftCount;
+                      });
+
+                      const selectedBus = candidateBuses[0];
+                      if (a.bus_id !== selectedBus.bus_id) {
+                          await client.query(
+                              `UPDATE assignments SET bus_id = $1 WHERE assignment_id = $2`,
+                              [selectedBus.bus_id, a.assignment_id]
+                          );
+                      }
+                      selectedBus.shiftCount += 1;
+                      selectedBus.availableTime = Math.max(selectedBus.availableTime, endMin + minRestTime);
+                  }
+              }
+          }
+          await client.query('COMMIT');
+          console.log(`Auto-reallocation completed for broken bus ${brokenBusId} on route ${routeCode}`);
+      } catch (err) {
+          await client.query('ROLLBACK');
+          console.error("Auto-reallocation failed:", err);
+      } finally {
+          client.release();
+      }
   }
 };
 
