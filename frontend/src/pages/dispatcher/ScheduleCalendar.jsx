@@ -105,11 +105,38 @@ export default function ScheduleCalendar() {
     const isLeaveDriver = (name) => leaves.some(l => l.driver_name === name);
     
     const leaveAlert = leaves.length > 0 ? (
-      <div className="mb-4 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
-        <h3 className="font-bold text-red-800">Cảnh báo Nghỉ phép</h3>
-        <p className="text-sm text-red-700">Các tài xế sau đã được duyệt nghỉ phép vào ngày này. Vui lòng gỡ phân công và kéo thả tài xế dự bị để thay thế:</p>
-        <ul className="list-disc list-inside text-sm text-red-600 mt-1">
-          {leaves.map(l => <li key={l.leave_id} className="font-semibold">{l.driver_name} (Lý do: {l.reason || 'Không có'})</li>)}
+      <div className="mb-4 bg-orange-50 border-l-4 border-orange-500 p-4 rounded-r-lg">
+        <h3 className="font-bold text-orange-800">Thông tin Nghỉ phép</h3>
+        <p className="text-sm text-orange-700">Trạng thái các tài xế xin nghỉ trong ngày:</p>
+        <ul className="list-disc list-inside text-sm mt-2 space-y-1">
+          {leaves.map(l => {
+            if (l.not_scheduled) {
+              return (
+                <li key={l.leave_id} className="text-gray-500 italic">
+                  {l.driver_name} <span className="text-sm">(Có lịch nghỉ nhưng hôm nay không được phân công tuyến này)</span>
+                </li>
+              );
+            } else if (l.replaced_by) {
+              return (
+                <li key={l.leave_id} className="text-green-700">
+                  <span className="font-bold line-through text-gray-500 mr-2">{l.driver_name}</span> 
+                  đã được thay thế bởi <span className="font-bold">{l.replaced_by}</span>
+                </li>
+              );
+            } else if (l.cleared) {
+              return (
+                <li key={l.leave_id} className="text-orange-600 font-semibold">
+                  {l.driver_name} <span className="font-normal">(Đã gỡ phân công, đang chờ kéo thả tài xế dự bị)</span>
+                </li>
+              );
+            } else {
+              return (
+                <li key={l.leave_id} className="text-red-600 font-bold">
+                  {l.driver_name} <span className="font-normal text-red-500">(Đang được phân công chạy. Vui lòng gỡ [✕] và thay thế!)</span>
+                </li>
+              );
+            }
+          })}
         </ul>
       </div>
     ) : null;

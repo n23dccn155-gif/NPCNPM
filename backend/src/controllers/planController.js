@@ -182,7 +182,41 @@ const planController = {
          WHERE l.leave_date = $1 AND l.status = 'approved'`,
         [plan.operation_date]
       );
-      plan.approved_leaves = leaveRes.rows;
+      const leaves = leaveRes.rows;
+
+      // Enhance leaves with replacement info for this specific plan
+      for (let l of leaves) {
+        // Was this driver replaced or cleared in this plan?
+        const oldAssigRes = await pool.query(
+          `SELECT group_id FROM assignments WHERE plan_id = $1 AND driver_id = $2 AND status = 'replaced'`,
+          [planId, l.driver_id]
+        );
+        if (oldAssigRes.rows.length > 0) {
+          const groupId = oldAssigRes.rows[0].group_id;
+          const activeAssigRes = await pool.query(
+            `SELECT a.driver_id, d.full_name as driver_name 
+             FROM assignments a JOIN drivers d ON a.driver_id = d.driver_id 
+             WHERE a.group_id = $1 AND a.status = 'active'`,
+            [groupId]
+          );
+          if (activeAssigRes.rows.length > 0) {
+            l.replaced_by = activeAssigRes.rows[0].driver_name;
+          } else {
+            l.cleared = true;
+          }
+        }
+        
+        // Is driver currently actively assigned in this plan?
+        const currentAssigRes = await pool.query(
+          `SELECT group_id FROM assignments WHERE plan_id = $1 AND driver_id = $2 AND status = 'active'`,
+          [planId, l.driver_id]
+        );
+        l.is_active_in_plan = currentAssigRes.rows.length > 0;
+        l.not_scheduled = !l.is_active_in_plan && !l.replaced_by && !l.cleared;
+      }
+
+      // Show all approved leaves for the day, even if not scheduled
+      plan.approved_leaves = leaves;
 
       return success(res, plan);
     } catch (err) {

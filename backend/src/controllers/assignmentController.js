@@ -288,6 +288,20 @@ const assignmentController = {
       const result = await client.query("INSERT INTO assignments (plan_id, group_id, bus_id, driver_id, assignment_type, assigned_by, status) VALUES ($1, $2, $3, $4, 'main', $5, 'active') RETURNING *", [plan_id_to_assign, group_id, bus_id_to_assign, new_driver_id, dispatcher_id]);
       await client.query("UPDATE trip_groups SET status = 'assigned' WHERE group_id = $1", [group_id]);
       await client.query("UPDATE trips SET status = 'assigned' WHERE group_id = $1", [group_id]);
+      
+      // Gửi thông báo cho tài xế mới được kéo vào
+      const newDriverUserRes = await client.query('SELECT user_id FROM drivers WHERE driver_id = $1', [new_driver_id]);
+      if (newDriverUserRes.rows.length > 0) {
+        const newDriverUserId = newDriverUserRes.rows[0].user_id;
+        const groupRes = await client.query('SELECT group_name FROM trip_groups WHERE group_id = $1', [group_id]);
+        const groupName = groupRes.rows.length ? groupRes.rows[0].group_name : '';
+        
+        await client.query(
+          `INSERT INTO notifications (user_id, title, content) VALUES ($1, $2, $3)`,
+          [newDriverUserId, 'Phân công lại ca chạy', `Bạn đã được điều phối viên chuyển từ vị trí dự bị sang chạy chính thức cho Nhóm chuyến ${groupName}. Vui lòng kiểm tra lịch trình của mình!`]
+        );
+      }
+
       await client.query('COMMIT');
       return res.status(200).json({ success: true, data: result.rows[0], message: 'Thay thế tài xế thành công' });
     } catch (err) {
