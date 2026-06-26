@@ -112,20 +112,28 @@ export default function RouteList() {
     setShowModal(true);
   };
 
-  const buildPayload = () => ({
-    route_name: form.route_name.trim(),
-    start_time: form.start_time,
-    end_time: form.end_time,
-    expected_trips_per_day: Math.floor((timeToMinutes(form.end_time) - timeToMinutes(form.start_time)) / Number(form.headway_minutes)) + 1,
-    headway_minutes: Number(form.headway_minutes),
-    confirmed_operating_buses: Number(form.confirmed_operating_buses),
-    outbound_start_point: form.outbound_start_point.trim(),
-    outbound_end_point: form.outbound_end_point.trim(),
-    outbound_distance: form.outbound_distance ? Number(form.outbound_distance) : null,
-    inbound_start_point: form.inbound_start_point.trim(),
-    inbound_end_point: form.inbound_end_point.trim(),
-    inbound_distance: form.inbound_distance ? Number(form.inbound_distance) : null
-  });
+  const buildPayload = () => {
+    const rtt = (Number(form.travel_time_minutes) * 2) + (Number(form.short_layover_minutes) * 2);
+    const hWay = Number(form.headway_minutes);
+    const baseBuses = (hWay > 0 && rtt > 0) ? Math.ceil(rtt / hWay) : 0;
+    const recoveryBuses = Math.ceil(baseBuses * (Number(form.standby_ratio) || 0));
+    const autoConfirmedBuses = baseBuses + recoveryBuses;
+
+    return {
+      route_name: form.route_name.trim(),
+      start_time: form.start_time,
+      end_time: form.end_time,
+      expected_trips_per_day: Math.floor((timeToMinutes(form.end_time) - timeToMinutes(form.start_time)) / Number(form.headway_minutes)) + 1,
+      headway_minutes: Number(form.headway_minutes),
+      confirmed_operating_buses: autoConfirmedBuses,
+      outbound_start_point: form.outbound_start_point.trim(),
+      outbound_end_point: form.outbound_end_point.trim(),
+      outbound_distance: form.outbound_distance ? Number(form.outbound_distance) : null,
+      inbound_start_point: form.inbound_start_point.trim(),
+      inbound_end_point: form.inbound_end_point.trim(),
+      inbound_distance: form.inbound_distance ? Number(form.inbound_distance) : null
+    };
+  };
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -136,10 +144,6 @@ export default function RouteList() {
     }
     if (Number(form.headway_minutes) <= 0) {
       setFormError('Giãn cách khai thác phải lớn hơn 0');
-      return;
-    }
-    if (editingSuggestedBuses && Number(form.confirmed_operating_buses) < editingSuggestedBuses) {
-      setFormError(`Số xe vận doanh xác nhận phải từ ${editingSuggestedBuses} xe trở lên theo thời gian vòng xe hiện tại`);
       return;
     }
     try {
@@ -192,8 +196,7 @@ export default function RouteList() {
   const editingBackupBuses = Math.ceil(editingSuggestedBuses * (Number(form.backup_bus_ratio) || 0));
   const editingTotalBuses = editingSuggestedBuses + editingBackupBuses;
 
-  const operatingBuses = Number(form.confirmed_operating_buses) || 0;
-  const mainShifts = operatingBuses * 2;
+  const mainShifts = editingBaseBuses * 2;
   const standbyCount = Math.ceil(mainShifts * (Number(form.standby_ratio) || 0));
   const dailyDrivers = mainShifts + standbyCount;
   const weeklyDrivers = Math.ceil(dailyDrivers * 7 / 6);
@@ -323,20 +326,10 @@ export default function RouteList() {
               <h4 className="text-sm font-semibold text-gray-700 mb-2">Lượt đi (Outbound)</h4>
               <div className="space-y-2">
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Điểm đầu - cuối</label>
+                  <label className="block text-xs text-gray-600 mb-1">Điểm đầu - cuối *</label>
                   <div className="flex gap-2">
-                    <input
-                      value={form.outbound_start_point}
-                      onChange={e => setForm({ ...form, outbound_start_point: e.target.value, inbound_end_point: e.target.value })}
-                      placeholder="Bến A"
-                      className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none"
-                    />
-                    <input
-                      value={form.outbound_end_point}
-                      onChange={e => setForm({ ...form, outbound_end_point: e.target.value, inbound_start_point: e.target.value })}
-                      placeholder="Bến B"
-                      className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none"
-                    />
+                    <input value={form.outbound_start_point} onChange={e => setForm({ ...form, outbound_start_point: e.target.value })} placeholder="Bến A" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" required />
+                    <input value={form.outbound_end_point} onChange={e => setForm({ ...form, outbound_end_point: e.target.value })} placeholder="Bến B" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" required />
                   </div>
                 </div>
                 <div className="space-y-3 mt-3">
@@ -351,10 +344,10 @@ export default function RouteList() {
               <h4 className="text-sm font-semibold text-gray-700 mb-2">Lượt về (Inbound)</h4>
               <div className="space-y-2">
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Điểm đầu - cuối</label>
+                  <label className="block text-xs text-gray-600 mb-1">Điểm đầu - cuối *</label>
                   <div className="flex gap-2">
-                    <input value={form.inbound_start_point} onChange={e => setForm({ ...form, inbound_start_point: e.target.value })} placeholder="Bến B" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
-                    <input value={form.inbound_end_point} onChange={e => setForm({ ...form, inbound_end_point: e.target.value })} placeholder="Bến A" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
+                    <input value={form.inbound_start_point} onChange={e => setForm({ ...form, inbound_start_point: e.target.value })} placeholder="Bến B" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" required />
+                    <input value={form.inbound_end_point} onChange={e => setForm({ ...form, inbound_end_point: e.target.value })} placeholder="Bến A" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" required />
                   </div>
                 </div>
                 <div className="space-y-3 mt-3">
@@ -425,23 +418,19 @@ export default function RouteList() {
             )}
           </div>
           <div>
-              <div className="flex items-center justify-between gap-4">
-                <label className="text-sm font-medium text-gray-700 w-1/3">Số ca (Nhóm xe) mong muốn *</label>
-                <input
-                  type="number"
-                  value={form.confirmed_operating_buses}
-                  onChange={(e) => setForm({ ...form, confirmed_operating_buses: e.target.value })}
-                  required
-                  min={1}
-                  className="w-2/3 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="flex justify-end mt-1">
-                <div className="w-2/3 text-xs text-amber-600 font-medium">
-                  Tính toán Gợi ý: {editingBaseBuses} xe nền + {editingRecoveryBuses} xe trám = {editingSuggestedBuses} Ca chạy
-                </div>
+            <div className="flex items-center justify-between gap-4">
+              <label className="text-sm font-medium text-gray-700 w-1/3">Tổng xe dự kiến huy động</label>
+              <div className="w-2/3 flex items-center justify-between border border-gray-100 bg-gray-50 rounded-xl px-3 py-2 text-sm text-gray-700 font-medium">
+                <span>{editingSuggestedBuses} xe</span>
+                <span className="text-xs text-amber-600 font-normal">({editingBaseBuses} xe nền + {editingRecoveryBuses} xe trám)</span>
               </div>
             </div>
+            <div className="flex justify-end mt-1">
+              <div className="w-2/3 text-xs text-gray-500 italic">
+                Hệ thống tự động tính toán số xe cần thiết dựa trên thời gian vòng xe và giãn cách chuyến.
+              </div>
+            </div>
+          </div>
 
           <div className="flex items-center justify-between gap-4">
             <label className="text-sm font-medium text-gray-700 w-1/3">Trạng thái *</label>

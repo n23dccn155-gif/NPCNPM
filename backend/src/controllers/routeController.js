@@ -376,16 +376,6 @@ const routeController = {
       }
 
       const suggestedOperatingBuses = await getSuggestedOperatingBuses(routeCode, routeHeadway);
-      if (
-        suggestedOperatingBuses !== null &&
-        Number(confirmed_operating_buses) < suggestedOperatingBuses
-      ) {
-        return error(
-          res,
-          `So xe van doanh xac nhan phai lon hon hoac bang so xe toi thieu he thong goi y (${suggestedOperatingBuses})`,
-          400
-        );
-      }
 
       const client = await pool.connect();
       try {

@@ -173,12 +173,21 @@ export default function RouteDriverManage() {
 
           <div className="lg:col-span-3 space-y-6">
             {selectedRoute ? (() => {
-              const mainShifts = (selectedRoute.confirmed_operating_buses || 0) * 2;
+              const travelTime = Number(selectedRoute.travel_time_minutes || 0);
+              const shortLayover = Number(selectedRoute.short_layover_minutes || 0);
+              const headway = Number(selectedRoute.headway_minutes || 1);
+              const minRestTime = Number(selectedRoute.min_rest_time_minutes || 60);
+              const baseBuses = (headway > 0 && travelTime > 0) ? Math.ceil((travelTime * 2 + shortLayover * 2) / headway) : 0;
+              
+              const requiredRecoveryBuses = headway > 0 ? Math.ceil(minRestTime / headway) : 0;
+              const suggestedOperatingBuses = baseBuses + requiredRecoveryBuses;
+              const requiredBackupBuses = Math.ceil(suggestedOperatingBuses * Number(selectedRoute.backup_bus_ratio || 0));
+              const requiredTotalBuses = suggestedOperatingBuses + requiredBackupBuses;
+
+              const mainShifts = baseBuses * 2;
               const standbyCount = Math.ceil(mainShifts * Number(selectedRoute.standby_ratio || 0));
               const requiredDriversDaily = mainShifts + standbyCount;
               const minWeeklyDrivers = Math.ceil((requiredDriversDaily * 7) / 6);
-              
-              const requiredTotalBuses = selectedRoute.required_total_buses || selectedRoute.confirmed_operating_buses || 0;
 
               const unassignedDrivers = drivers.filter(d => d.status === 'working' && !routeDrivers.some(rd => rd.driver_id === d.driver_id));
               const unassignedBuses = buses.filter(b => b.status === 'active' && !routeBuses.some(rb => rb.bus_id === b.bus_id));
