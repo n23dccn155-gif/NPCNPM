@@ -35,7 +35,7 @@ const incidentController = {
       // Tạo thông báo cho các điều phối viên (dispatcher) để xử lý khẩn cấp
       const dispatchers = await client.query("SELECT user_id FROM users WHERE role = 'dispatcher' AND status = 'active'");
       const content = `Tài xế ${driver.full_name} đã báo cáo sự cố loại "${incident_type}" ở xe ${bus_id || 'chưa rõ'}. Mô tả: ${description}`;
-      
+      const { broadcast } = require('../sockets/socketManager');
       for (let disp of dispatchers.rows) {
         await client.query(
           `INSERT INTO notifications (user_id, title, content) 
@@ -43,6 +43,7 @@ const incidentController = {
           [disp.user_id, content]
         );
       }
+      broadcast('NEW_INCIDENT', { title: 'Sự cố khẩn cấp', content });
 
       await client.query('COMMIT');
       return success(res, result.rows[0], 'Gửi báo cáo sự cố thành công', 201);
@@ -120,11 +121,14 @@ const incidentController = {
       // Thông báo lại cho tài xế/người báo gửi báo cáo
       const reporterId = incident.reported_by;
       if (reporterId) {
+        const content = `Báo cáo sự cố của bạn đã được chuyển sang trạng thái: ${status}.`;
         await pool.query(
           `INSERT INTO notifications (user_id, title, content) 
            VALUES ($1, 'Cập nhật xử lý sự cố', $2)`,
-          [reporterId, `Báo cáo sự cố của bạn đã được chuyển sang trạng thái: ${status}.`]
+          [reporterId, content]
         );
+        const { emitToUser } = require('../sockets/socketManager');
+        emitToUser(reporterId, 'NEW_NOTIFICATION', { title: 'Cập nhật xử lý sự cố', content });
       }
 
       return success(res, result.rows[0], 'Cập nhật trạng thái sự cố thành công');

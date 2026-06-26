@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useContext } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { SocketContext } from '../context/SocketContext';
 import { useNavigate } from 'react-router-dom';
 import { getMyNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '../services/notificationService';
+import { toast } from 'react-toastify';
 
 const roleLabel = {
   manager: 'Quản lý vận hành',
@@ -21,6 +23,8 @@ export default function Topbar() {
   const [notifications, setNotifications] = useState([]);
   const [showNotif, setShowNotif] = useState(false);
 
+  const { socket } = useContext(SocketContext);
+
   async function loadNotifications() {
     try {
       const res = await getMyNotifications(true); // Chỉ lấy chưa đọc
@@ -30,14 +34,50 @@ export default function Topbar() {
     }
   }
 
+  // Tiếng chuông báo hiệu
+  const playSound = () => {
+    try {
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+      audio.play().catch(e => console.warn('Trình duyệt chặn âm thanh:', e));
+    } catch(e) {}
+  };
+
   useEffect(() => {
     if (user) {
       loadNotifications();
-      // Polling notifications every 30 seconds
-      const interval = setInterval(loadNotifications, 30000);
-      return () => clearInterval(interval);
     }
   }, [user]);
+
+  useEffect(() => {
+    if (socket) {
+      const handleNotification = (data) => {
+        // Có thông báo mới
+        toast.info(data.title + ': ' + data.content, {
+          position: "top-right",
+          autoClose: 5000
+        });
+        playSound();
+        loadNotifications(); // Reload danh sách
+      };
+
+      const handleIncident = (data) => {
+        toast.error(data.title + ': ' + data.content, {
+          position: "top-right",
+          autoClose: 8000
+        });
+        playSound();
+        loadNotifications();
+      };
+
+      socket.on('NEW_NOTIFICATION', handleNotification);
+      socket.on('NEW_INCIDENT', handleIncident);
+
+      return () => {
+        socket.off('NEW_NOTIFICATION', handleNotification);
+        socket.off('NEW_INCIDENT', handleIncident);
+      };
+    }
+  }, [socket]);
 
   const handleMarkAsRead = async (id) => {
     try {

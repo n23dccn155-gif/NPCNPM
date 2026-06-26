@@ -190,6 +190,19 @@ const assignmentController = {
       await client.query("UPDATE trips SET status = 'assigned' WHERE group_id = $1", [group_id]);
 
       await client.query('COMMIT');
+      
+      try {
+        const { emitToUser } = require('../sockets/socketManager');
+        const driverUser = await pool.query("SELECT user_id FROM drivers WHERE driver_id = $1", [driver_id]);
+        if (driverUser.rows.length) {
+          const content = `Bạn vừa được phân công một lịch chạy mới.`;
+          await pool.query(
+            `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Phân công mới', $2)`,
+            [driverUser.rows[0].user_id, content]
+          );
+          emitToUser(driverUser.rows[0].user_id, 'NEW_NOTIFICATION', { title: 'Phân công mới', content });
+        }
+      } catch (e) { console.error('Socket error:', e); }
       return success(res, result.rows[0], 'Phân công xe và tài xế thành công', 201);
     } catch (err) {
       await client.query('ROLLBACK');
@@ -266,29 +279,38 @@ const assignmentController = {
       const newDriverUser = await client.query("SELECT user_id FROM drivers WHERE driver_id = $1", [new_driver_id]);
 
       if (oldDriverUser.rows.length) {
+        const content = `Lịch phân công ngày ${dateStr} của bạn đã được chuyển cho tài xế khác.`;
         await client.query(
           `INSERT INTO notifications (user_id, title, content) 
            VALUES ($1, 'Thay đổi lịch phân công', $2)`,
-          [oldDriverUser.rows[0].user_id, `Lịch phân công ngày ${dateStr} của bạn đã được chuyển cho tài xế khác.`]
+          [oldDriverUser.rows[0].user_id, content]
         );
+        const { emitToUser } = require('../sockets/socketManager');
+        emitToUser(oldDriverUser.rows[0].user_id, 'NEW_NOTIFICATION', { title: 'Thay đổi lịch phân công', content });
       }
       if (newDriverUser.rows.length) {
+        const content = `Bạn được phân công thay thế cho ngày ${dateStr}.`;
         await client.query(
           `INSERT INTO notifications (user_id, title, content) 
            VALUES ($1, 'Lịch phân công thay thế', $2)`,
-          [newDriverUser.rows[0].user_id, `Bạn được phân công thay thế cho ngày ${dateStr}.`]
+          [newDriverUser.rows[0].user_id, content]
         );
+        const { emitToUser } = require('../sockets/socketManager');
+        emitToUser(newDriverUser.rows[0].user_id, 'NEW_NOTIFICATION', { title: 'Lịch phân công thay thế', content });
       }
 
       // Gửi thông báo cho Quản lý vận hành
       const managers = await client.query("SELECT user_id FROM users WHERE role = 'manager' AND status = 'active'");
+      const { broadcast } = require('../sockets/socketManager');
       for (let mgr of managers.rows) {
+        const content = `Điều phối đã thay đổi tài xế cho nhóm chuyến ${check.group.group_name} ngày ${dateStr}.`;
         await client.query(
           `INSERT INTO notifications (user_id, title, content) 
            VALUES ($1, 'Thay đổi tài xế', $2)`,
-          [mgr.user_id, `Điều phối đã thay đổi tài xế cho nhóm chuyến ${check.group.group_name} ngày ${dateStr}.`]
+          [mgr.user_id, content]
         );
       }
+      broadcast('NEW_NOTIFICATION', { title: 'Thay đổi tài xế', content: `Điều phối đã thay đổi tài xế ngày ${dateStr}.` });
 
       await client.query('COMMIT');
       return success(res, result.rows[0], 'Thay thế tài xế thành công');
@@ -353,21 +375,27 @@ const assignmentController = {
 
       const driverUser = await client.query("SELECT user_id FROM drivers WHERE driver_id = $1", [oldAssignment.driver_id]);
       if (driverUser.rows.length) {
+        const content = `Xe phân công ngày ${dateStr} của bạn đã được đổi sang xe khác do sự cố.`;
         await client.query(
           `INSERT INTO notifications (user_id, title, content) 
            VALUES ($1, 'Thay đổi xe phân công', $2)`,
-          [driverUser.rows[0].user_id, `Xe phân công ngày ${dateStr} của bạn đã được đổi sang xe khác do sự cố.`]
+          [driverUser.rows[0].user_id, content]
         );
+        const { emitToUser } = require('../sockets/socketManager');
+        emitToUser(driverUser.rows[0].user_id, 'NEW_NOTIFICATION', { title: 'Thay đổi xe phân công', content });
       }
 
       const managers = await client.query("SELECT user_id FROM users WHERE role = 'manager' AND status = 'active'");
+      const { broadcast } = require('../sockets/socketManager');
       for (let mgr of managers.rows) {
+        const content = `Điều phối đã thay đổi xe vận doanh cho nhóm chuyến ${check.group.group_name} ngày ${dateStr}.`;
         await client.query(
           `INSERT INTO notifications (user_id, title, content) 
            VALUES ($1, 'Thay đổi xe vận hành', $2)`,
-          [mgr.user_id, `Điều phối đã thay đổi xe vận doanh cho nhóm chuyến ${check.group.group_name} ngày ${dateStr}.`]
+          [mgr.user_id, content]
         );
       }
+      broadcast('NEW_NOTIFICATION', { title: 'Thay đổi xe vận hành', content: `Điều phối đã thay đổi xe ngày ${dateStr}.` });
 
       await client.query('COMMIT');
       return success(res, result.rows[0], 'Thay thế xe thành công');
