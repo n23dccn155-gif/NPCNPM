@@ -7,9 +7,9 @@ const role = require('../middlewares/roleMiddleware');
 
 // Bus stops
 router.get('/directions/:directionId/stops', auth, routeController.getStopsByDirection);
-router.post('/stops', auth, role(['manager', 'dispatcher']), routeController.createStop);
-router.put('/stops/:stopId', auth, role(['manager', 'dispatcher']), routeController.updateStop);
-router.delete('/stops/:stopId', auth, role(['manager', 'dispatcher']), routeController.deleteStop);
+router.post('/stops', auth, role(['manager']), routeController.createStop);
+router.put('/stops/:stopId', auth, role(['manager']), routeController.updateStop);
+router.delete('/stops/:stopId', auth, role(['manager']), routeController.deleteStop);
 
 // Route directions
 router.get('/:routeCode/directions', auth, routeController.getDirectionsByRoute);
@@ -25,12 +25,12 @@ router.patch('/:routeCode/status', auth, role(['manager']), routeController.upda
 router.delete('/:routeCode', auth, role(['manager']), routeController.deleteRoute);
 
 // Batch schedule generation
-router.post('/:routeCode/generate-schedule', auth, role(['manager']), batchController.generate2Months);
+router.post('/:routeCode/generate-schedule', auth, role(['manager', 'dispatcher']), batchController.generate2Months);
 
 // Route buses
-router.post('/:routeCode/buses', auth, role(['manager']), routeController.addBusToRoute);
+router.post('/:routeCode/buses', auth, role(['manager', 'dispatcher']), routeController.addBusToRoute);
 router.get('/:routeCode/buses', auth, routeController.getRouteBuses);
-router.delete('/:routeCode/buses/:busId', auth, role(['manager']), routeController.removeBusFromRoute);
+router.delete('/:routeCode/buses/:busId', auth, role(['manager', 'dispatcher']), routeController.removeBusFromRoute);
 
 // Route drivers
 router.post('/:routeCode/drivers', auth, role(['manager', 'dispatcher']), routeController.addDriverToRoute);

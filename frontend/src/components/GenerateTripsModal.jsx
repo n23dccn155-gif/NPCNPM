@@ -77,7 +77,7 @@ export default function GenerateTripsModal({ isOpen, onClose, onGenerate, isReGe
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Giới hạn lái liên tục (phút)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tích luỹ lái để nghỉ ăn ca (phút)</label>
             <input
               type="number"
               name="max_driving_minutes"

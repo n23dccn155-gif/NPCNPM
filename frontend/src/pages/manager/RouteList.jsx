@@ -232,56 +232,56 @@ export default function RouteList() {
         </select>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-100">
+            <thead className="bg-slate-100 border-b border-slate-200">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã tuyến</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tên tuyến</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Giờ hoạt động</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lượt/chiều</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Giãn cách</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vòng xe</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Xe vận doanh</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Xe dự phòng</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trạng thái</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Thao tác</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Mã tuyến</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Tên tuyến</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Giờ hoạt động</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Lượt/chiều</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Giãn cách</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Vòng xe</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Xe vận doanh</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Xe dự phòng</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Trạng thái</th>
+                <th className="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Thao tác</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-slate-100">
               {filtered.map((r) => (
-                <tr key={r.route_code} className="hover:bg-gray-50 transition">
-                  <td className="px-6 py-4 font-mono font-medium text-gray-900">{r.route_code}</td>
-                  <td className="px-6 py-4 text-gray-700">{r.route_name}</td>
-                  <td className="px-6 py-4 text-gray-600 text-sm">{toTimeInput(r.start_time, '--:--')} - {toTimeInput(r.end_time, '--:--')}</td>
-                  <td className="px-6 py-4 text-gray-600 text-sm">{r.expected_trips_per_day}</td>
-                  <td className="px-6 py-4 text-gray-600 text-sm">
+                <tr key={r.route_code} className="hover:bg-slate-50 transition">
+                  <td className="px-6 py-4 font-mono font-medium text-slate-900 tabular-nums">{r.route_code}</td>
+                  <td className="px-6 py-4 text-slate-700 text-sm">{r.route_name}</td>
+                  <td className="px-6 py-4 text-slate-600 text-sm tabular-nums">{toTimeInput(r.start_time, '--:--')} - {toTimeInput(r.end_time, '--:--')}</td>
+                  <td className="px-6 py-4 text-slate-600 text-sm tabular-nums">{r.expected_trips_per_day}</td>
+                  <td className="px-6 py-4 text-slate-600 text-sm tabular-nums">
                     {formatMinutes(r.headway_minutes)}
                     {r.calculated_headway_minutes && Math.abs(r.calculated_headway_minutes - r.headway_minutes) > 0.01 && (
-                      <span className="text-xs text-gray-400 block">(Tối đa: {formatMinutes(r.calculated_headway_minutes)})</span>
+                      <span className="text-xs text-slate-400 block mt-0.5">(Tối đa: {formatMinutes(r.calculated_headway_minutes)})</span>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-gray-600 text-sm">{r.round_trip_time_minutes ? `${r.round_trip_time_minutes} phút` : 'Chưa đủ dữ liệu'}</td>
-                  <td className="px-6 py-4 text-gray-600 text-sm">
+                  <td className="px-6 py-4 text-slate-600 text-sm tabular-nums">{r.round_trip_time_minutes ? `${r.round_trip_time_minutes} phút` : '---'}</td>
+                  <td className="px-6 py-4 text-slate-600 text-sm tabular-nums">
                     {r.confirmed_operating_buses} xe
                     {r.suggested_operating_buses && r.suggested_operating_buses !== r.confirmed_operating_buses && (
-                      <span className="text-xs text-gray-400 block">(Gợi ý: {r.suggested_operating_buses} xe)</span>
+                      <span className="text-xs text-slate-400 block mt-0.5">(Gợi ý: {r.suggested_operating_buses} xe)</span>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-gray-600 text-sm">{r.standby_buses_count ?? 0}</td>
+                  <td className="px-6 py-4 text-slate-600 text-sm tabular-nums">{r.standby_buses_count ?? 0}</td>
                   <td className="px-6 py-4"><StatusBadge status={r.status} /></td>
                   <td className="px-6 py-4 text-right whitespace-nowrap">
-                    <button onClick={() => openEdit(r)} className="text-blue-600 hover:text-blue-800 text-sm mr-3">Sửa</button>
+                    <button onClick={() => openEdit(r)} className="text-blue-600 hover:text-blue-800 text-sm font-medium mr-3 transition">Sửa</button>
                     <button
                       onClick={() => setConfirm({ open: true, route: r, newStatus: r.status === 'active' ? 'inactive' : 'active' })}
-                      className={`text-sm mr-3 ${r.status === 'active' ? 'text-orange-500 hover:text-orange-700' : 'text-green-600 hover:text-green-800'}`}
+                      className={`text-sm font-medium mr-3 transition ${r.status === 'active' ? 'text-amber-600 hover:text-amber-800' : 'text-green-600 hover:text-green-800'}`}
                     >
                       {r.status === 'active' ? 'Ngưng' : 'Kích hoạt'}
                     </button>
                     <button
                       onClick={() => setConfirm({ open: true, route: r, newStatus: 'delete' })}
-                      className="text-red-600 hover:text-red-800 text-sm"
+                      className="text-red-600 hover:text-red-800 text-sm font-medium transition"
                     >
                       Xóa
                     </button>
@@ -291,7 +291,7 @@ export default function RouteList() {
             </tbody>
           </table>
         </div>
-        {filtered.length === 0 && <div className="text-center py-12 text-gray-400">Không tìm thấy tuyến xe nào</div>}
+        {filtered.length === 0 && <div className="text-center py-12 text-slate-400">Không tìm thấy tuyến xe nào</div>}
       </div>
 
       <Modal isOpen={showModal} title={editing ? 'Sửa tuyến xe' : 'Thêm tuyến xe'} onClose={() => setShowModal(false)}>

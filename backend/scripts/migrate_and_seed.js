@@ -1,12 +1,20 @@
+require('dotenv').config();
 const { Pool } = require('pg');
 
-const pool = new Pool({
-  host: 'localhost',
-  port: 5432,
-  database: 'bus_trip_db',
-  user: 'postgres',
-  password: '123456',
-});
+const poolConfig = process.env.DATABASE_URL
+  ? {
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false }
+    }
+  : {
+      host: process.env.DB_HOST || 'localhost',
+      port: process.env.DB_PORT || 5432,
+      database: process.env.DB_NAME || 'bus_trip_db',
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD || '123',
+    };
+
+const pool = new Pool(poolConfig);
 
 async function main() {
   const client = await pool.connect();

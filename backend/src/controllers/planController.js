@@ -28,12 +28,16 @@ function calculateSchedulingMetrics(route, outbound, inbound) {
   const headwayMinutes = Number(route.headway_minutes);
   const totalOperationMinutes = endMin - startMin;
   const calculatedHeadwayMinutes = totalOperationMinutes / (expectedTripsPerDirection - 1);
-  const roundTripTimeMinutes =
-    Number(outbound.travel_time_minutes) +
-    Number(outbound.turnaround_time_minutes) +
-    Number(inbound.travel_time_minutes) +
-    Number(inbound.turnaround_time_minutes);
+  const travelTimeMinutes = Number(outbound.travel_time_minutes);
+  const shortLayoverMinutes = Number(outbound.short_layover_minutes) || 20;
+  const longLayoverMinutes = Number(outbound.long_layover_minutes) || 60;
+  
+  // Chu trình 3 vòng: 2 vòng nghỉ ngắn + 1 vòng nghỉ dài
+  const cycleTimeMinutes = 3 * (travelTimeMinutes * 2) + 2 * shortLayoverMinutes + 1 * longLayoverMinutes;
+  const avgRoundTripTime = cycleTimeMinutes / 3;
+  
   const generatedTripsPerDirection = Math.floor(totalOperationMinutes / headwayMinutes) + 1;
+  const suggestedOperatingBuses = Math.ceil(avgRoundTripTime / headwayMinutes);
 
   return {
     startMin,
@@ -43,8 +47,8 @@ function calculateSchedulingMetrics(route, outbound, inbound) {
     calculatedHeadwayMinutes,
     headwayMinutes,
     generatedTripsPerDirection,
-    roundTripTimeMinutes,
-    suggestedOperatingBuses: Math.ceil(roundTripTimeMinutes / headwayMinutes)
+    roundTripTimeMinutes: avgRoundTripTime,
+    suggestedOperatingBuses
   };
 }
 
@@ -293,12 +297,12 @@ const planController = {
       const routeRes = await client.query('SELECT * FROM routes WHERE route_code = $1', [plan.route_code]);
       const route = routeRes.rows[0];
       
-      const travel_time = route.travel_time_minutes || 80;
-      const headway_minutes = route.headway_minutes || 15;
-      const short_layover = route.short_layover_minutes || 10;
-      const long_layover = route.long_layover_minutes || 15;
-      const max_driving_minutes = route.max_driving_minutes || 240;
-      const standby_ratio = route.standby_ratio || 0.15;
+      const travel_time = req.body.travel_time || route.travel_time_minutes || 80;
+      const headway_minutes = req.body.headway_minutes || route.headway_minutes || 15;
+      const short_layover = req.body.short_layover || route.short_layover_minutes || 10;
+      const long_layover = req.body.long_layover || route.long_layover_minutes || 15;
+      const max_driving_minutes = req.body.max_driving_minutes || route.max_driving_minutes || 240;
+      const standby_ratio = req.body.standby_ratio || route.standby_ratio || 0.15;
       
       const { outbound, inbound } = await getRouteDirections(client, plan.route_code);
 
@@ -324,106 +328,88 @@ const planController = {
       const d = String(plan.operation_date.getDate()).padStart(2, '0');
       const dateStr = `${y}-${m}-${d}`;
       
-      const buses = [];
-      const requiredBuses = Math.ceil((travel_time * 2 + short_layover * 2) / headway_minutes);
-      
-      for (let i = 0; i < requiredBuses; i++) {
-        let startLoc = i % 2 === 0 ? 'A' : 'B';
-        let aIndex = Math.floor(i / 2);
-        let bIndex = Math.floor((i - 1) / 2); // Wait, if i=0 -> A (0), i=1 -> B (0), i=2 -> A (1), i=3 -> B (1)
-        if(i % 2 === 1) bIndex = Math.floor(i / 2); 
-        
-        let startTime = startLoc === 'A' ? startMin + (aIndex * headway_minutes) : inboundStartMin + (bIndex * headway_minutes);
-        
-        buses.push({
-            id: i + 1,
-            startLoc: startLoc,
-            startTime: startTime
-        });
+      // Các mốc giờ xuất bến cố định tại bến A
+      const dispatchTimes = [];
+      let tTime = startMin;
+      while (tTime <= endMin - travel_time * 2) {
+          dispatchTimes.push(tTime);
+          tTime += headway_minutes;
       }
-
+      
+      const activeBuses = [];
       const allDrivers = [];
       const allGeneratedTrips = [];
-
-      buses.forEach(bus => {
-          let currentLoc = bus.startLoc;
-          let currentTime = bus.startTime;
-          let drivingSinceRest = 0;
-          let shiftCount = 1;
+      let busCounter = 0;
+      
+      for (const dispatchTime of dispatchTimes) {
+          // Cập nhật queue: Tìm xe rảnh rỗi sớm nhất
+          activeBuses.sort((a, b) => a.availableTime - b.availableTime);
           
-          let currentDriver = {
-              busId: bus.id,
-              shiftName: `Ca ${shiftCount}`,
-              startLoc: currentLoc,
-              startTime: currentTime,
-              trips: []
+          let bus = activeBuses.find(b => b.availableTime <= dispatchTime);
+          
+          if (!bus) {
+              // Nếu không có xe nào rảnh, hoặc tất cả đều đang đỗ chờ hết giờ nghỉ -> Bổ sung xe mới
+              busCounter++;
+              bus = {
+                  busId: busCounter,
+                  availableTime: dispatchTime, 
+                  roundTripCount: 0,
+                  trips: []
+              };
+              activeBuses.push(bus);
+          }
+          
+          // Xe 'bus' sẽ nhận lượt chạy tròn (A->B->A) cho slot này
+          let arrTimeAtoB = dispatchTime + travel_time;
+          let tripAtoB = {
+              direction_id: outbound.direction_id,
+              startLoc: 'A',
+              startTime: dispatchTime,
+              endLoc: 'B',
+              endTime: arrTimeAtoB,
+              scheduled_departure: buildTimestamp(dateStr, dispatchTime),
+              scheduled_arrival: buildTimestamp(dateStr, arrTimeAtoB)
           };
           
-          while (currentTime <= endMin) {
-              if (currentLoc === 'A' && currentTime > endMin - 60) {
-                  break; 
-              }
-              
-              let arrTime = currentTime + travel_time;
-              let t = {
-                  direction_id: currentLoc === 'A' ? outbound.direction_id : inbound.direction_id,
-                  startLoc: currentLoc,
-                  startTime: currentTime,
-                  endLoc: currentLoc === 'A' ? 'B' : 'A',
-                  endTime: arrTime,
-                  scheduled_departure: buildTimestamp(dateStr, currentTime),
-                  scheduled_arrival: buildTimestamp(dateStr, arrTime)
-              };
-              currentDriver.trips.push(t);
-              allGeneratedTrips.push(t);
-              
-              drivingSinceRest += travel_time;
-              
-              let layover = short_layover;
-              if (drivingSinceRest >= max_driving_minutes) {
-                  layover = long_layover;
-                  drivingSinceRest = 0;
-              }
-              
-              currentLoc = currentLoc === 'A' ? 'B' : 'A';
-              currentTime = arrTime + layover;
-              
-              if (currentLoc === 'A' && currentDriver.trips.length >= 5 && currentTime < endMin - 120) {
-                  currentDriver.endTime = currentDriver.trips[currentDriver.trips.length-1].endTime;
-                  allDrivers.push(currentDriver);
-                  
-                  shiftCount++;
-                  currentDriver = {
-                      busId: bus.id,
-                      shiftName: `Ca ${shiftCount}`,
-                      startLoc: currentLoc,
-                      startTime: currentTime,
-                      trips: []
-                  };
-                  drivingSinceRest = 0; 
-              }
+          let arrTimeBtoA = arrTimeAtoB + travel_time; // Quay đầu tức thì tại B
+          let tripBtoA = {
+              direction_id: inbound.direction_id,
+              startLoc: 'B',
+              startTime: arrTimeAtoB,
+              endLoc: 'A',
+              endTime: arrTimeBtoA,
+              scheduled_departure: buildTimestamp(dateStr, arrTimeAtoB),
+              scheduled_arrival: buildTimestamp(dateStr, arrTimeBtoA)
+          };
+          
+          bus.trips.push(tripAtoB);
+          bus.trips.push(tripBtoA);
+          allGeneratedTrips.push(tripAtoB);
+          allGeneratedTrips.push(tripBtoA);
+          
+          bus.roundTripCount++;
+          
+          // Tính thời gian nghỉ tại Bến A
+          let layover = short_layover;
+          if (bus.roundTripCount >= 3) {
+              layover = long_layover; // Nghỉ dài
+              bus.roundTripCount = 0;
           }
           
-          if (currentDriver && currentDriver.trips.length > 0) {
-              if (currentLoc === 'B') {
-                  let arrTime = currentTime + travel_time;
-                  let t = {
-                      direction_id: inbound.direction_id,
-                      startLoc: 'B',
-                      startTime: currentTime,
-                      endLoc: 'A',
-                      endTime: arrTime,
-                      scheduled_departure: buildTimestamp(dateStr, currentTime),
-                      scheduled_arrival: buildTimestamp(dateStr, arrTime)
-                  };
-                  currentDriver.trips.push(t);
-                  allGeneratedTrips.push(t);
-                  currentLoc = 'A';
-                  currentTime = arrTime + short_layover;
-              }
-              currentDriver.endTime = currentDriver.trips[currentDriver.trips.length-1].endTime;
-              allDrivers.push(currentDriver);
-          }
+          // Thời điểm xe sẵn sàng cho vòng tiếp theo
+          bus.availableTime = arrTimeBtoA + layover;
+      }
+      
+      // Chuyển định dạng lại cho phù hợp với response đầu ra
+      activeBuses.forEach(bus => {
+          allDrivers.push({
+              busId: bus.busId,
+              shiftName: 'Ca 1',
+              startLoc: 'A',
+              startTime: bus.trips[0].startTime,
+              endTime: bus.trips[bus.trips.length - 1].endTime,
+              trips: bus.trips
+          });
       });
 
       allGeneratedTrips

@@ -14,7 +14,7 @@ export default function RouteDriverManage() {
   
   const [selectedRoute, setSelectedRoute] = useState(null);
   const [activeTab, setActiveTab] = useState('drivers'); // 'drivers' | 'buses'
-
+  
   const [routeDrivers, setRouteDrivers] = useState([]);
   const [routeBuses, setRouteBuses] = useState([]);
   
@@ -26,7 +26,8 @@ export default function RouteDriverManage() {
 
   // Add forms
   const [addDriverIds, setAddDriverIds] = useState([]);
-  const [addBusIds, setAddBusIds] = useState([]);
+  const [addBusId, setAddBusId] = useState('');
+  const [addBusRole, setAddBusRole] = useState('operating');
   const [addError, setAddError] = useState('');
 
   const [confirm, setConfirm] = useState({ open: false, type: '', item: null });
@@ -66,7 +67,8 @@ export default function RouteDriverManage() {
   useEffect(() => {
     if (selectedRoute) {
       setAddDriverIds([]);
-      setAddBusIds([]);
+      setAddBusId('');
+      setAddBusRole('operating');
       setAddError('');
       loadRouteData(selectedRoute.route_code);
     }
@@ -93,20 +95,23 @@ export default function RouteDriverManage() {
   const handleAddBus = async (e) => {
     e.preventDefault();
     setAddError('');
-    if (!selectedRoute || addBusIds.length === 0) {
-      setAddError('Vui lòng chọn ít nhất một xe buýt');
+    if (!selectedRoute || !addBusId) {
+      setAddError('Vui lòng chọn xe buýt');
       return;
     }
     try {
-      await Promise.all(addBusIds.map(id => addBusToRoute(selectedRoute.route_code, { bus_id: id, bus_role: 'operating' })));
-      setAddBusIds([]);
+      await addBusToRoute(selectedRoute.route_code, { bus_id: Number(addBusId), bus_role: addBusRole });
+      setAddBusId('');
+      setAddBusRole('operating');
       loadRouteData(selectedRoute.route_code);
-      setSuccessMsg(`Thêm ${addBusIds.length} xe buýt thành công`);
+      setSuccessMsg('Thêm xe buýt thành công');
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err) {
       setAddError(err.response?.data?.message || 'Lỗi khi thêm xe buýt');
     }
   };
+
+
 
   const [generating, setGenerating] = useState(false);
 
@@ -173,24 +178,24 @@ export default function RouteDriverManage() {
 
           <div className="lg:col-span-3 space-y-6">
             {selectedRoute ? (() => {
-              const travelTime = Number(selectedRoute.travel_time_minutes || 0);
-              const shortLayover = Number(selectedRoute.short_layover_minutes || 0);
+              const rtt = Number(selectedRoute.round_trip_time_minutes || 0);
               const headway = Number(selectedRoute.headway_minutes || 1);
-              const minRestTime = Number(selectedRoute.min_rest_time_minutes || 60);
-              const baseBuses = (headway > 0 && travelTime > 0) ? Math.ceil((travelTime * 2 + shortLayover * 2) / headway) : 0;
               
-              const requiredRecoveryBuses = headway > 0 ? Math.ceil(minRestTime / headway) : 0;
-              const suggestedOperatingBuses = baseBuses + requiredRecoveryBuses;
-              const requiredBackupBuses = Math.ceil(suggestedOperatingBuses * Number(selectedRoute.backup_bus_ratio || 0));
-              const requiredTotalBuses = suggestedOperatingBuses + requiredBackupBuses;
-
+              // 1. Calculate Drivers
+              const baseBuses = (headway > 0 && rtt > 0) ? Math.ceil(rtt / headway) : 0;
               const mainShifts = baseBuses * 2;
-              const standbyCount = Math.ceil(mainShifts * Number(selectedRoute.standby_ratio || 0));
+              const standbyCount = Math.ceil(mainShifts * (Number(selectedRoute.standby_ratio) || 0.15));
               const requiredDriversDaily = mainShifts + standbyCount;
               const minWeeklyDrivers = Math.ceil((requiredDriversDaily * 7) / 6);
 
+              // 2. Calculate Buses
+              const requiredOperatingBuses = Number(selectedRoute.confirmed_operating_buses || 0);
+              const requiredStandbyBuses = selectedRoute.standby_buses_count !== undefined 
+                ? Number(selectedRoute.standby_buses_count) 
+                : Math.ceil(requiredOperatingBuses * (Number(selectedRoute.backup_bus_ratio) || 0.20));
+              const requiredTotalBuses = requiredOperatingBuses + requiredStandbyBuses;
+
               const unassignedDrivers = drivers.filter(d => d.status === 'working' && !routeDrivers.some(rd => rd.driver_id === d.driver_id));
-              const unassignedBuses = buses.filter(b => b.status === 'active' && !routeBuses.some(rb => rb.bus_id === b.bus_id));
 
               const isReady = routeDrivers.length >= minWeeklyDrivers && routeBuses.length >= requiredTotalBuses;
 
@@ -205,7 +210,7 @@ export default function RouteDriverManage() {
                      <button
                         onClick={handleGenerateSchedule}
                         disabled={generating || !isReady}
-                        className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 ${isReady && !generating ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+                        className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 ${isReady && !generating ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
                       >
                         {generating ? 'Đang sinh lịch...' : 'Sẵn sàng xếp lịch'}
                       </button>
@@ -278,25 +283,36 @@ export default function RouteDriverManage() {
                           <div className="text-2xl font-bold text-emerald-700">{routeBuses.length} / {requiredTotalBuses}</div>
                         </div>
 
-                        <form onSubmit={handleAddBus} className="flex gap-4 items-start">
+                        <form onSubmit={handleAddBus} className="flex gap-4 items-end">
                           <div className="flex-1 space-y-1">
-                            <div className="w-full border rounded-lg p-3 max-h-48 overflow-y-auto bg-gray-50">
-                              {unassignedBuses.length === 0 ? (
-                                <div className="text-sm text-gray-500 text-center py-2">Hết xe buýt rảnh</div>
-                              ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                  {unassignedBuses.map(b => (
-                                    <label key={b.bus_id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1.5 rounded">
-                                      <input type="checkbox" checked={addBusIds.includes(b.bus_id)} onChange={(e) => setAddBusIds(e.target.checked ? [...addBusIds, b.bus_id] : addBusIds.filter(id => id !== b.bus_id))} className="rounded text-emerald-600 w-4 h-4"/>
-                                      <span className="text-sm text-gray-700">{b.license_plate} <span className="text-gray-400">({b.seat_count} chỗ)</span></span>
-                                    </label>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                            {addError && activeTab === 'buses' && <p className="text-red-500 text-sm">{addError}</p>}
+                            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">Chọn xe *</label>
+                            <select
+                              value={addBusId}
+                              onChange={e => setAddBusId(e.target.value)}
+                              required
+                              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                            >
+                              <option value="">-- Chọn xe buýt khả dụng --</option>
+                              {buses.filter(b => b.status === 'active' && !routeBuses.some(rb => rb.bus_id === b.bus_id)).map(b => (
+                                <option key={b.bus_id} value={b.bus_id}>
+                                  {b.license_plate} ({b.seat_count} chỗ)
+                                </option>
+                              ))}
+                            </select>
+                            {addError && activeTab === 'buses' && <p className="text-red-500 text-sm mt-1">{addError}</p>}
                           </div>
-                          <button type="submit" className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">Thêm</button>
+                          <div className="w-48 space-y-1">
+                            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">Vai trò *</label>
+                            <select
+                              value={addBusRole}
+                              onChange={e => setAddBusRole(e.target.value)}
+                              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                            >
+                              <option value="operating">Xe vận doanh</option>
+                              <option value="standby">Xe dự phòng</option>
+                            </select>
+                          </div>
+                          <button type="submit" className="px-6 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium whitespace-nowrap">Thêm xe</button>
                         </form>
 
                         {dataLoading ? <div className="text-center text-gray-500 py-4">Đang tải...</div> : (
@@ -305,6 +321,7 @@ export default function RouteDriverManage() {
                               <tr>
                                 <th className="px-4 py-3 font-medium">Biển số</th>
                                 <th className="px-4 py-3 font-medium">Sức chứa</th>
+                                <th className="px-4 py-3 font-medium">Vai trò</th>
                                 <th className="px-4 py-3 font-medium text-right">Thao tác</th>
                               </tr>
                             </thead>
@@ -313,6 +330,11 @@ export default function RouteDriverManage() {
                                 <tr key={rb.route_bus_id} className="hover:bg-gray-50">
                                   <td className="px-4 py-3 font-medium text-gray-900">{rb.license_plate}</td>
                                   <td className="px-4 py-3">{rb.seat_count} chỗ</td>
+                                  <td className="px-4 py-3">
+                                    <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold ${rb.bus_role === 'operating' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>
+                                      {rb.bus_role === 'operating' ? 'Vận doanh' : 'Dự phòng'}
+                                    </span>
+                                  </td>
                                   <td className="px-4 py-3 text-right">
                                     <button onClick={() => setConfirm({ open: true, type: 'bus', item: rb })} className="text-red-600 hover:bg-red-50 px-2 py-1 rounded text-xs font-medium">Gỡ</button>
                                   </td>

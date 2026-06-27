@@ -20,6 +20,7 @@ DROP TABLE IF EXISTS assignments CASCADE;
 DROP TABLE IF EXISTS trips CASCADE;
 DROP TABLE IF EXISTS trip_groups CASCADE;
 DROP TABLE IF EXISTS operation_plans CASCADE;
+DROP TABLE IF EXISTS route_drivers CASCADE;
 DROP TABLE IF EXISTS route_buses CASCADE;
 DROP TABLE IF EXISTS drivers CASCADE;
 DROP TABLE IF EXISTS buses CASCADE;
@@ -67,7 +68,8 @@ CREATE TABLE route_directions (
     end_point VARCHAR(255) NOT NULL,
     distance_km NUMERIC(5,2),
     travel_time_minutes INT NOT NULL,
-    turnaround_time_minutes INT NOT NULL
+    turnaround_time_minutes INT NOT NULL,
+    UNIQUE(route_code, direction_type)
 );
 
 -- 4. Bảng bus_stops: Lưu danh sách điểm dừng theo từng hướng tuyến
@@ -76,7 +78,8 @@ CREATE TABLE bus_stops (
     direction_id INT NOT NULL,
     stop_order INT NOT NULL,
     stop_name VARCHAR(255) NOT NULL,
-    minute_from_start INT NOT NULL
+    minute_from_start INT NOT NULL,
+    UNIQUE(direction_id, stop_order)
 );
 
 -- 5. Bảng buses: Lưu thông tin xe buýt
@@ -102,7 +105,8 @@ CREATE TABLE route_buses (
     route_bus_id SERIAL PRIMARY KEY,
     route_code VARCHAR(20) NOT NULL,
     bus_id INT NOT NULL,
-    bus_role VARCHAR(20) NOT NULL -- operating, standby
+    bus_role VARCHAR(20) NOT NULL, -- operating, standby
+    UNIQUE(route_code, bus_id)
 );
 
 -- 7b. Bảng route_drivers: Lưu thông tin tài xế thuộc tuyến
