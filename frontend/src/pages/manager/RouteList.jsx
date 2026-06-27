@@ -23,9 +23,9 @@ const emptyForm = {
   long_layover_minutes: 15,
   max_driving_minutes: 240,
   standby_ratio: 0.15,
-  inbound_start_time: '05:30',
   backup_bus_ratio: 0.20,
-  min_rest_time_minutes: 60
+  min_rest_time_minutes: 60,
+  confirmed_operating_drivers: ''
 };
 
 const toTimeInput = (value, fallback) => value?.slice(0, 5) || fallback;
@@ -104,28 +104,22 @@ export default function RouteList() {
       long_layover_minutes: r.long_layover_minutes ?? 15,
       max_driving_minutes: r.max_driving_minutes ?? 240,
       standby_ratio: r.standby_ratio ?? 0.15,
-      inbound_start_time: r.inbound_start_time?.slice(0, 5) || '05:30',
       backup_bus_ratio: r.backup_bus_ratio ?? 0.20,
       min_rest_time_minutes: r.min_rest_time_minutes ?? 60,
+      confirmed_operating_drivers: ''
     });
     setFormError('');
     setShowModal(true);
   };
 
   const buildPayload = () => {
-    const rtt = (Number(form.travel_time_minutes) * 2) + (Number(form.short_layover_minutes) * 2);
-    const hWay = Number(form.headway_minutes);
-    const baseBuses = (hWay > 0 && rtt > 0) ? Math.ceil(rtt / hWay) : 0;
-    const recoveryBuses = Math.ceil(baseBuses * (Number(form.standby_ratio) || 0));
-    const autoConfirmedBuses = baseBuses + recoveryBuses;
-
     return {
       route_name: form.route_name.trim(),
       start_time: form.start_time,
       end_time: form.end_time,
-      expected_trips_per_day: Math.floor((timeToMinutes(form.end_time) - timeToMinutes(form.start_time)) / Number(form.headway_minutes)) + 1,
+      expected_trips_per_day: Number(form.expected_trips_per_day),
       headway_minutes: Number(form.headway_minutes),
-      confirmed_operating_buses: autoConfirmedBuses,
+      confirmed_operating_buses: Number(form.confirmed_operating_buses),
       outbound_start_point: form.outbound_start_point.trim(),
       outbound_end_point: form.outbound_end_point.trim(),
       outbound_distance: form.outbound_distance ? Number(form.outbound_distance) : null,
@@ -328,8 +322,8 @@ export default function RouteList() {
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">Điểm đầu - cuối *</label>
                   <div className="flex gap-2">
-                    <input value={form.outbound_start_point} onChange={e => setForm({ ...form, outbound_start_point: e.target.value })} placeholder="Bến A" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" required />
-                    <input value={form.outbound_end_point} onChange={e => setForm({ ...form, outbound_end_point: e.target.value })} placeholder="Bến B" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" required />
+                    <input value={form.outbound_start_point} onChange={e => setForm({ ...form, outbound_start_point: e.target.value, inbound_end_point: e.target.value })} placeholder="Bến A" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" required />
+                    <input value={form.outbound_end_point} onChange={e => setForm({ ...form, outbound_end_point: e.target.value, inbound_start_point: e.target.value })} placeholder="Bến B" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" required />
                   </div>
                 </div>
                 <div className="space-y-3 mt-3">
@@ -360,23 +354,13 @@ export default function RouteList() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Xuất phát Bến A (Outbound) *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Giờ bắt đầu hoạt động *</label>
               <input
                 type="time"
                 value={form.start_time}
                 onChange={(e) => setForm({ ...form, start_time: e.target.value })}
-                required
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Xuất phát Bến B (Inbound) *</label>
-              <input
-                type="time"
-                value={form.inbound_start_time}
-                onChange={(e) => setForm({ ...form, inbound_start_time: e.target.value })}
                 required
                 className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
@@ -409,25 +393,67 @@ export default function RouteList() {
                 <span className="text-sm text-gray-500 whitespace-nowrap">phút</span>
               </div>
             </div>
-            {form.start_time && form.end_time && form.headway_minutes > 0 && (
-              <div className="flex justify-end mt-1">
-                <div className="w-2/3 text-xs text-blue-600 font-medium">
-                  Hệ thống tự tính: Khoảng {Math.floor((timeToMinutes(form.end_time) - timeToMinutes(form.start_time)) / Number(form.headway_minutes)) + 1} lượt mỗi chiều mỗi ngày.
-                </div>
-              </div>
-            )}
-          </div>
-          <div>
             <div className="flex items-center justify-between gap-4">
-              <label className="text-sm font-medium text-gray-700 w-1/3">Tổng xe dự kiến huy động</label>
-              <div className="w-2/3 flex items-center justify-between border border-gray-100 bg-gray-50 rounded-xl px-3 py-2 text-sm text-gray-700 font-medium">
-                <span>{editingSuggestedBuses} xe</span>
-                <span className="text-xs text-amber-600 font-normal">({editingBaseBuses} xe nền + {editingRecoveryBuses} xe trám)</span>
+              <label className="text-sm font-medium text-gray-700 w-1/3">Số lượng chuyến (mỗi chiều) *</label>
+              <div className="w-2/3 flex items-center gap-2">
+                <input
+                  type="number"
+                  value={form.expected_trips_per_day}
+                  onChange={(e) => setForm({ ...form, expected_trips_per_day: e.target.value })}
+                  required
+                  min="1"
+                  step="1"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-500 whitespace-nowrap">chuyến</span>
               </div>
             </div>
-            <div className="flex justify-end mt-1">
-              <div className="w-2/3 text-xs text-gray-500 italic">
-                Hệ thống tự động tính toán số xe cần thiết dựa trên thời gian vòng xe và giãn cách chuyến.
+          </div>
+          <div className="space-y-4 mt-4">
+            <div className="flex items-center justify-between gap-4">
+              <label className="text-sm font-medium text-gray-700 w-1/3">Tổng số xe phân bổ *</label>
+              <div className="w-2/3">
+                <input
+                  type="number"
+                  value={form.confirmed_operating_buses}
+                  onChange={(e) => setForm({ ...form, confirmed_operating_buses: e.target.value })}
+                  onBlur={(e) => {
+                    const val = Number(e.target.value);
+                    if (val < editingTotalBuses) {
+                      setForm({ ...form, confirmed_operating_buses: editingTotalBuses });
+                    }
+                  }}
+                  required
+                  min={editingTotalBuses}
+                  title={`Gợi ý hệ thống: Ít nhất ${editingTotalBuses} xe`}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <div className="text-[11px] text-gray-500 mt-1 italic">
+                  Gợi ý từ hệ thống: Cần ít nhất <b>{editingTotalBuses} xe</b> để đảm bảo thuật toán đúng.
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <label className="text-sm font-medium text-gray-700 w-1/3">Tổng tài xế dự kiến *</label>
+              <div className="w-2/3">
+                <input
+                  type="number"
+                  value={form.confirmed_operating_drivers}
+                  onChange={(e) => setForm({ ...form, confirmed_operating_drivers: e.target.value })}
+                  onBlur={(e) => {
+                    const val = Number(e.target.value);
+                    if (val < dailyDrivers) {
+                      setForm({ ...form, confirmed_operating_drivers: dailyDrivers });
+                    }
+                  }}
+                  required
+                  min={dailyDrivers}
+                  title={`Gợi ý hệ thống: Ít nhất ${dailyDrivers} tài xế`}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <div className="text-[11px] text-gray-500 mt-1 italic">
+                  Gợi ý từ hệ thống: Cần ít nhất <b>{dailyDrivers} tài xế</b> cho 1 ngày.
+                </div>
               </div>
             </div>
           </div>
@@ -450,19 +476,19 @@ export default function RouteList() {
             <h4 className="col-span-2 text-sm font-semibold text-gray-700">Tham số lập lịch nâng cao</h4>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Thời gian chạy (phút)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Thời gian chạy 1 chiều (phút)</label>
               <input type="number" value={form.travel_time_minutes} onChange={e => setForm({...form, travel_time_minutes: e.target.value})} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nghỉ ngắn tại bến (phút)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nghỉ ngắn sau mỗi vòng (phút)</label>
               <input type="number" value={form.short_layover_minutes} onChange={e => setForm({...form, short_layover_minutes: e.target.value})} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nghỉ dài / Đổi ca (phút)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nghỉ dài / Ăn ca (phút)</label>
               <input type="number" value={form.long_layover_minutes} onChange={e => setForm({...form, long_layover_minutes: e.target.value})} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Giới hạn lái liên tục (phút)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Số vòng chạy để nghỉ dài (Vòng)</label>
               <input type="number" value={form.max_driving_minutes} onChange={e => setForm({...form, max_driving_minutes: e.target.value})} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
             </div>
             <div>

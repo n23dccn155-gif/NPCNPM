@@ -31,10 +31,11 @@ function calculateSchedulingMetrics(route, outbound, inbound) {
   const travelTimeMinutes = Number(outbound.travel_time_minutes);
   const shortLayoverMinutes = Number(outbound.short_layover_minutes) || 20;
   const longLayoverMinutes = Number(outbound.long_layover_minutes) || 60;
+  const roundsBeforeLongBreak = Number(route.max_driving_minutes) || 3;
   
-  // Chu trình 3 vòng: 2 vòng nghỉ ngắn + 1 vòng nghỉ dài
-  const cycleTimeMinutes = 3 * (travelTimeMinutes * 2) + 2 * shortLayoverMinutes + 1 * longLayoverMinutes;
-  const avgRoundTripTime = cycleTimeMinutes / 3;
+  // Chu trình X vòng: (X-1) vòng nghỉ ngắn + 1 vòng nghỉ dài
+  const cycleTimeMinutes = roundsBeforeLongBreak * (travelTimeMinutes * 2) + (roundsBeforeLongBreak - 1) * shortLayoverMinutes + 1 * longLayoverMinutes;
+  const avgRoundTripTime = cycleTimeMinutes / roundsBeforeLongBreak;
   
   const generatedTripsPerDirection = Math.floor(totalOperationMinutes / headwayMinutes) + 1;
   const suggestedOperatingBuses = Math.ceil(avgRoundTripTime / headwayMinutes);
@@ -391,7 +392,7 @@ const planController = {
           
           // Tính thời gian nghỉ tại Bến A
           let layover = short_layover;
-          if (bus.roundTripCount >= 3) {
+          if (bus.roundTripCount >= max_driving_minutes) {
               layover = long_layover; // Nghỉ dài
               bus.roundTripCount = 0;
           }
