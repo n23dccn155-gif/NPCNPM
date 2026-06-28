@@ -28,9 +28,9 @@ router.delete('/:routeCode', auth, role(['manager']), routeController.deleteRout
 router.post('/:routeCode/generate-schedule', auth, role(['manager']), batchController.generate2Months);
 
 // Route buses
-router.post('/:routeCode/buses', auth, role(['manager']), routeController.addBusToRoute);
+router.post('/:routeCode/buses', auth, role(['manager', 'dispatcher']), routeController.addBusToRoute);
 router.get('/:routeCode/buses', auth, routeController.getRouteBuses);
-router.delete('/:routeCode/buses/:busId', auth, role(['manager']), routeController.removeBusFromRoute);
+router.delete('/:routeCode/buses/:busId', auth, role(['manager', 'dispatcher']), routeController.removeBusFromRoute);
 
 // Route drivers
 router.post('/:routeCode/drivers', auth, role(['manager', 'dispatcher']), routeController.addDriverToRoute);

@@ -67,14 +67,14 @@ function App() {
           <Route path="/manager/users" element={<PrivateRoute allowedRoles={['manager']}><UserList /></PrivateRoute>} />
           <Route path="/manager/leave-requests" element={<PrivateRoute allowedRoles={['manager']}><LeaveApproval /></PrivateRoute>} />
           <Route path="/manager/reports" element={<PrivateRoute allowedRoles={['manager']}><Reports /></PrivateRoute>} />
-          <Route path="/manager/route-buses" element={<PrivateRoute allowedRoles={['manager']}><RouteBusManage /></PrivateRoute>} />
-          <Route path="/manager/route-drivers" element={<PrivateRoute allowedRoles={['manager', 'dispatcher']}><RouteDriverManage /></PrivateRoute>} />
           <Route path="/manager/direction-stops" element={<PrivateRoute allowedRoles={['manager']}><DirectionStopManage /></PrivateRoute>} />
           <Route path="/manager/plan-approval" element={<PrivateRoute allowedRoles={['manager']}><PlanApproval /></PrivateRoute>} />
 
           {/* Dispatcher Routes */}
           <Route path="/dispatcher" element={<Navigate to="/dispatcher/calendar" replace />} />
           <Route path="/dispatcher/calendar" element={<PrivateRoute allowedRoles={['dispatcher', 'manager']}><ScheduleCalendar /></PrivateRoute>} />
+          <Route path="/dispatcher/route-buses" element={<PrivateRoute allowedRoles={['dispatcher', 'manager']}><RouteBusManage /></PrivateRoute>} />
+          <Route path="/dispatcher/route-drivers" element={<PrivateRoute allowedRoles={['dispatcher', 'manager']}><RouteDriverManage /></PrivateRoute>} />
           <Route path="/dispatcher/trips" element={<PrivateRoute allowedRoles={['dispatcher']}><TripManage /></PrivateRoute>} />
           <Route path="/dispatcher/affected-trips" element={<PrivateRoute allowedRoles={['dispatcher']}><AffectedTrips /></PrivateRoute>} />
           <Route path="/dispatcher/incidents" element={<PrivateRoute allowedRoles={['dispatcher']}><IncidentManage /></PrivateRoute>} />
