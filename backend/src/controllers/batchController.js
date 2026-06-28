@@ -10,13 +10,16 @@ function addDays(dateStr, days) {
 }
 
 const batchController = {
-  generate2Months: async (req, res, next) => {
+  generateSchedule: async (req, res, next) => {
     // This could take a while, we might not want to do it all inside a single HTTP request transaction
     // But for simplicity, we do it in a loop here.
     const { routeCode } = req.params;
+    const { startDate, cycles } = req.body;
     const userId = req.user.id;
 
     if (!routeCode) return error(res, 'Missing route code', 400);
+    if (!startDate) return error(res, 'Missing startDate', 400);
+    if (!cycles || cycles < 1) return error(res, 'Invalid cycles', 400);
 
     const client = await pool.connect();
     try {
@@ -32,18 +35,24 @@ const batchController = {
         return error(res, 'Tuyến không hoạt động', 400);
       }
 
-      // Check if drivers are assigned to this route
-      const driversRes = await client.query('SELECT * FROM route_drivers WHERE route_code = $1 AND status = $2', [routeCode, 'active']);
-      if (driversRes.rows.length === 0) {
+      // Check working drivers assigned to this route to calculate cycle length
+      const driversRes = await client.query(`
+        SELECT COUNT(*) FROM route_drivers rd 
+        JOIN drivers d ON rd.driver_id = d.driver_id 
+        WHERE rd.route_code = $1 AND rd.status = 'active' AND d.status = 'working'
+      `, [routeCode]);
+      
+      const driverCount = parseInt(driversRes.rows[0].count);
+
+      if (driverCount === 0) {
         client.release();
-        return error(res, 'Tuyến chưa có tài xế nào trong danh sách, không thể sinh lịch', 400);
+        return error(res, 'Tuyến chưa có tài xế nào đang làm việc trong danh sách, không thể sinh lịch', 400);
       }
 
       client.release();
 
-      // Start from tomorrow
-      let currentDate = addDays(new Date().toISOString().split('T')[0], 1);
-      const NUM_DAYS = 60;
+      let currentDate = startDate;
+      const NUM_DAYS = cycles * driverCount;
       
       let successCount = 0;
       let errorCount = 0;

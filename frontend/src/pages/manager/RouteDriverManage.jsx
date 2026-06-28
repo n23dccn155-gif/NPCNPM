@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
-import { PageHeader, ConfirmDialog, AlertBox } from '../../components/UI';
+import { PageHeader, ConfirmDialog, AlertBox, Modal } from '../../components/UI';
 import { getRoutes, generateSchedule } from '../../services/routeService';
 import routeDriverService from '../../services/routeDriverService';
 import { getDrivers } from '../../services/driverService';
@@ -109,16 +109,19 @@ export default function RouteDriverManage() {
   };
 
   const [generating, setGenerating] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleForm, setScheduleForm] = useState({ startDate: new Date().toISOString().split('T')[0], cycles: 1 });
 
-  const handleGenerateSchedule = async () => {
+  const handleGenerateSchedule = async (e) => {
+    if (e) e.preventDefault();
     if (!selectedRoute) return;
-    if (!window.confirm('Hành động này sẽ sinh lịch và phân công cho 60 ngày tiếp theo. Có thể mất một chút thời gian. Bạn có muốn tiếp tục?')) return;
     setGenerating(true);
     setError('');
     setSuccessMsg('');
     try {
-      const res = await generateSchedule(selectedRoute.route_code);
+      const res = await generateSchedule(selectedRoute.route_code, scheduleForm);
       setSuccessMsg(res.data.message || 'Sinh lịch thành công!');
+      setShowScheduleModal(false);
     } catch (err) {
       setError(err.response?.data?.message || 'Lỗi khi sinh lịch');
     } finally {
@@ -203,7 +206,7 @@ export default function RouteDriverManage() {
                         <button onClick={() => setActiveTab('buses')} className={`font-semibold pb-1 border-b-2 ${activeTab === 'buses' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>Xe Buýt ({routeBuses.length}/{requiredTotalBuses})</button>
                      </div>
                      <button
-                        onClick={handleGenerateSchedule}
+                        onClick={() => setShowScheduleModal(true)}
                         disabled={generating || !isReady}
                         className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 ${isReady && !generating ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
                       >
@@ -342,6 +345,43 @@ export default function RouteDriverManage() {
         onConfirm={handleRemove}
         onCancel={() => setConfirm({ open: false, type: '', item: null })}
       />
+
+      <Modal isOpen={showScheduleModal} onClose={() => !generating && setShowScheduleModal(false)} title="Cấu hình Xếp lịch tự động">
+        <form onSubmit={handleGenerateSchedule} className="space-y-4">
+          <p className="text-sm text-gray-600 mb-4">
+            Hệ thống sử dụng thuật toán <strong className="text-gray-900">Tua ca (Rotating Shift)</strong>. 
+            Một chu kỳ tương đương với khoảng thời gian để toàn bộ tài xế hiện có luân phiên hết tất cả các khung giờ chạy.
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Ngày bắt đầu</label>
+            <input 
+              type="date" 
+              required
+              disabled={generating}
+              value={scheduleForm.startDate}
+              onChange={e => setScheduleForm({...scheduleForm, startDate: e.target.value})}
+              className="w-full border p-2 rounded-lg"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Số lượng chu kỳ muốn xếp</label>
+            <input 
+              type="number" 
+              required min="1"
+              disabled={generating}
+              value={scheduleForm.cycles}
+              onChange={e => setScheduleForm({...scheduleForm, cycles: parseInt(e.target.value)})}
+              className="w-full border p-2 rounded-lg"
+            />
+          </div>
+          <div className="flex justify-end gap-3 mt-6">
+            <button type="button" onClick={() => setShowScheduleModal(false)} disabled={generating} className="px-4 py-2 text-gray-600 font-medium">Hủy</button>
+            <button type="submit" disabled={generating} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">
+              {generating ? 'Đang chạy...' : 'Sinh lịch ngay'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </Layout>
   );
 }

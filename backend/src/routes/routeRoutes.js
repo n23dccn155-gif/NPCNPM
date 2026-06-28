@@ -25,7 +25,7 @@ router.patch('/:routeCode/status', auth, role(['manager']), routeController.upda
 router.delete('/:routeCode', auth, role(['manager']), routeController.deleteRoute);
 
 // Batch schedule generation
-router.post('/:routeCode/generate-schedule', auth, role(['manager']), batchController.generate2Months);
+router.post('/:routeCode/generate-schedule', auth, role(['manager', 'dispatcher']), batchController.generateSchedule);
 
 // Route buses
 router.post('/:routeCode/buses', auth, role(['manager', 'dispatcher']), routeController.addBusToRoute);

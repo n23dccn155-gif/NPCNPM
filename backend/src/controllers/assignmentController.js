@@ -506,32 +506,28 @@ const assignmentController = {
       );
       const availableBuses = busesRes.rows.map(b => b.bus_id);
 
-      const driversRes = await client.query(
-        `SELECT rd.driver_id,
+      const restZoneLength = totalRouteDrivers - totalDriversNeeded;
+      const stepSize = Math.max(1, restZoneLength);
 
-                COALESCE(
-                  (SELECT ($2::date - dDate::date) - 1
-                   FROM generate_series($2::date - INTERVAL '30 days', $2::date - INTERVAL '1 day', '1 day') AS dDate
-                   WHERE NOT EXISTS (
-                     SELECT 1 FROM assignments a 
-                     JOIN operation_plans p ON a.plan_id = p.plan_id
-                     WHERE a.driver_id = rd.driver_id AND p.operation_date = dDate::date AND a.status = 'active'
-                   )
-                   ORDER BY dDate DESC LIMIT 1), 
-                  30
-                ) AS consecutive_shifts
-         FROM route_drivers rd
-         JOIN drivers d ON rd.driver_id = d.driver_id
-         WHERE rd.route_code = $1 
-           AND rd.status = 'active'
-           AND d.status = 'working'
-           AND NOT EXISTS (
+      const driversRes = await client.query(
+        `WITH numbered_drivers AS (
+            SELECT rd.driver_id,
+                   ROW_NUMBER() OVER (ORDER BY rd.driver_id) - 1 AS seq_idx
+            FROM route_drivers rd
+            JOIN drivers d ON rd.driver_id = d.driver_id
+            WHERE rd.route_code = $1 
+              AND rd.status = 'active'
+              AND d.status = 'working'
+         )
+         SELECT nd.driver_id,
+                0 AS consecutive_shifts
+         FROM numbered_drivers nd
+         WHERE NOT EXISTS (
              SELECT 1 FROM leave_requests l 
-             WHERE l.driver_id = d.driver_id AND l.leave_date = $2 AND l.status = 'approved'
-           )
-         ORDER BY consecutive_shifts ASC, 
-                  ((rd.driver_id + (SELECT extract(epoch FROM $2::date)/86400/7)::int) % (SELECT COUNT(*) FROM route_drivers WHERE route_code=$1 AND status='active')) ASC`,
-        [plan.route_code, plan.operation_date]
+             WHERE l.driver_id = nd.driver_id AND l.leave_date = $2 AND l.status = 'approved'
+         )
+         ORDER BY ((nd.seq_idx + (SELECT extract(epoch FROM $2::date)/86400)::int * $3) % (SELECT COUNT(*) FROM route_drivers WHERE route_code=$1 AND status='active')) ASC`,
+        [plan.route_code, plan.operation_date, stepSize]
       );
       
       const availableDrivers = [];
