@@ -39,8 +39,10 @@ export default function Topbar() {
   const playSound = () => {
     try {
       const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-      audio.play().catch(e => console.warn('Trình duyệt chặn âm thanh:', e));
-    } catch(e) {}
+      audio.play().catch((e) => console.warn('Trình duyệt chặn âm thanh:', e));
+    } catch (e) {
+      // Bỏ qua lỗi
+    }
   };
 
   useEffect(() => {
@@ -53,8 +55,8 @@ export default function Topbar() {
     if (socket) {
       const handleNotification = (data) => {
         toast.info(data.title + ': ' + data.content, {
-          position: "top-right",
-          autoClose: 5000
+          position: 'top-right',
+          autoClose: 5000,
         });
         playSound();
         loadNotifications();
@@ -62,8 +64,8 @@ export default function Topbar() {
 
       const handleIncident = (data) => {
         toast.error(data.title + ': ' + data.content, {
-          position: "top-right",
-          autoClose: 8000
+          position: 'top-right',
+          autoClose: 8000,
         });
         playSound();
         loadNotifications();
@@ -82,7 +84,7 @@ export default function Topbar() {
   const handleMarkAsRead = async (id) => {
     try {
       await markNotificationAsRead(id);
-      setNotifications(prev => prev.filter(n => n.notification_id !== id));
+      setNotifications((prev) => prev.filter((n) => n.notification_id !== id));
     } catch (err) {
       console.error(err);
     }
@@ -145,11 +147,9 @@ export default function Topbar() {
 
               <div className="max-h-60 overflow-y-auto">
                 {notifications.length === 0 ? (
-                  <div className="px-4 py-6 text-center text-gray-400 text-xs">
-                    Không có thông báo mới
-                  </div>
+                  <div className="px-4 py-6 text-center text-gray-400 text-xs">Không có thông báo mới</div>
                 ) : (
-                  Array.isArray(notifications) && notifications.map((notif) => (
+                  notifications.map((notif) => (
                     <div
                       key={notif.notification_id}
                       className="px-4 py-3 hover:bg-slate-50 border-b border-slate-50 last:border-b-0 flex gap-2 justify-between items-start"
