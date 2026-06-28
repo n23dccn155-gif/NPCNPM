@@ -25,14 +25,17 @@ export default function Topbar() {
 
   const { socket } = useContext(SocketContext);
 
-  async function loadNotifications() {
-    try {
-      const res = await getMyNotifications(true); // Chỉ lấy chưa đọc
-      setNotifications(res.data);
-    } catch (err) {
-      console.error('Lỗi tải thông báo:', err);
-    }
+ async function loadNotifications() {
+  try {
+    const res = await getMyNotifications(true);
+    // Đảm bảo notifications luôn là mảng
+    const data = Array.isArray(res.data) ? res.data : [];
+    setNotifications(data);
+  } catch (err) {
+    console.error('Lỗi tải thông báo:', err);
+    setNotifications([]);
   }
+}
 
   // Tiếng chuông báo hiệu
   const playSound = () => {
