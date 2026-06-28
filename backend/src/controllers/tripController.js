@@ -105,7 +105,7 @@ const tripController = {
          JOIN operation_plans p ON t.plan_id = p.plan_id
          JOIN trip_groups tg ON t.group_id = tg.group_id
          JOIN assignments a ON tg.group_id = a.group_id AND a.status = 'active'
-         JOIN buses b ON a.bus_id = b.bus_id
+         LEFT JOIN buses b ON a.bus_id = b.bus_id
          JOIN route_directions rd ON t.direction_id = rd.direction_id
          WHERE a.driver_id = $1 AND p.operation_date = $2 AND p.status = 'approved'
          ORDER BY t.scheduled_departure`,

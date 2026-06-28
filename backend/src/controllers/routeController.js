@@ -7,20 +7,25 @@ function timeToMinutes(value) {
   return hours * 60 + minutes;
 }
 
-function getCalculatedHeadway(startTime, endTime, expectedTrips) {
+function getCalculatedHeadway(startTime, endTime, expectedTrips, outboundTravel = 80, inboundTravel = 80) {
   const startMin = timeToMinutes(startTime);
   const endMin = timeToMinutes(endTime);
   const trips = Number(expectedTrips);
+  const outT = Number(outboundTravel) || 80;
+  const inT = Number(inboundTravel) || 80;
 
   if (startMin === null || endMin === null || endMin <= startMin || trips < 2) {
     return null;
   }
 
-  return (endMin - startMin) / (trips - 1);
+  const totalOperationMinutes = (endMin - (outT + inT)) - startMin;
+  if (totalOperationMinutes <= 0) return null;
+
+  return totalOperationMinutes / (trips - 1);
 }
 
-function validateRouteInput({ start_time, end_time, expected_trips_per_day, headway_minutes, confirmed_operating_buses }) {
-  const calculatedHeadway = getCalculatedHeadway(start_time, end_time, expected_trips_per_day);
+function validateRouteInput({ start_time, end_time, expected_trips_per_day, headway_minutes, confirmed_operating_buses, outbound_travel = 80, inbound_travel = 80 }) {
+  const calculatedHeadway = getCalculatedHeadway(start_time, end_time, expected_trips_per_day, outbound_travel, inbound_travel);
   const headway = Number(headway_minutes);
   const confirmedBuses = Number(confirmed_operating_buses);
 
@@ -29,11 +34,6 @@ function validateRouteInput({ start_time, end_time, expected_trips_per_day, head
   }
   if (!Number.isFinite(headway) || headway <= 0) {
     return { message: 'Giãn cách khai thác phải lớn hơn 0' };
-  }
-  if (headway - calculatedHeadway > 0.001) {
-    return {
-      message: `Giãn cách khai thác không được lớn hơn giãn cách tính từ số lượt (${Number(calculatedHeadway.toFixed(2))} phút)`
-    };
   }
   if (!Number.isInteger(confirmedBuses) || confirmedBuses < 1) {
     return { message: 'Số xe vận doanh xác nhận phải lớn hơn hoặc bằng 1' };
@@ -46,36 +46,26 @@ function addRouteMetrics(route) {
   const startMin = timeToMinutes(route.start_time);
   const endMin = timeToMinutes(route.end_time);
   const expectedTrips = Number(route.expected_trips_per_day);
-  const headway = Number(route.headway_minutes);
-  const outboundTravel = Number(route.outbound_travel_time_minutes);
-  const outboundTurnaround = Number(route.outbound_turnaround_time_minutes);
-  const inboundTravel = Number(route.inbound_travel_time_minutes);
-  const inboundTurnaround = Number(route.inbound_turnaround_time_minutes);
+  const outboundTravel = Number(route.outbound_travel_time_minutes || route.travel_time_minutes || 80);
+  const inboundTravel = Number(route.inbound_travel_time_minutes || route.travel_time_minutes || 80);
 
-  const totalOperationMinutes = startMin !== null && endMin !== null ? endMin - startMin : null;
+  const totalOperationMinutes = startMin !== null && endMin !== null ? (endMin - (outboundTravel + inboundTravel)) - startMin : null;
   const calculatedHeadwayMinutes = totalOperationMinutes && expectedTrips > 1
-    ? totalOperationMinutes / (expectedTrips - 1)
+    ? Math.round(totalOperationMinutes / (expectedTrips - 1))
     : null;
-  const roundTripTimeMinutes = [
-    outboundTravel,
-    outboundTurnaround,
-    inboundTravel,
-    inboundTurnaround
-  ].every(Number.isFinite)
-    ? outboundTravel + outboundTurnaround + inboundTravel + inboundTurnaround
-    : null;
+  const headway = route.headway_minutes !== undefined ? Number(route.headway_minutes) : (calculatedHeadwayMinutes || 30);
+  const roundTripTravelTime = outboundTravel + inboundTravel;
+
   let suggestedOperatingBuses = null;
-  let requiredRecoveryBuses = null;
   let requiredBackupBuses = null;
   let requiredTotalBuses = null;
+  let maxCycleTime = null;
 
-  if (Number.isFinite(headway) && headway > 0 && roundTripTimeMinutes) {
-    const baseBuses = Math.ceil(roundTripTimeMinutes / headway);
-    const minRestTime = route.min_rest_time_minutes ? Number(route.min_rest_time_minutes) : 60;
-    const backupRatio = route.backup_bus_ratio ? Number(route.backup_bus_ratio) : 0.20;
-    
-    requiredRecoveryBuses = Math.ceil(minRestTime / headway);
-    suggestedOperatingBuses = baseBuses + requiredRecoveryBuses;
+  if (Number.isFinite(headway) && headway > 0 && roundTripTravelTime) {
+    const longLayoverMinutes = Number(route.min_rest_time_minutes) || Number(route.long_layover_minutes) || 60;
+    maxCycleTime = roundTripTravelTime + longLayoverMinutes;
+    suggestedOperatingBuses = Math.ceil(maxCycleTime / headway);
+    const backupRatio = route.backup_bus_ratio !== undefined ? Number(route.backup_bus_ratio) : 0.20;
     requiredBackupBuses = Math.ceil(suggestedOperatingBuses * backupRatio);
     requiredTotalBuses = suggestedOperatingBuses + requiredBackupBuses;
   }
@@ -83,18 +73,22 @@ function addRouteMetrics(route) {
   return {
     ...route,
     total_operation_minutes: totalOperationMinutes,
-    calculated_headway_minutes: calculatedHeadwayMinutes !== null ? Number(calculatedHeadwayMinutes.toFixed(2)) : null,
-    average_headway_minutes: route.headway_minutes !== undefined ? Number(headway.toFixed(2)) : null,
-    headway_minutes: route.headway_minutes !== undefined ? Number(headway.toFixed(2)) : null,
-    round_trip_time_minutes: roundTripTimeMinutes,
+    calculated_headway_minutes: calculatedHeadwayMinutes,
+    average_headway_minutes: headway,
+    headway_minutes: headway,
+    round_trip_time_minutes: roundTripTravelTime,
     suggested_operating_buses: suggestedOperatingBuses,
-    required_recovery_buses: requiredRecoveryBuses,
+    required_recovery_buses: 0,
     required_backup_buses: requiredBackupBuses,
     required_total_buses: requiredTotalBuses
   };
 }
 
 async function getSuggestedOperatingBuses(routeCode, headwayMinutes) {
+  const routeRes = await pool.query('SELECT * FROM routes WHERE route_code = $1', [routeCode]);
+  const route = routeRes.rows[0];
+  if (!route) return null;
+
   const directionsRes = await pool.query(
     `SELECT direction_type, travel_time_minutes, turnaround_time_minutes
      FROM route_directions
@@ -111,13 +105,14 @@ async function getSuggestedOperatingBuses(routeCode, headwayMinutes) {
     return null;
   }
 
-  const roundTripTimeMinutes =
-    Number(outbound.travel_time_minutes) +
-    Number(outbound.turnaround_time_minutes) +
-    Number(inbound.travel_time_minutes) +
-    Number(inbound.turnaround_time_minutes);
+  const outboundTravel = Number(outbound.travel_time_minutes) || 0;
+  const inboundTravel = Number(inbound.travel_time_minutes) || 0;
+  const roundTripTravelTime = outboundTravel + inboundTravel;
 
-  return Math.ceil(roundTripTimeMinutes / headway);
+  const longLayoverMinutes = Number(route.min_rest_time_minutes) || Number(route.long_layover_minutes) || 60;
+  const maxCycleTime = roundTripTravelTime + longLayoverMinutes;
+
+  return Math.ceil(maxCycleTime / headway);
 }
 
 const routeController = {
@@ -244,21 +239,32 @@ const routeController = {
         standby_ratio = 0.15,
         inbound_start_time = '05:30:00',
         backup_bus_ratio = 0.20,
-        min_rest_time_minutes = 60
+        min_rest_time_minutes = 60,
+        outbound_travel,
+        outbound_turnaround,
+        inbound_travel,
+        inbound_turnaround
       } = req.body;
+
+      const outTravel = outbound_travel ?? travel_time_minutes;
+      const outTurn = outbound_turnaround ?? short_layover_minutes;
+      const inTravel = inbound_travel ?? travel_time_minutes;
+      const inTurn = inbound_turnaround ?? short_layover_minutes;
 
       if (!route_code || !route_name) {
         return error(res, 'Ma tuyen va ten tuyen la bat buoc', 400);
       }
 
-      const calculatedHeadway = getCalculatedHeadway(start_time, end_time, expected_trips_per_day);
-      const routeHeadway = headway_minutes ?? (calculatedHeadway !== null ? Number(calculatedHeadway.toFixed(2)) : undefined);
+      const calculatedHeadway = getCalculatedHeadway(start_time, end_time, expected_trips_per_day, outTravel, inTravel);
+      const routeHeadway = headway_minutes ?? (calculatedHeadway !== null ? Math.round(calculatedHeadway) : undefined);
       const validation = validateRouteInput({
         start_time,
         end_time,
         expected_trips_per_day,
         headway_minutes: routeHeadway,
-        confirmed_operating_buses
+        confirmed_operating_buses,
+        outbound_travel: outTravel,
+        inbound_travel: inTravel
       });
       if (validation.message) {
         return error(res, validation.message, 400);
@@ -311,14 +317,14 @@ const routeController = {
           await client.query(
             `INSERT INTO route_directions (route_code, direction_type, start_point, end_point, distance_km, travel_time_minutes, turnaround_time_minutes)
              VALUES ($1, 'outbound', $2, $3, $4, $5, $6)`,
-            [route_code, req.body.outbound_start_point, req.body.outbound_end_point, req.body.outbound_distance || null, travel_time_minutes, short_layover_minutes]
+            [route_code, req.body.outbound_start_point, req.body.outbound_end_point, req.body.outbound_distance || null, outTravel, outTurn]
           );
         }
         if (req.body.inbound_start_point) {
           await client.query(
             `INSERT INTO route_directions (route_code, direction_type, start_point, end_point, distance_km, travel_time_minutes, turnaround_time_minutes)
              VALUES ($1, 'inbound', $2, $3, $4, $5, $6)`,
-            [route_code, req.body.inbound_start_point, req.body.inbound_end_point, req.body.inbound_distance || null, travel_time_minutes, short_layover_minutes]
+            [route_code, req.body.inbound_start_point, req.body.inbound_end_point, req.body.inbound_distance || null, inTravel, inTurn]
           );
         }
 
@@ -355,21 +361,32 @@ const routeController = {
         standby_ratio = 0.15,
         inbound_start_time,
         backup_bus_ratio = 0.20,
-        min_rest_time_minutes = 60
+        min_rest_time_minutes = 60,
+        outbound_travel,
+        outbound_turnaround,
+        inbound_travel,
+        inbound_turnaround
       } = req.body;
+
+      const outTravel = outbound_travel ?? travel_time_minutes;
+      const outTurn = outbound_turnaround ?? short_layover_minutes;
+      const inTravel = inbound_travel ?? travel_time_minutes;
+      const inTurn = inbound_turnaround ?? short_layover_minutes;
 
       if (!route_name) {
         return error(res, 'Ten tuyen xe la bat buoc', 400);
       }
 
-      const calculatedHeadway = getCalculatedHeadway(start_time, end_time, expected_trips_per_day);
-      const routeHeadway = headway_minutes ?? (calculatedHeadway !== null ? Number(calculatedHeadway.toFixed(2)) : undefined);
+      const calculatedHeadway = getCalculatedHeadway(start_time, end_time, expected_trips_per_day, outTravel, inTravel);
+      const routeHeadway = headway_minutes ?? (calculatedHeadway !== null ? Math.round(calculatedHeadway) : undefined);
       const validation = validateRouteInput({
         start_time,
         end_time,
         expected_trips_per_day,
         headway_minutes: routeHeadway,
-        confirmed_operating_buses
+        confirmed_operating_buses,
+        outbound_travel: outTravel,
+        inbound_travel: inTravel
       });
       if (validation.message) {
         return error(res, validation.message, 400);
@@ -428,7 +445,7 @@ const routeController = {
              VALUES ($1, 'outbound', $2, $3, $4, $5, $6)
              ON CONFLICT (route_code, direction_type)
              DO UPDATE SET start_point = EXCLUDED.start_point, end_point = EXCLUDED.end_point, distance_km = EXCLUDED.distance_km, travel_time_minutes = EXCLUDED.travel_time_minutes, turnaround_time_minutes = EXCLUDED.turnaround_time_minutes`,
-            [routeCode, req.body.outbound_start_point, req.body.outbound_end_point, req.body.outbound_distance || null, travel_time_minutes, short_layover_minutes]
+            [routeCode, req.body.outbound_start_point, req.body.outbound_end_point, req.body.outbound_distance || null, outTravel, outTurn]
           );
         }
         if (req.body.inbound_start_point) {
@@ -437,7 +454,7 @@ const routeController = {
              VALUES ($1, 'inbound', $2, $3, $4, $5, $6)
              ON CONFLICT (route_code, direction_type)
              DO UPDATE SET start_point = EXCLUDED.start_point, end_point = EXCLUDED.end_point, distance_km = EXCLUDED.distance_km, travel_time_minutes = EXCLUDED.travel_time_minutes, turnaround_time_minutes = EXCLUDED.turnaround_time_minutes`,
-            [routeCode, req.body.inbound_start_point, req.body.inbound_end_point, req.body.inbound_distance || null, travel_time_minutes, short_layover_minutes]
+            [routeCode, req.body.inbound_start_point, req.body.inbound_end_point, req.body.inbound_distance || null, inTravel, inTurn]
           );
         }
 

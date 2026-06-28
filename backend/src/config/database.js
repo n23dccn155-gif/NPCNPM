@@ -4,7 +4,9 @@ require('dotenv').config();
 const poolConfig = process.env.DATABASE_URL
   ? {
       connectionString: process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      ssl: process.env.DATABASE_URL.includes('neon.tech') || process.env.NODE_ENV === 'production' 
+        ? { rejectUnauthorized: false } 
+        : false,
     }
   : {
       user: process.env.DB_USER,

@@ -1,6 +1,5 @@
 const pool = require('../config/database');
 const { success, error } = require('../utils/responseHelper');
-const { planController } = require('./planController');
 
 // Helper to add days to a date string YYYY-MM-DD
 function addDays(dateStr, days) {
@@ -11,8 +10,6 @@ function addDays(dateStr, days) {
 
 const batchController = {
   generate2Months: async (req, res, next) => {
-    // This could take a while, we might not want to do it all inside a single HTTP request transaction
-    // But for simplicity, we do it in a loop here.
     const { routeCode } = req.params;
     const userId = req.user.id;
 
@@ -43,20 +40,17 @@ const batchController = {
 
       // Start from tomorrow
       let currentDate = addDays(new Date().toISOString().split('T')[0], 1);
-      const NUM_DAYS = 60;
+      const NUM_PLANS = Math.ceil(60 / 7); // 9 plans (approx 63 days)
       
       let successCount = 0;
       let errorCount = 0;
 
-      // Import the internal functions from planController and assignmentController
-      // Since they are written to respond to Express req/res, we can mock req/res OR write direct DB logic.
-      // Writing direct DB logic is better. Or we can just import them and mock req, res.
+      // Import the internal functions from planController
       const planCtrl = require('./planController');
-      const assignmentCtrl = require('./assignmentController');
 
-      for (let i = 0; i < NUM_DAYS; i++) {
+      for (let i = 0; i < NUM_PLANS; i++) {
         const operationDate = currentDate;
-        currentDate = addDays(currentDate, 1);
+        currentDate = addDays(currentDate, 7); // step by 7 days
 
         try {
           // 1. Check if plan exists
@@ -80,7 +74,7 @@ const batchController = {
 
           // 2. Generate Trips (Mock Req/Res)
           await new Promise((resolve, reject) => {
-            const mockReq = { params: { planId }, body: {} };
+            const mockReq = { params: { planId }, body: {}, user: { id: userId } };
             const mockRes = {
               status: () => mockRes,
               json: (data) => {
@@ -91,23 +85,7 @@ const batchController = {
             planCtrl.generateTrips(mockReq, mockRes, reject);
           });
 
-          // 3. Auto Assign
-          await new Promise((resolve, reject) => {
-            const mockReq = { params: { planId }, body: {}, user: { id: userId } };
-            const mockRes = {
-              status: () => mockRes,
-              json: (data) => {
-                if (data.success) resolve();
-                else {
-                   console.log('AUTO ASSIGN ERROR:', data);
-                   reject(new Error(data.message));
-                }
-              }
-            };
-            assignmentCtrl.autoAssignPlan(mockReq, mockRes, reject);
-          });
-
-          // 4. Mark plan as approved
+          // 3. Mark plan as approved
           await pool.query('UPDATE operation_plans SET status = $1 WHERE plan_id = $2', ['approved', planId]);
           
           successCount++;
@@ -117,7 +95,7 @@ const batchController = {
         }
       }
 
-      return success(res, { successCount, errorCount }, `Đã sinh lịch thành công cho ${successCount} ngày, lỗi ${errorCount} ngày.`);
+      return success(res, { successCount, errorCount }, `Đã sinh lịch thành công cho ${successCount} tuần (${successCount * 7} ngày), lỗi ${errorCount} tuần.`);
     } catch (err) {
       if (client) client.release();
       next(err);

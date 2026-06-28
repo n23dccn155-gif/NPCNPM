@@ -4,6 +4,23 @@ import { PageHeader, Modal, AlertBox } from '../../components/UI';
 import { getPlans, getPlan, reviewPlan } from '../../services/planService';
 import { getRoutes } from '../../services/routeService';
 
+const DAY_LABELS = ['CN','T2','T3','T4','T5','T6','T7'];
+
+function formatTime(ts) {
+  if (!ts) return '--:--';
+  return new Date(ts).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDate(ts) {
+  const d = new Date(ts);
+  return `${DAY_LABELS[d.getDay()]} ${d.getDate()}/${d.getMonth()+1}`;
+}
+
+function getDateStr(ts) {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
 export default function PlanApproval() {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -12,6 +29,8 @@ export default function PlanApproval() {
   const [selectedPlanId, setSelectedPlanId] = useState(null);
   const [planDetail, setPlanDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+
+  const [selectedDayStr, setSelectedDayStr] = useState(null); // 'YYYY-MM-DD'
 
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewDecision, setReviewDecision] = useState('approve');
@@ -44,8 +63,21 @@ export default function PlanApproval() {
     setDetailLoading(true);
     getPlan(planId)
       .then(res => {
-        setPlanDetail(res.data?.data || res.data || null);
+        const detail = res.data?.data || res.data || null;
+        setPlanDetail(detail);
         setSelectedPlanId(planId);
+        if (detail?.groups?.length > 0) {
+          const dayGroupsLocal = {};
+          for (const g of detail.groups) {
+            const ds = getDateStr(g.start_time);
+            if (!dayGroupsLocal[ds]) dayGroupsLocal[ds] = [];
+            dayGroupsLocal[ds].push(g);
+          }
+          const sortedDays = Object.keys(dayGroupsLocal).sort();
+          if (sortedDays.length > 0) {
+            setSelectedDayStr(sortedDays[0]);
+          }
+        }
       })
       .catch(() => setErrorMsg('Không thể tải chi tiết kế hoạch'))
       .finally(() => setDetailLoading(false));
@@ -89,7 +121,27 @@ export default function PlanApproval() {
     return r ? `Tuyến ${r.route_code} – ${r.route_name}` : `Tuyến ${code}`;
   };
 
-  const filteredPlans = plans.filter(p => !filterStatus || p.status === filterStatus);
+  // Manager không thấy kế hoạch nháp
+  const filteredPlans = plans.filter(p => p.status !== 'draft' && (!filterStatus || p.status === filterStatus));
+
+  // Nhóm groups theo ngày
+  const dayGroups = {};
+  if (planDetail?.groups) {
+    for (const g of planDetail.groups) {
+      const ds = getDateStr(g.start_time);
+      if (!dayGroups[ds]) dayGroups[ds] = [];
+      dayGroups[ds].push(g);
+    }
+  }
+  const dayKeys = Object.keys(dayGroups).sort();
+
+  const activeGroups = selectedDayStr ? (dayGroups[selectedDayStr] || []) : [];
+  const operatingGroups = activeGroups.filter(g => g.status !== 'standby');
+  const standbyGroups = activeGroups.filter(g => g.status === 'standby');
+  const activeTrips = planDetail?.trips?.filter(t => {
+    if (!selectedDayStr) return true;
+    return getDateStr(t.scheduled_departure) === selectedDayStr;
+  }) || [];
 
   return (
     <Layout>
@@ -116,7 +168,6 @@ export default function PlanApproval() {
                 <option value="pending_approval">Chờ duyệt</option>
                 <option value="approved">Đã duyệt</option>
                 <option value="rejected">Bị từ chối</option>
-                <option value="draft">Nháp</option>
               </select>
             </div>
             <div className="max-h-[600px] overflow-y-auto divide-y divide-slate-50">
@@ -167,7 +218,7 @@ export default function PlanApproval() {
                   <div>
                     <h3 className="font-bold text-lg text-slate-800">{getRouteName(planDetail.route_code)}</h3>
                     <p className="text-xs text-slate-500 mt-1 font-mono">
-                      Ngày vận hành: {new Date(planDetail.operation_date).toLocaleDateString('vi-VN')}
+                      Chu kỳ 7 ngày: <span className="font-semibold text-slate-700">{selectedDayStr && dayKeys.length > 0 ? `${new Date(dayKeys[0]).toLocaleDateString('vi-VN')} - ${new Date(dayKeys[dayKeys.length-1]).toLocaleDateString('vi-VN')}` : new Date(planDetail.operation_date).toLocaleDateString('vi-VN')}</span>
                       {planDetail.submitted_by_name && ` • Gửi bởi: ${planDetail.submitted_by_name}`}
                     </p>
                   </div>
@@ -212,7 +263,7 @@ export default function PlanApproval() {
                     </div>
                     <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
                       <div className="text-2xs text-slate-400 font-bold uppercase">Vòng xe</div>
-                      <div className="text-lg font-bold text-slate-800">{planDetail.scheduling_metrics.round_trip_time_minutes}p</div>
+                      <div className="text-lg font-bold text-slate-800">{planDetail.scheduling_metrics.round_trip_time_minutes ? Math.round(planDetail.scheduling_metrics.round_trip_time_minutes) : 0}p</div>
                     </div>
                     <div className="bg-green-50 rounded-xl p-3 border border-green-100">
                       <div className="text-2xs text-green-500 font-bold uppercase">Số xe vận doanh</div>
@@ -222,14 +273,30 @@ export default function PlanApproval() {
                 </div>
               )}
 
+              {/* Tab chọn ngày */}
+              {dayKeys.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                  <h4 className="font-bold text-gray-800 text-sm mb-3">📅 Xem theo ngày</h4>
+                  <div className="flex gap-2 flex-wrap">
+                    {dayKeys.map(ds => (
+                      <button key={ds}
+                        onClick={() => setSelectedDayStr(ds)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition border ${selectedDayStr === ds ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'}`}>
+                        {formatDate(ds + 'T00:00:00')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Groups */}
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                <h4 className="font-bold text-sm text-slate-800 mb-3">Nhóm chuyến & Phân công ({planDetail.groups?.length || 0} nhóm)</h4>
-                {!planDetail.groups?.length ? (
+                <h4 className="font-bold text-sm text-slate-800 mb-3">🚌 Nhóm chuyến & Phân công ngày — {selectedDayStr ? formatDate(selectedDayStr + 'T00:00:00') : ''}</h4>
+                {!operatingGroups.length ? (
                   <div className="text-center py-10 bg-slate-50 rounded-xl text-slate-400 text-xs">Chưa có nhóm chuyến nào</div>
                 ) : (
                   <div className="space-y-3">
-                    {planDetail.groups.map(g => (
+                    {operatingGroups.map(g => (
                       <div 
                         key={g.group_id} 
                         className={`border border-slate-100 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 cursor-pointer transition ${highlightedDriver && g.driver_name === highlightedDriver ? 'bg-yellow-100 border-yellow-300' : 'bg-white'}`}
@@ -242,7 +309,7 @@ export default function PlanApproval() {
                         <div>
                           <div className="font-bold text-slate-800 text-sm">{g.group_name}</div>
                           <div className="text-2xs font-semibold text-gray-500 mt-1 font-mono">
-                            {new Date(g.start_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} – {new Date(g.end_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                            {formatTime(g.start_time)} – {formatTime(g.end_time)}
                           </div>
                         </div>
                         <div className="text-xs text-right">
@@ -267,12 +334,12 @@ export default function PlanApproval() {
 
               {/* Trips */}
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                <h4 className="font-bold text-sm text-slate-800 mb-3">Lịch trình chi tiết ({planDetail.trips?.length || 0} chuyến)</h4>
-                {!planDetail.trips?.length ? (
+                <h4 className="font-bold text-sm text-slate-800 mb-3">Lịch trình chi tiết ngày — {selectedDayStr ? formatDate(selectedDayStr + 'T00:00:00') : ''} ({activeTrips.length} chuyến)</h4>
+                {!activeTrips.length ? (
                   <div className="text-center py-6 bg-slate-50 rounded-xl text-slate-400 text-xs">Không có lịch chuyến</div>
                 ) : (
                   <div className="max-h-60 overflow-y-auto border border-slate-100 rounded-xl divide-y">
-                    {planDetail.trips.map(t => {
+                    {activeTrips.map(t => {
                       const group = planDetail.groups?.find(g => g.group_id === t.group_id);
                       return (
                         <div 
@@ -294,7 +361,7 @@ export default function PlanApproval() {
                             )}
                           </div>
                           <div className="font-semibold text-slate-800">
-                            {new Date(t.scheduled_departure).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} – {new Date(t.scheduled_arrival).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                            {formatTime(t.scheduled_departure)} – {formatTime(t.scheduled_arrival)}
                           </div>
                         </div>
                       );
@@ -302,6 +369,25 @@ export default function PlanApproval() {
                   </div>
                 )}
               </div>
+
+              {/* Standby resources */}
+              {selectedDayStr && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+                  <h4 className="font-bold text-amber-800 text-sm mb-3 font-semibold">⚠️ Dự phòng & Nghỉ ngày {formatDate(selectedDayStr + 'T00:00:00')}</h4>
+                  {standbyGroups.length === 0 ? (
+                    <p className="text-xs text-amber-600">Chưa có thông tin dự phòng</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {standbyGroups.map(g => (
+                        <div key={g.group_id} className="flex gap-4 text-xs">
+                          {g.driver_name && <span className="text-amber-800"><span className="font-semibold">Tài xế nghỉ/dự phòng:</span> {g.driver_name}</span>}
+                          {g.license_plate && <span className="text-amber-800"><span className="font-semibold">Xe dự phòng:</span> {g.license_plate}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-16 text-center text-slate-400 font-semibold">

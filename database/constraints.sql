@@ -57,7 +57,7 @@ ALTER TABLE operation_plans
 -- 9. Bảng trip_groups
 ALTER TABLE trip_groups
     ADD CONSTRAINT fk_groups_plans FOREIGN KEY (plan_id) REFERENCES operation_plans(plan_id) ON DELETE CASCADE,
-    ADD CONSTRAINT chk_groups_status CHECK (status IN ('unassigned', 'assigned')),
+    ADD CONSTRAINT chk_groups_status CHECK (status IN ('unassigned', 'assigned', 'standby')),
     ADD CONSTRAINT chk_groups_times CHECK (end_time > start_time);
 
 -- 10. Bảng trips

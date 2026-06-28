@@ -219,8 +219,8 @@ const incidentController = {
          FROM assignments a
          JOIN trip_groups tg ON a.group_id = tg.group_id
          JOIN operation_plans p ON tg.plan_id = p.plan_id
-         JOIN buses b ON a.bus_id = b.bus_id
-         JOIN drivers d ON a.driver_id = d.driver_id
+         LEFT JOIN buses b ON a.bus_id = b.bus_id
+         LEFT JOIN drivers d ON a.driver_id = d.driver_id
          WHERE a.bus_id = $1 AND a.status = 'active' AND tg.end_time >= NOW()`,
         [bus_id]
       );

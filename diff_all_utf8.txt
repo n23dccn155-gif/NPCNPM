@@ -1,0 +1,2156 @@
+﻿diff --git a/backend/src/controllers/planController.js b/backend/src/controllers/planController.js
+index 1c6f1e0..7a75340 100644
+--- a/backend/src/controllers/planController.js
++++ b/backend/src/controllers/planController.js
+@@ -11,13 +11,11 @@ function buildTimestamp(dateStr, minutes) {
+   const minuteOfDay = ((minutes % 1440) + 1440) % 1440;
+   const base = new Date(`${dateStr}T00:00:00`);
+   base.setDate(base.getDate() + dayOffset);
+-
+   const y = base.getFullYear();
+   const m = String(base.getMonth() + 1).padStart(2, '0');
+   const d = String(base.getDate()).padStart(2, '0');
+   const hh = String(Math.floor(minuteOfDay / 60)).padStart(2, '0');
+   const mm = String(minuteOfDay % 60).padStart(2, '0');
+-
+   return `${y}-${m}-${d}T${hh}:${mm}:00`;
+ }
+ 
+@@ -28,50 +26,38 @@ function calculateSchedulingMetrics(route, outbound, inbound) {
+   const headwayMinutes = Number(route.headway_minutes);
+   const totalOperationMinutes = endMin - startMin;
+   const calculatedHeadwayMinutes = totalOperationMinutes / (expectedTripsPerDirection - 1);
+-  const travelTimeMinutes = Number(outbound.travel_time_minutes);
+-  const shortLayoverMinutes = Number(outbound.short_layover_minutes) || 20;
+-  const longLayoverMinutes = Number(outbound.long_layover_minutes) || 60;
++  const outboundTravel = Number(outbound.travel_time_minutes) || 0;
++  const inboundTravel = Number(inbound.travel_time_minutes) || 0;
++  const roundTripTravelTime = outboundTravel + inboundTravel;
++  const shortLayoverMinutes = Number(route.short_layover_minutes) || 10;
++  const longLayoverMinutes = Number(route.min_rest_time_minutes) || Number(route.long_layover_minutes) || 60;
+   const roundsBeforeLongBreak = Number(route.max_driving_minutes) || 3;
+-  
+-  // Chu tr├¼nh X v├▓ng: (X-1) v├▓ng nghß╗ë ngß║»n + 1 v├▓ng nghß╗ë d├ái
+-  const cycleTimeMinutes = roundsBeforeLongBreak * (travelTimeMinutes * 2) + (roundsBeforeLongBreak - 1) * shortLayoverMinutes + 1 * longLayoverMinutes;
++  const cycleTimeMinutes = roundsBeforeLongBreak * roundTripTravelTime + (roundsBeforeLongBreak - 1) * shortLayoverMinutes + longLayoverMinutes;
+   const avgRoundTripTime = cycleTimeMinutes / roundsBeforeLongBreak;
+-  
+   const generatedTripsPerDirection = Math.floor(totalOperationMinutes / headwayMinutes) + 1;
+   const suggestedOperatingBuses = Math.ceil(avgRoundTripTime / headwayMinutes);
+-
+   return {
+-    startMin,
+-    endMin,
+-    expectedTripsPerDirection,
+-    totalOperationMinutes,
+-    calculatedHeadwayMinutes,
+-    headwayMinutes,
+-    generatedTripsPerDirection,
+-    roundTripTimeMinutes: avgRoundTripTime,
+-    suggestedOperatingBuses
++    startMin, endMin, expectedTripsPerDirection, totalOperationMinutes,
++    calculatedHeadwayMinutes, headwayMinutes, generatedTripsPerDirection,
++    roundTripTimeMinutes: avgRoundTripTime, suggestedOperatingBuses
+   };
+ }
+ 
+ async function getRouteDirections(client, routeCode) {
+   const result = await client.query(
+-    `SELECT *
+-     FROM route_directions
+-     WHERE route_code = $1
++    `SELECT * FROM route_directions WHERE route_code = $1
+      ORDER BY CASE direction_type WHEN 'outbound' THEN 1 ELSE 2 END`,
+     [routeCode]
+   );
+-
+-  const outbound = result.rows.find(direction => direction.direction_type === 'outbound');
+-  const inbound = result.rows.find(direction => direction.direction_type === 'inbound');
+-
++  const outbound = result.rows.find(d => d.direction_type === 'outbound');
++  const inbound = result.rows.find(d => d.direction_type === 'inbound');
+   return { directions: result.rows, outbound, inbound };
+ }
+ 
+ const planController = {
+   getAll: async (req, res, next) => {
+     try {
+-      const { route_code, status, date } = req.query;
++      const { route_code, status, date, role } = req.query;
+       let query = `
+         SELECT p.*, r.route_name, u.full_name AS creator_name
+         FROM operation_plans p
+@@ -80,59 +66,35 @@ const planController = {
+       `;
+       const params = [];
+       const conditions = [];
+-
+-      if (route_code) {
+-        params.push(route_code);
+-        conditions.push(`p.route_code = $${params.length}`);
+-      }
+-      if (status) {
+-        params.push(status);
+-        conditions.push(`p.status = $${params.length}`);
+-      }
+-      if (date) {
+-        params.push(date);
+-        conditions.push(`p.operation_date = $${params.length}`);
+-      }
+-
+-      if (conditions.length) {
+-        query += ` WHERE ${conditions.join(' AND ')}`;
++      // Manager chß╗ë thß║Ñy kß║┐ hoß║ích ─æ├ú submit trß╗ƒ l├¬n
++      if (req.user?.role === 'manager') {
++        conditions.push(`p.status IN ('pending_approval','approved','rejected')`);
+       }
++      if (route_code) { params.push(route_code); conditions.push(`p.route_code = $${params.length}`); }
++      if (status) { params.push(status); conditions.push(`p.status = $${params.length}`); }
++      if (date) { params.push(date); conditions.push(`p.operation_date = $${params.length}`); }
++      if (conditions.length) query += ` WHERE ${conditions.join(' AND ')}`;
+       query += ' ORDER BY p.operation_date DESC, p.route_code';
+-
+       const result = await pool.query(query, params);
+       return success(res, result.rows);
+-    } catch (err) {
+-      next(err);
+-    }
++    } catch (err) { next(err); }
+   },
+ 
+   getOne: async (req, res, next) => {
+     try {
+       const { planId } = req.params;
+       const planRes = await pool.query(
+-        `SELECT p.*,
+-                r.route_name,
+-                r.start_time,
+-                r.end_time,
+-                r.expected_trips_per_day,
+-                r.headway_minutes,
+-                r.confirmed_operating_buses,
+-                u.full_name AS creator_name
++        `SELECT p.*, r.route_name, r.start_time, r.end_time, r.expected_trips_per_day,
++                r.headway_minutes, r.confirmed_operating_buses, u.full_name AS creator_name
+          FROM operation_plans p
+          JOIN routes r ON p.route_code = r.route_code
+          JOIN users u ON p.created_by = u.user_id
+-         WHERE p.plan_id = $1`,
+-        [planId]
++         WHERE p.plan_id = $1`, [planId]
+       );
+-
+-      if (!planRes.rows.length) {
+-        return error(res, 'Kh├┤ng t├¼m thß║Ñy kß║┐ hoß║ích vß║¡n doanh', 404);
+-      }
+-
++      if (!planRes.rows.length) return error(res, 'Kh├┤ng t├¼m thß║Ñy kß║┐ hoß║ích vß║¡n doanh', 404);
+       const plan = planRes.rows[0];
+       const { directions, outbound, inbound } = await getRouteDirections(pool, plan.route_code);
+       plan.directions = directions;
+-
+       if (outbound && inbound && Number(plan.expected_trips_per_day) >= 2) {
+         const metrics = calculateSchedulingMetrics(plan, outbound, inbound);
+         plan.scheduling_metrics = {
+@@ -147,318 +109,218 @@ const planController = {
+           generated_trips_per_direction: metrics.generatedTripsPerDirection
+         };
+       }
+-
+       const groupsRes = await pool.query(
+-        `SELECT g.*, a.bus_id, a.driver_id, b.license_plate, d.full_name AS driver_name
++        `SELECT g.*, a.bus_id, a.driver_id, a.assignment_type,
++                b.license_plate, d.full_name AS driver_name
+          FROM trip_groups g
+          LEFT JOIN assignments a ON g.group_id = a.group_id AND a.status = 'active'
+          LEFT JOIN buses b ON a.bus_id = b.bus_id
+          LEFT JOIN drivers d ON a.driver_id = d.driver_id
+          WHERE g.plan_id = $1
+-         ORDER BY g.group_id`,
+-        [planId]
++         ORDER BY g.start_time, g.group_id`, [planId]
+       );
+       plan.groups = groupsRes.rows;
+-
+       const tripsRes = await pool.query(
+         `SELECT t.*, tg.group_name, rd.direction_type, rd.start_point, rd.end_point
+          FROM trips t
+          LEFT JOIN trip_groups tg ON t.group_id = tg.group_id
+          JOIN route_directions rd ON t.direction_id = rd.direction_id
+-         WHERE t.plan_id = $1
+-         ORDER BY t.trip_order`,
+-        [planId]
++         WHERE t.plan_id = $1 ORDER BY t.scheduled_departure`, [planId]
+       );
+       plan.trips = tripsRes.rows;
+-
+-      const standbyRes = await pool.query(
+-        `SELECT a.*, d.full_name AS driver_name, d.phone
+-         FROM assignments a
+-         JOIN drivers d ON a.driver_id = d.driver_id
+-         WHERE a.plan_id = $1 AND a.assignment_type LIKE 'standby%' AND a.status = 'active'`,
+-        [planId]
+-      );
+-      plan.standby_drivers = standbyRes.rows;
+-
+-      const leaveRes = await pool.query(
+-        `SELECT l.*, d.full_name AS driver_name
+-         FROM leave_requests l
+-         JOIN drivers d ON l.driver_id = d.driver_id
+-         WHERE l.leave_date = $1 AND l.status = 'approved'`,
+-        [plan.operation_date]
+-      );
+-      const leaves = leaveRes.rows;
+-
+-      const incidentRes = await pool.query(
+-        `SELECT ir.*, u.full_name as reported_by_name, b.license_plate
+-         FROM incident_reports ir
+-         JOIN users u ON ir.reported_by = u.user_id
+-         LEFT JOIN buses b ON ir.bus_id = b.bus_id
+-         WHERE DATE(ir.created_at) = $1`,
+-        [plan.operation_date]
+-      );
+-      plan.incidents = incidentRes.rows;
+-
+-      // Enhance leaves with replacement info for this specific plan
+-      for (let l of leaves) {
+-        // Was this driver replaced or cleared in this plan?
+-        const oldAssigRes = await pool.query(
+-          `SELECT group_id FROM assignments WHERE plan_id = $1 AND driver_id = $2 AND status = 'replaced'`,
+-          [planId, l.driver_id]
+-        );
+-        if (oldAssigRes.rows.length > 0) {
+-          const groupId = oldAssigRes.rows[0].group_id;
+-          const activeAssigRes = await pool.query(
+-            `SELECT a.driver_id, d.full_name as driver_name 
+-             FROM assignments a JOIN drivers d ON a.driver_id = d.driver_id 
+-             WHERE a.group_id = $1 AND a.status = 'active'`,
+-            [groupId]
+-          );
+-          if (activeAssigRes.rows.length > 0) {
+-            l.replaced_by = activeAssigRes.rows[0].driver_name;
+-          } else {
+-            l.cleared = true;
+-          }
+-        }
+-        
+-        // Is driver currently actively assigned in this plan?
+-        const currentAssigRes = await pool.query(
+-          `SELECT group_id FROM assignments WHERE plan_id = $1 AND driver_id = $2 AND status = 'active'`,
+-          [planId, l.driver_id]
+-        );
+-        l.is_active_in_plan = currentAssigRes.rows.length > 0;
+-        l.not_scheduled = !l.is_active_in_plan && !l.replaced_by && !l.cleared;
+-      }
+-
+-      // Show all approved leaves for the day, even if not scheduled
+-      plan.approved_leaves = leaves;
+-
+       return success(res, plan);
+-    } catch (err) {
+-      next(err);
+-    }
++    } catch (err) { next(err); }
+   },
+ 
+   create: async (req, res, next) => {
+     try {
+       const { route_code, operation_date } = req.body;
+       const dispatcherId = req.user.id;
+-
+-      if (!route_code || !operation_date) {
+-        return error(res, 'Vui l├▓ng cung cß║Ñp m├ú tuyß║┐n v├á ng├áy vß║¡n h├ánh', 400);
+-      }
+-
++      if (!route_code || !operation_date) return error(res, 'Vui l├▓ng cung cß║Ñp m├ú tuyß║┐n v├á ng├áy vß║¡n h├ánh', 400);
+       const routeRes = await pool.query('SELECT * FROM routes WHERE route_code = $1', [route_code]);
+-      if (!routeRes.rows.length) {
+-        return error(res, 'Tuyß║┐n kh├┤ng tß╗ôn tß║íi', 404);
+-      }
+-      if (routeRes.rows[0].status !== 'active') {
+-        return error(res, 'Tuyß║┐n kh├┤ng hoß║ít ─æß╗Öng', 400);
+-      }
+-
++      if (!routeRes.rows.length) return error(res, 'Tuyß║┐n kh├┤ng tß╗ôn tß║íi', 404);
++      if (routeRes.rows[0].status !== 'active') return error(res, 'Tuyß║┐n kh├┤ng hoß║ít ─æß╗Öng', 400);
+       const existRes = await pool.query(
+         'SELECT plan_id FROM operation_plans WHERE route_code = $1 AND operation_date = $2',
+         [route_code, operation_date]
+       );
+-      if (existRes.rows.length) {
+-        return error(res, 'Kß║┐ hoß║ích cho tuyß║┐n trong ng├áy n├áy ─æ├ú tß╗ôn tß║íi', 409);
+-      }
+-
++      if (existRes.rows.length) return error(res, 'Kß║┐ hoß║ích cho tuyß║┐n trong ng├áy n├áy ─æ├ú tß╗ôn tß║íi', 409);
+       const result = await pool.query(
+         `INSERT INTO operation_plans (route_code, operation_date, created_by, status)
+-         VALUES ($1, $2, $3, 'draft')
+-         RETURNING *`,
++         VALUES ($1, $2, $3, 'draft') RETURNING *`,
+         [route_code, operation_date, dispatcherId]
+       );
+-
+       return success(res, result.rows[0], 'Tß║ío kß║┐ hoß║ích vß║¡n doanh th├ánh c├┤ng', 201);
+-    } catch (err) {
+-      next(err);
+-    }
++    } catch (err) { next(err); }
++  },
++
++  // X├ôA kß║┐ hoß║ích nh├íp / bß╗ï tß╗½ chß╗æi
++  deletePlan: async (req, res, next) => {
++    try {
++      const { planId } = req.params;
++      const planRes = await pool.query('SELECT * FROM operation_plans WHERE plan_id = $1', [planId]);
++      if (!planRes.rows.length) return error(res, 'Kh├┤ng t├¼m thß║Ñy kß║┐ hoß║ích', 404);
++      if (!['draft', 'rejected'].includes(planRes.rows[0].status)) {
++        return error(res, 'Chß╗ë ─æ╞░ß╗úc x├│a kß║┐ hoß║ích nh├íp hoß║╖c bß╗ï tß╗½ chß╗æi', 400);
++      }
++      await pool.query(
++        `DELETE FROM assignments WHERE group_id IN (SELECT group_id FROM trip_groups WHERE plan_id = $1)`,
++        [planId]
++      );
++      await pool.query('DELETE FROM trips WHERE plan_id = $1', [planId]);
++      await pool.query('DELETE FROM trip_groups WHERE plan_id = $1', [planId]);
++      await pool.query('DELETE FROM operation_plans WHERE plan_id = $1', [planId]);
++      return success(res, null, '─É├ú x├│a kß║┐ hoß║ích th├ánh c├┤ng');
++    } catch (err) { next(err); }
+   },
+ 
++  // SINH CHUYß║╛N 7 NG├ÇY + XOAY V├ÆNG T├ÇI Xß║╛ / XE
+   generateTrips: async (req, res, next) => {
+     const client = await pool.connect();
+     try {
+       await client.query('BEGIN');
+       const { planId } = req.params;
+-      
+       const planRes = await client.query('SELECT * FROM operation_plans WHERE plan_id = $1', [planId]);
+-      if (!planRes.rows.length) {
+-        await client.query('ROLLBACK');
+-        return error(res, 'Kh├┤ng t├¼m thß║Ñy kß║┐ hoß║ích vß║¡n doanh', 404);
+-      }
+-
++      if (!planRes.rows.length) { await client.query('ROLLBACK'); return error(res, 'Kh├┤ng t├¼m thß║Ñy kß║┐ hoß║ích', 404); }
+       const plan = planRes.rows[0];
+-      if (plan.status !== 'draft') {
+-        await client.query('ROLLBACK');
+-        return error(res, 'Chß╗ë kß║┐ hoß║ích nh├íp mß╗¢i ─æ╞░ß╗úc sinh chuyß║┐n', 400);
+-      }
++      if (plan.status !== 'draft') { await client.query('ROLLBACK'); return error(res, 'Chß╗ë kß║┐ hoß║ích nh├íp mß╗¢i ─æ╞░ß╗úc sinh chuyß║┐n', 400); }
+ 
+       const routeRes = await client.query('SELECT * FROM routes WHERE route_code = $1', [plan.route_code]);
+       const route = routeRes.rows[0];
+-      
+-      const travel_time = req.body.travel_time || route.travel_time_minutes || 80;
+-      const headway_minutes = req.body.headway_minutes || route.headway_minutes || 15;
+-      const short_layover = req.body.short_layover || route.short_layover_minutes || 10;
+-      const long_layover = req.body.long_layover || route.long_layover_minutes || 15;
+-      const max_driving_minutes = req.body.max_driving_minutes || route.max_driving_minutes || 240;
+-      const standby_ratio = req.body.standby_ratio || route.standby_ratio || 0.15;
+-      
+       const { outbound, inbound } = await getRouteDirections(client, plan.route_code);
++      if (!outbound || !inbound) { await client.query('ROLLBACK'); return error(res, 'Tuyß║┐n ch╞░a cß║Ñu h├¼nh ─æß╗º l╞░ß╗út ─æi v├á l╞░ß╗út vß╗ü', 400); }
++
++      const short_layover = Number(route.short_layover_minutes) || 10;
++      const long_layover = Number(route.min_rest_time_minutes) || 60;
++      const max_rounds = Number(route.max_driving_minutes) || 3;
++      const headway = Number(route.headway_minutes) || 30;
++      const startMin = timeToMinutes(route.start_time);
++      const endMin = timeToMinutes(route.end_time);
++      const outT = Number(outbound.travel_time_minutes) || 80;
++      const inT = Number(inbound.travel_time_minutes) || 80;
++
++      // Lß║Ñy xe v├á t├ái xß║┐ ─æ├ú g├ín cho tuyß║┐n
++      const busRes = await client.query(
++        `SELECT rb.bus_id, rb.bus_role, b.license_plate FROM route_buses rb
++         JOIN buses b ON rb.bus_id = b.bus_id
++         WHERE rb.route_code = $1 AND b.status = 'active'
++         ORDER BY rb.bus_role DESC, rb.route_bus_id`,
++        [plan.route_code]
++      );
++      const drvRes = await client.query(
++        `SELECT rd.driver_id, d.full_name FROM route_drivers rd
++         JOIN drivers d ON rd.driver_id = d.driver_id
++         WHERE rd.route_code = $1 AND d.status = 'working'
++         ORDER BY rd.route_driver_id`,
++        [plan.route_code]
++      );
++      const operatingBuses = busRes.rows.filter(b => b.bus_role === 'operating');
++      const standbyBuses = busRes.rows.filter(b => b.bus_role === 'standby');
++      const allDrivers = drvRes.rows;
+ 
+-      if (!outbound || !inbound) {
+-        await client.query('ROLLBACK');
+-        return error(res, 'Tuyß║┐n ch╞░a cß║Ñu h├¼nh ─æß╗º l╞░ß╗út ─æi v├á l╞░ß╗út vß╗ü', 400);
+-      }
+-
+-      const startMin = timeToMinutes(route.start_time); // e.g. 05:00
+-      const endMin = timeToMinutes(route.end_time);     // e.g. 21:30
+-      const inboundStartMin = route.inbound_start_time ? timeToMinutes(route.inbound_start_time) : startMin + 30;
+-
++      // X├│a dß╗» liß╗çu c┼⌐
+       await client.query(
+-        `DELETE FROM assignments
+-         WHERE group_id IN (SELECT group_id FROM trip_groups WHERE plan_id = $1)`,
++        `DELETE FROM assignments WHERE group_id IN (SELECT group_id FROM trip_groups WHERE plan_id = $1)`,
+         [planId]
+       );
+       await client.query('DELETE FROM trips WHERE plan_id = $1', [planId]);
+       await client.query('DELETE FROM trip_groups WHERE plan_id = $1', [planId]);
+ 
+-      const y = plan.operation_date.getFullYear();
+-      const m = String(plan.operation_date.getMonth() + 1).padStart(2, '0');
+-      const d = String(plan.operation_date.getDate()).padStart(2, '0');
+-      const dateStr = `${y}-${m}-${d}`;
+-      
+-      // C├íc mß╗æc giß╗¥ xuß║Ñt bß║┐n cß╗æ ─æß╗ïnh tß║íi bß║┐n A
++      // T├¡nh danh s├ích giß╗¥ xuß║Ñt bß║┐n
+       const dispatchTimes = [];
+-      let tTime = startMin;
+-      while (tTime <= endMin - travel_time * 2) {
+-          dispatchTimes.push(tTime);
+-          tTime += headway_minutes;
++      let t = startMin;
++      while (t <= endMin - (outT + inT)) { dispatchTimes.push(t); t += headway; }
++
++      // M├┤ phß╗Ång ─æß╗â t├¼m cß║Ñu tr├║c xe
++      const simBuses = [];
++      let simCounter = 0;
++      for (const dt of dispatchTimes) {
++        simBuses.sort((a, b) => a.avail - b.avail);
++        let bus = simBuses.find(b => b.avail <= dt);
++        if (!bus) { simCounter++; bus = { id: simCounter, avail: dt, rounds: 0, trips: [] }; simBuses.push(bus); }
++        bus.trips.push({ out_dep: dt, out_arr: dt + outT, in_dep: dt + outT, in_arr: dt + outT + inT });
++        bus.rounds++;
++        const lay = bus.rounds >= max_rounds ? long_layover : short_layover;
++        if (bus.rounds >= max_rounds) bus.rounds = 0;
++        bus.avail = dt + outT + inT + lay;
+       }
+-      
+-      const activeBuses = [];
+-      const allDrivers = [];
+-      const allGeneratedTrips = [];
+-      let busCounter = 0;
+-      
+-      for (const dispatchTime of dispatchTimes) {
+-          // Cß║¡p nhß║¡t queue: T├¼m xe rß║únh rß╗ùi sß╗¢m nhß║Ñt
+-          activeBuses.sort((a, b) => a.availableTime - b.availableTime);
+-          
+-          let bus = activeBuses.find(b => b.availableTime <= dispatchTime);
+-          
+-          if (!bus) {
+-              // Nß║┐u kh├┤ng c├│ xe n├áo rß║únh, hoß║╖c tß║Ñt cß║ú ─æß╗üu ─æang ─æß╗ù chß╗¥ hß║┐t giß╗¥ nghß╗ë -> Bß╗ò sung xe mß╗¢i
+-              busCounter++;
+-              bus = {
+-                  busId: busCounter,
+-                  availableTime: dispatchTime, 
+-                  roundTripCount: 0,
+-                  trips: []
+-              };
+-              activeBuses.push(bus);
+-          }
+-          
+-          // Xe 'bus' sß║╜ nhß║¡n l╞░ß╗út chß║íy tr├▓n (A->B->A) cho slot n├áy
+-          let arrTimeAtoB = dispatchTime + travel_time;
+-          let tripAtoB = {
+-              direction_id: outbound.direction_id,
+-              startLoc: 'A',
+-              startTime: dispatchTime,
+-              endLoc: 'B',
+-              endTime: arrTimeAtoB,
+-              scheduled_departure: buildTimestamp(dateStr, dispatchTime),
+-              scheduled_arrival: buildTimestamp(dateStr, arrTimeAtoB)
+-          };
+-          
+-          let arrTimeBtoA = arrTimeAtoB + travel_time; // Quay ─æß║ºu tß╗⌐c th├¼ tß║íi B
+-          let tripBtoA = {
+-              direction_id: inbound.direction_id,
+-              startLoc: 'B',
+-              startTime: arrTimeAtoB,
+-              endLoc: 'A',
+-              endTime: arrTimeBtoA,
+-              scheduled_departure: buildTimestamp(dateStr, arrTimeAtoB),
+-              scheduled_arrival: buildTimestamp(dateStr, arrTimeBtoA)
+-          };
+-          
+-          bus.trips.push(tripAtoB);
+-          bus.trips.push(tripBtoA);
+-          allGeneratedTrips.push(tripAtoB);
+-          allGeneratedTrips.push(tripBtoA);
+-          
+-          bus.roundTripCount++;
+-          
+-          // T├¡nh thß╗¥i gian nghß╗ë tß║íi Bß║┐n A
+-          let layover = short_layover;
+-          if (bus.roundTripCount >= max_driving_minutes) {
+-              layover = long_layover; // Nghß╗ë d├ái
+-              bus.roundTripCount = 0;
+-          }
+-          
+-          // Thß╗¥i ─æiß╗âm xe sß║╡n s├áng cho v├▓ng tiß║┐p theo
+-          bus.availableTime = arrTimeBtoA + layover;
+-      }
+-      
+-      // Chuyß╗ân ─æß╗ïnh dß║íng lß║íi cho ph├╣ hß╗úp vß╗¢i response ─æß║ºu ra
+-      activeBuses.forEach(bus => {
+-          allDrivers.push({
+-              busId: bus.busId,
+-              shiftName: 'Ca 1',
+-              startLoc: 'A',
+-              startTime: bus.trips[0].startTime,
+-              endTime: bus.trips[bus.trips.length - 1].endTime,
+-              trips: bus.trips
+-          });
+-      });
+-
+-      allGeneratedTrips
+-        .sort((a, b) => new Date(a.scheduled_departure) - new Date(b.scheduled_departure))
+-        .forEach((trip, index) => {
+-          trip.trip_order = index + 1;
+-        });
+ 
+-      for (const d of allDrivers) {
+-          const groupName = `Xe ${d.busId} - ${d.shiftName}`;
+-          const groupStart = buildTimestamp(dateStr, d.startTime);
+-          const groupEnd = buildTimestamp(dateStr, d.endTime);
+-
+-          const groupRes = await client.query(
++      const numSlots = simBuses.length; // sß╗æ xe ─æang chß║íy song song
++      let totalTrips = 0;
++
++      // Sinh 7 ng├áy
++      const baseDate = new Date(plan.operation_date);
++      for (let day = 0; day < 7; day++) {
++        const cur = new Date(baseDate);
++        cur.setDate(cur.getDate() + day);
++        const dateStr = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`;
++
++        // Tß║ío groups cho mß╗ùi xe-slot trong ng├áy
++        for (let i = 0; i < simBuses.length; i++) {
++          const slot = simBuses[i];
++          const physBus = operatingBuses.length > 0 ? operatingBuses[i % operatingBuses.length] : null;
++          // Xoay v├▓ng t├ái xß║┐: ng├áy day, slot i ΓåÆ driver index (day + i) % numDrivers
++          const driverIdx = allDrivers.length > 0 ? (day + i) % allDrivers.length : -1;
++          const driver = driverIdx >= 0 ? allDrivers[driverIdx] : null;
++
++          const gStart = buildTimestamp(dateStr, slot.trips[0].out_dep);
++          const gEnd = buildTimestamp(dateStr, slot.trips[slot.trips.length-1].in_arr);
++          const gName = physBus ? physBus.license_plate : `Xe ${slot.id}`;
++          const gStatus = (physBus && driver) ? 'assigned' : 'unassigned';
++
++          const gRes = await client.query(
+             `INSERT INTO trip_groups (plan_id, group_name, start_time, end_time, status)
+-             VALUES ($1, $2, $3, $4, 'unassigned')
+-             RETURNING group_id`,
+-            [planId, groupName, groupStart, groupEnd]
++             VALUES ($1,$2,$3,$4,$5) RETURNING group_id`,
++            [planId, gName, gStart, gEnd, gStatus]
+           );
+-          const groupId = groupRes.rows[0].group_id;
++          const gId = gRes.rows[0].group_id;
++
++          if (physBus && driver) {
++            await client.query(
++              `INSERT INTO assignments (plan_id, group_id, bus_id, driver_id, assignment_type, status)
++               VALUES ($1,$2,$3,$4,'active','active')`,
++              [planId, gId, physBus.bus_id, driver.driver_id]
++            );
++          }
+ 
+-          for (const trip of d.trips) {
+-              await client.query(
+-                `INSERT INTO trips (
+-                   plan_id, direction_id, group_id, trip_order,
+-                   scheduled_departure, scheduled_arrival, status
+-                 ) VALUES ($1, $2, $3, $4, $5, $6, 'scheduled')`,
+-                [
+-                  planId, trip.direction_id, groupId, trip.trip_order,
+-                  trip.scheduled_departure, trip.scheduled_arrival
+-                ]
+-              );
++          // Trips cho group n├áy
++          let tripOrder = 1;
++          for (const tr of slot.trips) {
++            await client.query(
++              `INSERT INTO trips (plan_id, direction_id, group_id, trip_order, scheduled_departure, scheduled_arrival, status)
++               VALUES ($1,$2,$3,$4,$5,$6,'scheduled')`,
++              [planId, outbound.direction_id, gId, tripOrder++, buildTimestamp(dateStr, tr.out_dep), buildTimestamp(dateStr, tr.out_arr)]
++            );
++            await client.query(
++              `INSERT INTO trips (plan_id, direction_id, group_id, trip_order, scheduled_departure, scheduled_arrival, status)
++               VALUES ($1,$2,$3,$4,$5,$6,'scheduled')`,
++              [planId, inbound.direction_id, gId, tripOrder++, buildTimestamp(dateStr, tr.in_dep), buildTimestamp(dateStr, tr.in_arr)]
++            );
++            totalTrips += 2;
+           }
+-      }
++        }
+ 
+-      const mainDrivers = allDrivers.length;
+-      const standbyDrivers = Math.ceil(mainDrivers * standby_ratio);
+-      const totalDailyDrivers = mainDrivers + standbyDrivers;
+-      const totalWeeklyDrivers = Math.ceil((totalDailyDrivers * 7) / 6);
++        // Group dß╗▒ ph├▓ng: t├ái xß║┐ xoay v├▓ng nghß╗ë + xe dß╗▒ ph├▓ng
++        const sbDriverIdx = allDrivers.length > 0 ? (day + numSlots) % allDrivers.length : -1;
++        const sbDriver = sbDriverIdx >= 0 ? allDrivers[sbDriverIdx] : null;
++        const sbBus = standbyBuses.length > 0 ? standbyBuses[day % standbyBuses.length] : null;
++
++        const sbRes = await client.query(
++          `INSERT INTO trip_groups (plan_id, group_name, start_time, end_time, status)
++           VALUES ($1,'Dß╗▒ ph├▓ng (Nghß╗ë)',$2,$3,'standby') RETURNING group_id`,
++          [planId, buildTimestamp(dateStr, startMin), buildTimestamp(dateStr, endMin)]
++        );
++        if (sbDriver) {
++          await client.query(
++            `INSERT INTO assignments (plan_id, group_id, bus_id, driver_id, assignment_type, status)
++             VALUES ($1,$2,$3,$4,'standby','active')`,
++            [planId, sbRes.rows[0].group_id, sbBus?.bus_id || null, sbDriver.driver_id]
++          );
++        }
++      }
+ 
+       await client.query('COMMIT');
+-      return success(res, {
+-        trips_generated: allGeneratedTrips.length,
+-        groups_generated: requiredBuses,
+-        total_shifts: mainDrivers,
+-        daily_drivers_needed: totalDailyDrivers,
+-        weekly_drivers_needed: totalWeeklyDrivers
+-      }, 'Sinh chuyß║┐n & Ph├ón ca n├óng cao th├ánh c├┤ng');
++      return success(res, { trips_generated: totalTrips, days: 7 }, 'Sinh lß╗ïch 7 ng├áy th├ánh c├┤ng');
+     } catch (err) {
+       await client.query('ROLLBACK');
+       next(err);
+@@ -470,134 +332,65 @@ const planController = {
+   submitPlan: async (req, res, next) => {
+     const { planId } = req.params;
+     const dispatcherId = req.user.id;
+-
+     try {
+       const planRes = await pool.query('SELECT * FROM operation_plans WHERE plan_id = $1', [planId]);
+-      if (!planRes.rows.length) {
+-        return error(res, 'Kh├┤ng t├¼m thß║Ñy kß║┐ hoß║ích vß║¡n doanh', 404);
+-      }
++      if (!planRes.rows.length) return error(res, 'Kh├┤ng t├¼m thß║Ñy kß║┐ hoß║ích vß║¡n doanh', 404);
+       const plan = planRes.rows[0];
+-
+       const tripsCount = await pool.query('SELECT COUNT(*) FROM trips WHERE plan_id = $1', [planId]);
+-      if (Number(tripsCount.rows[0].count) === 0) {
+-        return error(res, 'Kß║┐ hoß║ích ch╞░a c├│ chuyß║┐n xe n├áo ─æ╞░ß╗úc sinh', 400);
+-      }
+-
+-      const unassignedGroups = await pool.query(
+-        "SELECT COUNT(*) FROM trip_groups WHERE plan_id = $1 AND status = 'unassigned'",
+-        [planId]
++      if (Number(tripsCount.rows[0].count) === 0) return error(res, 'Kß║┐ hoß║ích ch╞░a c├│ chuyß║┐n xe n├áo ─æ╞░ß╗úc sinh', 400);
++      const unassigned = await pool.query(
++        `SELECT COUNT(*) FROM trip_groups WHERE plan_id = $1 AND status = 'unassigned'`, [planId]
+       );
+-      if (Number(unassignedGroups.rows[0].count) > 0) {
+-        return error(res, 'C├▓n nh├│m chuyß║┐n ch╞░a ─æ╞░ß╗úc ph├ón c├┤ng xe v├á t├ái xß║┐', 400);
+-      }
+-
++      if (Number(unassigned.rows[0].count) > 0) return error(res, 'C├▓n nh├│m chuyß║┐n ch╞░a ─æ╞░ß╗úc ph├ón c├┤ng', 400);
+       const updateRes = await pool.query(
+-        `UPDATE operation_plans
+-         SET status = 'pending_approval', submitted_by = $1
+-         WHERE plan_id = $2
+-         RETURNING *`,
++        `UPDATE operation_plans SET status = 'pending_approval', submitted_by = $1 WHERE plan_id = $2 RETURNING *`,
+         [dispatcherId, planId]
+       );
+-
+-      const managers = await pool.query("SELECT user_id FROM users WHERE role = 'manager' AND status = 'active'");
+-      const y = plan.operation_date.getFullYear();
+-      const m = String(plan.operation_date.getMonth() + 1).padStart(2, '0');
+-      const d = String(plan.operation_date.getDate()).padStart(2, '0');
+-      const dateStr = `${y}-${m}-${d}`;
+-      for (const manager of managers.rows) {
++      const managers = await pool.query(`SELECT user_id FROM users WHERE role = 'manager' AND status = 'active'`);
++      const dateStr = plan.operation_date.toISOString().split('T')[0];
++      for (const mgr of managers.rows) {
+         await pool.query(
+-          `INSERT INTO notifications (user_id, title, content)
+-           VALUES ($1, 'Kß║┐ hoß║ích chß╗¥ duyß╗çt', $2)`,
+-          [manager.user_id, `Kß║┐ hoß║ích vß║¡n doanh tuyß║┐n ${plan.route_code} ng├áy ${dateStr} ─æang chß╗¥ duyß╗çt.`]
++          `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Kß║┐ hoß║ích chß╗¥ duyß╗çt', $2)`,
++          [mgr.user_id, `Kß║┐ hoß║ích tuyß║┐n ${plan.route_code} bß║»t ─æß║ºu ${dateStr} ─æang chß╗¥ duyß╗çt.`]
+         );
+       }
+-
+       return success(res, updateRes.rows[0], 'Gß╗¡i duyß╗çt kß║┐ hoß║ích th├ánh c├┤ng');
+-    } catch (err) {
+-      next(err);
+-    }
++    } catch (err) { next(err); }
+   },
+ 
+   reviewPlan: async (req, res, next) => {
+     const { planId } = req.params;
+     const { decision, reject_reason } = req.body;
+     const managerId = req.user.id;
+-
+-    if (!['approve', 'reject'].includes(decision)) {
+-      return error(res, 'Quyß║┐t ─æß╗ïnh kh├┤ng hß╗úp lß╗ç', 400);
+-    }
+-
++    if (!['approve', 'reject'].includes(decision)) return error(res, 'Quyß║┐t ─æß╗ïnh kh├┤ng hß╗úp lß╗ç', 400);
+     try {
+       const planRes = await pool.query('SELECT * FROM operation_plans WHERE plan_id = $1', [planId]);
+-      if (!planRes.rows.length) {
+-        return error(res, 'Kh├┤ng t├¼m thß║Ñy kß║┐ hoß║ích vß║¡n doanh', 404);
+-      }
++      if (!planRes.rows.length) return error(res, 'Kh├┤ng t├¼m thß║Ñy kß║┐ hoß║ích vß║¡n doanh', 404);
+       const plan = planRes.rows[0];
+-
+-      if (plan.status !== 'pending_approval') {
+-        return error(res, 'Kß║┐ hoß║ích kh├┤ng ß╗ƒ trß║íng th├íi chß╗¥ duyß╗çt', 400);
+-      }
+-
+-      const y = plan.operation_date.getFullYear();
+-      const m = String(plan.operation_date.getMonth() + 1).padStart(2, '0');
+-      const d = String(plan.operation_date.getDate()).padStart(2, '0');
+-      const dateStr = `${y}-${m}-${d}`;
+-
++      if (plan.status !== 'pending_approval') return error(res, 'Kß║┐ hoß║ích kh├┤ng ß╗ƒ trß║íng th├íi chß╗¥ duyß╗çt', 400);
++      const dateStr = plan.operation_date.toISOString().split('T')[0];
+       if (decision === 'approve') {
+         await pool.query(
+-          `UPDATE operation_plans
+-           SET status = 'approved', reviewed_by = $1, reject_reason = NULL
+-           WHERE plan_id = $2`,
++          `UPDATE operation_plans SET status = 'approved', reviewed_by = $1, reject_reason = NULL WHERE plan_id = $2`,
+           [managerId, planId]
+         );
+-
+         await pool.query(
+-          `INSERT INTO notifications (user_id, title, content)
+-           VALUES ($1, 'Kß║┐ hoß║ích ─æ╞░ß╗úc duyß╗çt', $2)`,
+-          [plan.created_by, `Kß║┐ hoß║ích vß║¡n doanh tuyß║┐n ${plan.route_code} ng├áy ${dateStr} ─æ├ú ─æ╞░ß╗úc duyß╗çt.`]
+-        );
+-
+-        const assignedDrivers = await pool.query(
+-          `SELECT DISTINCT d.user_id
+-           FROM assignments a
+-           JOIN trip_groups tg ON a.group_id = tg.group_id
+-           JOIN drivers d ON a.driver_id = d.driver_id
+-           WHERE tg.plan_id = $1 AND a.status = 'active'`,
+-          [planId]
++          `INSERT INTO notifications (user_id, title, content) VALUES ($1,'Kß║┐ hoß║ích ─æ╞░ß╗úc duyß╗çt',$2)`,
++          [plan.created_by, `Kß║┐ hoß║ích tuyß║┐n ${plan.route_code} ng├áy ${dateStr} ─æ├ú ─æ╞░ß╗úc duyß╗çt.`]
+         );
+-
+-        for (const driver of assignedDrivers.rows) {
+-          await pool.query(
+-            `INSERT INTO notifications (user_id, title, content)
+-             VALUES ($1, 'Lß╗ïch chß║íy xe mß╗¢i', $2)`,
+-            [driver.user_id, `Bß║ín c├│ lß╗ïch ph├ón c├┤ng chuyß║┐n xe mß╗¢i v├áo ng├áy ${dateStr}.`]
+-          );
+-        }
+-
+-        return success(res, null, 'Duyß╗çt kß║┐ hoß║ích vß║¡n doanh th├ánh c├┤ng');
++        return success(res, null, 'Duyß╗çt kß║┐ hoß║ích th├ánh c├┤ng');
+       }
+-
+-      if (!reject_reason) {
+-        return error(res, 'Vui l├▓ng nhß║¡p l├╜ do tß╗½ chß╗æi', 400);
+-      }
+-
++      if (!reject_reason) return error(res, 'Vui l├▓ng nhß║¡p l├╜ do tß╗½ chß╗æi', 400);
+       await pool.query(
+-        `UPDATE operation_plans
+-         SET status = 'rejected', reviewed_by = $1, reject_reason = $2
+-         WHERE plan_id = $3`,
++        `UPDATE operation_plans SET status = 'rejected', reviewed_by = $1, reject_reason = $2 WHERE plan_id = $3`,
+         [managerId, reject_reason, planId]
+       );
+-
+       await pool.query(
+-        `INSERT INTO notifications (user_id, title, content)
+-         VALUES ($1, 'Kß║┐ hoß║ích bß╗ï tß╗½ chß╗æi', $2)`,
+-        [plan.created_by, `Kß║┐ hoß║ích vß║¡n doanh tuyß║┐n ${plan.route_code} ng├áy ${dateStr} bß╗ï tß╗½ chß╗æi. L├╜ do: ${reject_reason}`]
++        `INSERT INTO notifications (user_id, title, content) VALUES ($1,'Kß║┐ hoß║ích bß╗ï tß╗½ chß╗æi',$2)`,
++        [plan.created_by, `Kß║┐ hoß║ích tuyß║┐n ${plan.route_code} ng├áy ${dateStr} bß╗ï tß╗½ chß╗æi. L├╜ do: ${reject_reason}`]
+       );
+-
+-      return success(res, null, 'Tß╗½ chß╗æi kß║┐ hoß║ích vß║¡n doanh th├ánh c├┤ng');
+-    } catch (err) {
+-      next(err);
+-    }
++      return success(res, null, 'Tß╗½ chß╗æi kß║┐ hoß║ích th├ánh c├┤ng');
++    } catch (err) { next(err); }
+   }
+ };
+ 
+diff --git a/backend/src/controllers/routeController.js b/backend/src/controllers/routeController.js
+index f434735..bf486e4 100644
+--- a/backend/src/controllers/routeController.js
++++ b/backend/src/controllers/routeController.js
+@@ -56,26 +56,25 @@ function addRouteMetrics(route) {
+   const calculatedHeadwayMinutes = totalOperationMinutes && expectedTrips > 1
+     ? totalOperationMinutes / (expectedTrips - 1)
+     : null;
+-  const roundTripTimeMinutes = [
+-    outboundTravel,
+-    outboundTurnaround,
+-    inboundTravel,
+-    inboundTurnaround
+-  ].every(Number.isFinite)
+-    ? outboundTravel + outboundTurnaround + inboundTravel + inboundTurnaround
++  const roundTripTravelTime = [outboundTravel, inboundTravel].every(Number.isFinite)
++    ? outboundTravel + inboundTravel
+     : null;
++
+   let suggestedOperatingBuses = null;
+-  let requiredRecoveryBuses = null;
+   let requiredBackupBuses = null;
+   let requiredTotalBuses = null;
++  let avgRoundTripTime = null;
+ 
+-  if (Number.isFinite(headway) && headway > 0 && roundTripTimeMinutes) {
+-    const baseBuses = Math.ceil(roundTripTimeMinutes / headway);
+-    const minRestTime = route.min_rest_time_minutes ? Number(route.min_rest_time_minutes) : 60;
+-    const backupRatio = route.backup_bus_ratio ? Number(route.backup_bus_ratio) : 0.20;
++  if (Number.isFinite(headway) && headway > 0 && roundTripTravelTime) {
++    const roundsBeforeLongBreak = Number(route.max_driving_minutes) || 3;
++    const shortLayoverMinutes = Number(route.short_layover_minutes) || 10;
++    const longLayoverMinutes = Number(route.min_rest_time_minutes) || Number(route.long_layover_minutes) || 60;
++    
++    const cycleTimeMinutes = roundsBeforeLongBreak * roundTripTravelTime + (roundsBeforeLongBreak - 1) * shortLayoverMinutes + 1 * longLayoverMinutes;
++    avgRoundTripTime = cycleTimeMinutes / roundsBeforeLongBreak;
+     
+-    requiredRecoveryBuses = Math.ceil(minRestTime / headway);
+-    suggestedOperatingBuses = baseBuses + requiredRecoveryBuses;
++    suggestedOperatingBuses = Math.ceil(avgRoundTripTime / headway);
++    const backupRatio = route.backup_bus_ratio !== undefined ? Number(route.backup_bus_ratio) : 0.20;
+     requiredBackupBuses = Math.ceil(suggestedOperatingBuses * backupRatio);
+     requiredTotalBuses = suggestedOperatingBuses + requiredBackupBuses;
+   }
+@@ -86,15 +85,19 @@ function addRouteMetrics(route) {
+     calculated_headway_minutes: calculatedHeadwayMinutes !== null ? Number(calculatedHeadwayMinutes.toFixed(2)) : null,
+     average_headway_minutes: route.headway_minutes !== undefined ? Number(headway.toFixed(2)) : null,
+     headway_minutes: route.headway_minutes !== undefined ? Number(headway.toFixed(2)) : null,
+-    round_trip_time_minutes: roundTripTimeMinutes,
++    round_trip_time_minutes: avgRoundTripTime ? Math.round(avgRoundTripTime) : null,
+     suggested_operating_buses: suggestedOperatingBuses,
+-    required_recovery_buses: requiredRecoveryBuses,
++    required_recovery_buses: 0,
+     required_backup_buses: requiredBackupBuses,
+     required_total_buses: requiredTotalBuses
+   };
+ }
+ 
+ async function getSuggestedOperatingBuses(routeCode, headwayMinutes) {
++  const routeRes = await pool.query('SELECT * FROM routes WHERE route_code = $1', [routeCode]);
++  const route = routeRes.rows[0];
++  if (!route) return null;
++
+   const directionsRes = await pool.query(
+     `SELECT direction_type, travel_time_minutes, turnaround_time_minutes
+      FROM route_directions
+@@ -111,13 +114,18 @@ async function getSuggestedOperatingBuses(routeCode, headwayMinutes) {
+     return null;
+   }
+ 
+-  const roundTripTimeMinutes =
+-    Number(outbound.travel_time_minutes) +
+-    Number(outbound.turnaround_time_minutes) +
+-    Number(inbound.travel_time_minutes) +
+-    Number(inbound.turnaround_time_minutes);
++  const outboundTravel = Number(outbound.travel_time_minutes) || 0;
++  const inboundTravel = Number(inbound.travel_time_minutes) || 0;
++  const roundTripTravelTime = outboundTravel + inboundTravel;
+ 
+-  return Math.ceil(roundTripTimeMinutes / headway);
++  const roundsBeforeLongBreak = Number(route.max_driving_minutes) || 3;
++  const shortLayoverMinutes = Number(route.short_layover_minutes) || 10;
++  const longLayoverMinutes = Number(route.min_rest_time_minutes) || Number(route.long_layover_minutes) || 60;
++  
++  const cycleTimeMinutes = roundsBeforeLongBreak * roundTripTravelTime + (roundsBeforeLongBreak - 1) * shortLayoverMinutes + 1 * longLayoverMinutes;
++  const avgRoundTripTime = cycleTimeMinutes / roundsBeforeLongBreak;
++
++  return Math.ceil(avgRoundTripTime / headway);
+ }
+ 
+ const routeController = {
+@@ -244,9 +252,18 @@ const routeController = {
+         standby_ratio = 0.15,
+         inbound_start_time = '05:30:00',
+         backup_bus_ratio = 0.20,
+-        min_rest_time_minutes = 60
++        min_rest_time_minutes = 60,
++        outbound_travel,
++        outbound_turnaround,
++        inbound_travel,
++        inbound_turnaround
+       } = req.body;
+ 
++      const outTravel = outbound_travel ?? travel_time_minutes;
++      const outTurn = outbound_turnaround ?? short_layover_minutes;
++      const inTravel = inbound_travel ?? travel_time_minutes;
++      const inTurn = inbound_turnaround ?? short_layover_minutes;
++
+       if (!route_code || !route_name) {
+         return error(res, 'Ma tuyen va ten tuyen la bat buoc', 400);
+       }
+@@ -311,14 +328,14 @@ const routeController = {
+           await client.query(
+             `INSERT INTO route_directions (route_code, direction_type, start_point, end_point, distance_km, travel_time_minutes, turnaround_time_minutes)
+              VALUES ($1, 'outbound', $2, $3, $4, $5, $6)`,
+-            [route_code, req.body.outbound_start_point, req.body.outbound_end_point, req.body.outbound_distance || null, travel_time_minutes, short_layover_minutes]
++            [route_code, req.body.outbound_start_point, req.body.outbound_end_point, req.body.outbound_distance || null, outTravel, outTurn]
+           );
+         }
+         if (req.body.inbound_start_point) {
+           await client.query(
+             `INSERT INTO route_directions (route_code, direction_type, start_point, end_point, distance_km, travel_time_minutes, turnaround_time_minutes)
+              VALUES ($1, 'inbound', $2, $3, $4, $5, $6)`,
+-            [route_code, req.body.inbound_start_point, req.body.inbound_end_point, req.body.inbound_distance || null, travel_time_minutes, short_layover_minutes]
++            [route_code, req.body.inbound_start_point, req.body.inbound_end_point, req.body.inbound_distance || null, inTravel, inTurn]
+           );
+         }
+ 
+@@ -355,9 +372,18 @@ const routeController = {
+         standby_ratio = 0.15,
+         inbound_start_time,
+         backup_bus_ratio = 0.20,
+-        min_rest_time_minutes = 60
++        min_rest_time_minutes = 60,
++        outbound_travel,
++        outbound_turnaround,
++        inbound_travel,
++        inbound_turnaround
+       } = req.body;
+ 
++      const outTravel = outbound_travel ?? travel_time_minutes;
++      const outTurn = outbound_turnaround ?? short_layover_minutes;
++      const inTravel = inbound_travel ?? travel_time_minutes;
++      const inTurn = inbound_turnaround ?? short_layover_minutes;
++
+       if (!route_name) {
+         return error(res, 'Ten tuyen xe la bat buoc', 400);
+       }
+@@ -428,7 +454,7 @@ const routeController = {
+              VALUES ($1, 'outbound', $2, $3, $4, $5, $6)
+              ON CONFLICT (route_code, direction_type)
+              DO UPDATE SET start_point = EXCLUDED.start_point, end_point = EXCLUDED.end_point, distance_km = EXCLUDED.distance_km, travel_time_minutes = EXCLUDED.travel_time_minutes, turnaround_time_minutes = EXCLUDED.turnaround_time_minutes`,
+-            [routeCode, req.body.outbound_start_point, req.body.outbound_end_point, req.body.outbound_distance || null, travel_time_minutes, short_layover_minutes]
++            [routeCode, req.body.outbound_start_point, req.body.outbound_end_point, req.body.outbound_distance || null, outTravel, outTurn]
+           );
+         }
+         if (req.body.inbound_start_point) {
+@@ -437,7 +463,7 @@ const routeController = {
+              VALUES ($1, 'inbound', $2, $3, $4, $5, $6)
+              ON CONFLICT (route_code, direction_type)
+              DO UPDATE SET start_point = EXCLUDED.start_point, end_point = EXCLUDED.end_point, distance_km = EXCLUDED.distance_km, travel_time_minutes = EXCLUDED.travel_time_minutes, turnaround_time_minutes = EXCLUDED.turnaround_time_minutes`,
+-            [routeCode, req.body.inbound_start_point, req.body.inbound_end_point, req.body.inbound_distance || null, travel_time_minutes, short_layover_minutes]
++            [routeCode, req.body.inbound_start_point, req.body.inbound_end_point, req.body.inbound_distance || null, inTravel, inTurn]
+           );
+         }
+ 
+diff --git a/backend/src/routes/planRoutes.js b/backend/src/routes/planRoutes.js
+index 9e8aab0..8d95eae 100644
+--- a/backend/src/routes/planRoutes.js
++++ b/backend/src/routes/planRoutes.js
+@@ -13,5 +13,6 @@ router.post('/:planId/generate-trips', auth, role(['dispatcher']), planControlle
+ router.post('/:planId/auto-assign', auth, role(['dispatcher']), assignmentController.autoAssignPlan);
+ router.post('/:planId/submit', auth, role(['dispatcher']), planController.submitPlan);
+ router.post('/:planId/review', auth, role(['manager']), planController.reviewPlan);
++router.delete('/:planId', auth, role(['dispatcher']), planController.deletePlan);
+ 
+ module.exports = router;
+diff --git a/frontend/src/pages/dispatcher/AutoSchedulerPage.jsx b/frontend/src/pages/dispatcher/AutoSchedulerPage.jsx
+index f238272..2093ff0 100644
+--- a/frontend/src/pages/dispatcher/AutoSchedulerPage.jsx
++++ b/frontend/src/pages/dispatcher/AutoSchedulerPage.jsx
+@@ -1,11 +1,26 @@
+ import { useState, useEffect } from 'react';
+ import Layout from '../../components/Layout';
+ import { PageHeader, Modal, AlertBox } from '../../components/UI';
+-import { getPlans, getPlan, createPlan, generateTrips, submitPlan, reviewPlan, autoAssignPlan } from '../../services/planService';
++import { getPlans, getPlan, createPlan, generateTrips, deletePlan, submitPlan, reviewPlan } from '../../services/planService';
+ import { getRoutes } from '../../services/routeService';
+-import { getAvailableResources, assignGroup, replaceDriver, replaceBus } from '../../services/assignmentService';
+ import { useAuth } from '../../context/AuthContext';
+-import GenerateTripsModal from '../../components/GenerateTripsModal';
++
++const DAY_LABELS = ['CN','T2','T3','T4','T5','T6','T7'];
++
++function formatTime(ts) {
++  if (!ts) return '--:--';
++  return new Date(ts).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
++}
++
++function formatDate(ts) {
++  const d = new Date(ts);
++  return `${DAY_LABELS[d.getDay()]} ${d.getDate()}/${d.getMonth()+1}`;
++}
++
++function getDateStr(ts) {
++  const d = new Date(ts);
++  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
++}
+ 
+ export default function AutoSchedulerPage() {
+   const { user } = useAuth();
+@@ -15,67 +30,52 @@ export default function AutoSchedulerPage() {
+   const [plans, setPlans] = useState([]);
+   const [loading, setLoading] = useState(true);
+   const [routes, setRoutes] = useState([]);
+-  
+-  // Modals / Detail state
+   const [selectedPlanId, setSelectedPlanId] = useState(null);
+   const [planDetail, setPlanDetail] = useState(null);
+   const [detailLoading, setDetailLoading] = useState(false);
+-  const [highlightedDriver, setHighlightedDriver] = useState(null);
+-  
++
++  const [selectedDayStr, setSelectedDayStr] = useState(null); // 'YYYY-MM-DD'
++
+   const [showCreateModal, setShowCreateModal] = useState(false);
+   const [createForm, setCreateForm] = useState({ route_code: '', operation_date: new Date().toISOString().split('T')[0] });
+   const [createError, setCreateError] = useState('');
+ 
+-  const [showGenerateModal, setShowGenerateModal] = useState(false);
+-
+-  const [showAssignModal, setShowAssignModal] = useState(false);
+-  const [assigningGroup, setAssigningGroup] = useState(null);
+-  const [availableResources, setAvailableResources] = useState({ buses: [], drivers: [] });
+-  const [resourcesLoading, setResourcesLoading] = useState(false);
+-  const [assignForm, setAssignForm] = useState({ bus_id: '', driver_id: '' });
+-  const [assignError, setAssignError] = useState('');
+-
+   const [showReviewModal, setShowReviewModal] = useState(false);
+-  const [reviewDecision, setReviewDecision] = useState('approve'); // approve / reject
++  const [reviewDecision, setReviewDecision] = useState('approve');
+   const [rejectReason, setRejectReason] = useState('');
+   const [reviewError, setReviewError] = useState('');
+ 
+   const [successMsg, setSuccessMsg] = useState('');
+   const [errorMsg, setErrorMsg] = useState('');
+ 
++  const flash = (setter, msg, ms = 4000) => { setter(msg); setTimeout(() => setter(''), ms); };
++
+   const loadPlans = () => {
+     setLoading(true);
+     getPlans()
+       .then(res => setPlans(res.data?.data || res.data || []))
+-      .catch(err => {
+-        console.error(err);
+-        setErrorMsg('Kh├┤ng thß╗â tß║úi danh s├ích kß║┐ hoß║ích');
+-      })
++      .catch(() => flash(setErrorMsg, 'Kh├┤ng thß╗â tß║úi danh s├ích kß║┐ hoß║ích'))
+       .finally(() => setLoading(false));
+   };
+ 
+-  const loadRoutes = () => {
+-    getRoutes({ status: 'active' })
+-      .then(res => setRoutes(res.data?.data || res.data || []))
+-      .catch(console.error);
+-  };
+-
+   useEffect(() => {
+     loadPlans();
+-    loadRoutes();
++    getRoutes({ status: 'active' }).then(res => setRoutes(res.data?.data || res.data || [])).catch(console.error);
+   }, []);
+ 
+   const loadPlanDetail = (planId) => {
+     setDetailLoading(true);
+     getPlan(planId)
+       .then(res => {
+-        setPlanDetail(res.data?.data || res.data || null);
++        const detail = res.data?.data || res.data || null;
++        setPlanDetail(detail);
+         setSelectedPlanId(planId);
++        // Tß╗▒ chß╗ìn ng├áy ─æß║ºu ti├¬n
++        if (detail?.groups?.length > 0) {
++          setSelectedDayStr(getDateStr(detail.groups[0].start_time));
++        }
+       })
+-      .catch(err => {
+-        console.error(err);
+-        setErrorMsg('Kh├┤ng thß╗â tß║úi chi tiß║┐t kß║┐ hoß║ích');
+-      })
++      .catch(() => flash(setErrorMsg, 'Kh├┤ng thß╗â tß║úi chi tiß║┐t kß║┐ hoß║ích'))
+       .finally(() => setDetailLoading(false));
+   };
+ 
+@@ -86,644 +86,356 @@ export default function AutoSchedulerPage() {
+       await createPlan(createForm);
+       setShowCreateModal(false);
+       loadPlans();
+-      setSuccessMsg('─É├ú khß╗ƒi tß║ío kß║┐ hoß║ích nh├íp mß╗¢i th├ánh c├┤ng.');
+-      setTimeout(() => setSuccessMsg(''), 4000);
+-    } catch (err) {
+-      setCreateError(err.response?.data?.message || 'Lß╗ùi khi tß║ío kß║┐ hoß║ích');
+-    }
++      flash(setSuccessMsg, '─É├ú tß║ío kß║┐ hoß║ích nh├íp mß╗¢i th├ánh c├┤ng.');
++    } catch (err) { setCreateError(err.response?.data?.message || 'Lß╗ùi khi tß║ío kß║┐ hoß║ích'); }
+   };
+ 
+-  const handleGenerateTrips = async (formData) => {
++  const handleGenerateTrips = async () => {
++    if (!selectedPlanId) return;
+     setDetailLoading(true);
+     try {
+-      await generateTrips(selectedPlanId, formData);
+-      setShowGenerateModal(false);
+-      setSuccessMsg('─É├ú sinh chuyß║┐n xe v├á gom nh├│m tß╗▒ ─æß╗Öng th├ánh c├┤ng.');
+-      setTimeout(() => setSuccessMsg(''), 4000);
++      await generateTrips(selectedPlanId);
++      flash(setSuccessMsg, '─É├ú sinh lß╗ïch 7 ng├áy v├á xoay v├▓ng t├ái xß║┐/xe th├ánh c├┤ng.');
+       loadPlanDetail(selectedPlanId);
+       loadPlans();
+     } catch (err) {
+-      setErrorMsg(err.response?.data?.message || 'Lß╗ùi sinh chuyß║┐n');
+-      setTimeout(() => setErrorMsg(''), 4000);
++      flash(setErrorMsg, err.response?.data?.message || 'Lß╗ùi sinh chuyß║┐n');
+       setDetailLoading(false);
+     }
+   };
+ 
+-  const handleAutoAssign = async (planId) => {
+-    setDetailLoading(true);
++  const handleDeletePlan = async (planId) => {
++    if (!window.confirm('X├│a kß║┐ hoß║ích n├áy?')) return;
+     try {
+-      await autoAssignPlan(planId);
+-      setSuccessMsg('─É├ú ph├ón c├┤ng xe v├á t├ái xß║┐ tß╗▒ ─æß╗Öng (Greedy) th├ánh c├┤ng.');
+-      setTimeout(() => setSuccessMsg(''), 4000);
+-      loadPlanDetail(planId);
++      await deletePlan(planId);
++      flash(setSuccessMsg, '─É├ú x├│a kß║┐ hoß║ích.');
++      if (selectedPlanId === planId) { setPlanDetail(null); setSelectedPlanId(null); }
+       loadPlans();
+-    } catch (err) {
+-      setErrorMsg(err.response?.data?.message || 'Lß╗ùi khi ph├ón c├┤ng tß╗▒ ─æß╗Öng');
+-      setTimeout(() => setErrorMsg(''), 6000);
+-      setDetailLoading(false);
+-    }
+-  };
+-
+-  const openAssignModal = async (group) => {
+-    setAssigningGroup(group);
+-    setAssignForm({
+-      bus_id: group.bus_id ? String(group.bus_id) : '',
+-      driver_id: group.driver_id ? String(group.driver_id) : ''
+-    });
+-    setAssignError('');
+-    setShowAssignModal(true);
+-    setResourcesLoading(true);
+-    try {
+-      const isReplacement = !!(group.bus_id || group.driver_id);
+-      const res = await getAvailableResources(group.group_id, isReplacement);
+-      setAvailableResources(res.data?.data || res.data || { buses: [], drivers: [] });
+-    } catch (err) {
+-      console.error(err);
+-    } finally {
+-      setResourcesLoading(false);
+-    }
+-  };
+-
+-  const handleAssignSubmit = async (e) => {
+-    e.preventDefault();
+-    setAssignError('');
+-    if (!assignForm.bus_id || !assignForm.driver_id) {
+-      setAssignError('Vui l├▓ng chß╗ìn ─æß║ºy ─æß╗º xe bu├╜t v├á t├ái xß║┐');
+-      return;
+-    }
+-    try {
+-      const payload = {
+-        group_id: assigningGroup.group_id,
+-        bus_id: Number(assignForm.bus_id),
+-        driver_id: Number(assignForm.driver_id)
+-      };
+-
+-      if (assigningGroup.bus_id || assigningGroup.driver_id) {
+-        // Replacement mode
+-        if (Number(assignForm.driver_id) !== assigningGroup.driver_id) {
+-          await replaceDriver({ group_id: assigningGroup.group_id, new_driver_id: Number(assignForm.driver_id) });
+-        }
+-        if (Number(assignForm.bus_id) !== assigningGroup.bus_id) {
+-          await replaceBus({ group_id: assigningGroup.group_id, new_bus_id: Number(assignForm.bus_id) });
+-        }
+-      } else {
+-        // Initial assignment
+-        await assignGroup(payload);
+-      }
+-      setShowAssignModal(false);
+-      loadPlanDetail(selectedPlanId);
+-      setSuccessMsg('Cß║¡p nhß║¡t ph├ón c├┤ng t├ái nguy├¬n th├ánh c├┤ng.');
+-      setTimeout(() => setSuccessMsg(''), 4000);
+-    } catch (err) {
+-      setAssignError(err.response?.data?.message || 'Kh├┤ng hß╗úp lß╗ç hoß║╖c tr├╣ng lß╗ïch');
+-    }
++    } catch (err) { flash(setErrorMsg, err.response?.data?.message || 'Lß╗ùi khi x├│a'); }
+   };
+ 
+-  const handleSubmitPlanForApproval = async (planId) => {
++  const handleSubmitPlan = async () => {
+     try {
+-      await submitPlan(planId);
+-      setSuccessMsg('Gß╗¡i duyß╗çt kß║┐ hoß║ích th├ánh c├┤ng.');
+-      setTimeout(() => setSuccessMsg(''), 4000);
+-      loadPlans();
+-      loadPlanDetail(planId);
+-    } catch (err) {
+-      setErrorMsg(err.response?.data?.message || 'Kh├┤ng thß╗â gß╗¡i duyß╗çt');
+-      setTimeout(() => setErrorMsg(''), 4000);
+-    }
++      await submitPlan(selectedPlanId);
++      flash(setSuccessMsg, 'Gß╗¡i duyß╗çt kß║┐ hoß║ích th├ánh c├┤ng.');
++      loadPlans(); loadPlanDetail(selectedPlanId);
++    } catch (err) { flash(setErrorMsg, err.response?.data?.message || 'Kh├┤ng thß╗â gß╗¡i duyß╗çt'); }
+   };
+ 
+   const handleReviewSubmit = async (e) => {
+     e.preventDefault();
+     setReviewError('');
+-    if (reviewDecision === 'reject' && !rejectReason.trim()) {
+-      setReviewError('Vui l├▓ng nhß║¡p l├╜ do tß╗½ chß╗æi');
+-      return;
+-    }
++    if (reviewDecision === 'reject' && !rejectReason.trim()) { setReviewError('Vui l├▓ng nhß║¡p l├╜ do tß╗½ chß╗æi'); return; }
+     try {
+       await reviewPlan(selectedPlanId, reviewDecision, rejectReason);
+       setShowReviewModal(false);
+-      setSuccessMsg(reviewDecision === 'approve' ? 'Kß║┐ hoß║ích ─æ├ú ─æ╞░ß╗úc ph├¬ duyß╗çt th├ánh c├┤ng.' : '─É├ú tß╗½ chß╗æi kß║┐ hoß║ích.');
+-      setTimeout(() => setSuccessMsg(''), 4000);
+-      loadPlans();
+-      loadPlanDetail(selectedPlanId);
+-    } catch (err) {
+-      setReviewError(err.response?.data?.message || 'Lß╗ùi xß╗¡ l├╜ duyß╗çt kß║┐ hoß║ích');
+-    }
++      flash(setSuccessMsg, reviewDecision === 'approve' ? '─É├ú ph├¬ duyß╗çt kß║┐ hoß║ích.' : '─É├ú tß╗½ chß╗æi kß║┐ hoß║ích.');
++      loadPlans(); loadPlanDetail(selectedPlanId);
++    } catch (err) { setReviewError(err.response?.data?.message || 'Lß╗ùi duyß╗çt kß║┐ hoß║ích'); }
+   };
+ 
+-  const getStatusText = (status) => {
+-    switch (status) {
+-      case 'draft': return 'Kß║┐ hoß║ích nh├íp';
+-      case 'pending_approval': return 'Chß╗¥ ph├¬ duyß╗çt';
+-      case 'approved': return '─É├ú ph├¬ duyß╗çt';
+-      case 'rejected': return 'Bß╗ï tß╗½ chß╗æi';
+-      default: return status;
++  // Nh├│m groups theo ng├áy
++  const dayGroups = {};
++  if (planDetail?.groups) {
++    for (const g of planDetail.groups) {
++      const ds = getDateStr(g.start_time);
++      if (!dayGroups[ds]) dayGroups[ds] = [];
++      dayGroups[ds].push(g);
+     }
+-  };
++  }
++  const dayKeys = Object.keys(dayGroups).sort();
+ 
+-  const getStatusBadge = (status) => {
+-    switch (status) {
+-      case 'draft': return 'bg-gray-100 text-gray-700';
+-      case 'pending_approval': return 'bg-amber-100 text-amber-700';
+-      case 'approved': return 'bg-green-100 text-green-700';
+-      case 'rejected': return 'bg-red-100 text-red-700';
+-      default: return 'bg-gray-100 text-gray-700';
+-    }
+-  };
++  const activeGroups = selectedDayStr ? (dayGroups[selectedDayStr] || []) : [];
++  const operatingGroups = activeGroups.filter(g => g.status !== 'standby');
++  const standbyGroups = activeGroups.filter(g => g.status === 'standby');
++  const activeTrips = planDetail?.trips?.filter(t => {
++    if (!selectedDayStr) return true;
++    return getDateStr(t.scheduled_departure) === selectedDayStr;
++  }) || [];
++
++  const statusText = { draft: 'Kß║┐ hoß║ích nh├íp', pending_approval: 'Chß╗¥ ph├¬ duyß╗çt', approved: '─É├ú ph├¬ duyß╗çt', rejected: 'Bß╗ï tß╗½ chß╗æi' };
++  const statusBadge = { draft: 'bg-gray-100 text-gray-700', pending_approval: 'bg-amber-100 text-amber-700', approved: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700' };
+ 
+   return (
+     <Layout>
+       <PageHeader
+         title="Kß║┐ hoß║ích vß║¡n doanh & Ph├ón c├┤ng"
+-        subtitle="Quß║ún l├╜ lß╗ïch tr├¼nh, sinh c├íc chuyß║┐n xe bu├╜t, gom nh├│m v├á ph├ón bß╗ò xe & t├ái xß║┐"
+-        action={
+-          isDispatcher && (
+-            <button
+-              onClick={() => {
+-                setCreateForm({ route_code: routes[0]?.route_code || '', operation_date: new Date().toISOString().split('T')[0] });
+-                setCreateError('');
+-                setShowCreateModal(true);
+-              }}
+-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-md shadow-blue-500/10 transition"
+-            >
+-              + Tß║ío kß║┐ hoß║ích mß╗¢i
+-            </button>
+-          )
+-        }
++        subtitle="Sinh lß╗ïch 7 ng├áy, xoay v├▓ng xe & t├ái xß║┐ tß╗▒ ─æß╗Öng"
++        action={isDispatcher && (
++          <button onClick={() => { setCreateForm({ route_code: routes[0]?.route_code || '', operation_date: new Date().toISOString().split('T')[0] }); setCreateError(''); setShowCreateModal(true); }}
++            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-md transition">
++            + Tß║ío kß║┐ hoß║ích mß╗¢i
++          </button>
++        )}
+       />
+ 
+       {successMsg && <div className="mb-4"><AlertBox type="success" message={successMsg} /></div>}
+       {errorMsg && <div className="mb-4"><AlertBox type="error" message={errorMsg} /></div>}
+ 
+       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+-        {/* Plans List Panel */}
++        {/* Danh s├ích kß║┐ hoß║ích */}
+         <div className="lg:col-span-1 bg-white rounded-2xl border border-slate-100 p-5 shadow-sm h-fit">
+           <h2 className="font-bold text-gray-900 mb-4 flex items-center justify-between">
+             Danh s├ích kß║┐ hoß║ích
+             <span className="text-xs font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{plans.length}</span>
+           </h2>
+-
+           {loading ? (
+-            <div className="text-center py-10 text-slate-400 font-semibold animate-pulse">─Éang tß║úi kß║┐ hoß║ích...</div>
++            <div className="text-center py-10 text-slate-400 animate-pulse font-semibold">─Éang tß║úi...</div>
+           ) : plans.length === 0 ? (
+-            <div className="text-center py-10 text-slate-400 text-sm">Ch╞░a c├│ kß║┐ hoß║ích vß║¡n doanh n├áo</div>
++            <div className="text-center py-10 text-slate-400 text-sm">Ch╞░a c├│ kß║┐ hoß║ích n├áo</div>
+           ) : (
+-            <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
++            <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
+               {plans.map(p => (
+-                <div
+-                  key={p.plan_id}
++                <div key={p.plan_id}
+                   onClick={() => loadPlanDetail(p.plan_id)}
+-                  className={`p-4 rounded-xl border transition cursor-pointer text-left ${
+-                    selectedPlanId === p.plan_id
+-                      ? 'border-blue-500 bg-blue-50/30 shadow-sm'
+-                      : 'border-slate-100 hover:border-slate-200'
+-                  }`}
+-                >
++                  className={`p-3 rounded-xl border transition cursor-pointer relative ${selectedPlanId === p.plan_id ? 'border-blue-500 bg-blue-50/30' : 'border-slate-100 hover:border-slate-200'}`}>
+                   <div className="flex justify-between items-start">
+-                    <span className="font-bold text-slate-900 font-mono">Tuyß║┐n {p.route_code}</span>
+-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-2xs font-semibold ${getStatusBadge(p.status)}`}>
+-                      {getStatusText(p.status)}
+-                    </span>
++                    <span className="font-bold text-slate-900 font-mono text-sm">Tuyß║┐n {p.route_code}</span>
++                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${statusBadge[p.status]}`}>{statusText[p.status]}</span>
+                   </div>
+-                  <div className="font-semibold text-gray-600 text-xs mt-1.5">
+-                    Ng├áy chß║íy: {new Date(p.operation_date).toLocaleDateString('vi-VN')}
+-                  </div>
+-                  <div className="text-2xs text-gray-400 mt-2 flex justify-between">
+-                    <span>Tß║ío bß╗ƒi: {p.creator_name}</span>
+-                    <span>ID: #{p.plan_id}</span>
++                  <div className="text-xs text-gray-500 mt-1">Tß╗½: {new Date(p.operation_date).toLocaleDateString('vi-VN')}</div>
++                  <div className="text-xs text-gray-400 mt-1 flex justify-between">
++                    <span>{p.creator_name}</span>
++                    <span>#{p.plan_id}</span>
+                   </div>
++                  {isDispatcher && ['draft','rejected'].includes(p.status) && (
++                    <button
++                      onClick={(e) => { e.stopPropagation(); handleDeletePlan(p.plan_id); }}
++                      className="absolute top-2 right-2 text-xs text-red-400 hover:text-red-600 hover:bg-red-50 px-1.5 py-0.5 rounded transition">
++                      ≡ƒùæ
++                    </button>
++                  )}
+                 </div>
+               ))}
+             </div>
+           )}
+         </div>
+ 
+-        {/* Plan Details & Group Assignments Panel */}
+-        <div className="lg:col-span-2 space-y-6">
++        {/* Chi tiß║┐t kß║┐ hoß║ích */}
++        <div className="lg:col-span-2 space-y-4">
+           {detailLoading ? (
+-            <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center text-slate-400 font-semibold animate-pulse shadow-sm">
+-              ─Éang ph├ón t├¡ch cß║Ñu tr├║c kß║┐ hoß║ích...
+-            </div>
++            <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center text-slate-400 font-semibold animate-pulse">─Éang tß║úi chi tiß║┐t...</div>
+           ) : planDetail ? (
+-            <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-6">
+-              {/* Detail Header */}
+-              <div className="flex justify-between items-start border-b pb-5">
++            <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-5">
++              {/* Header */}
++              <div className="flex justify-between items-start border-b pb-4">
+                 <div>
+-                  <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2">
+-                    Chi tiß║┐t kß║┐ hoß║ích: Tuyß║┐n {planDetail.route_code} - {planDetail.route_name}
+-                  </h3>
+-                  <p className="text-sm font-semibold text-slate-500 mt-1">
+-                    Ng├áy chß║íy: {new Date(planDetail.operation_date).toLocaleDateString('vi-VN')}
+-                  </p>
++                  <h3 className="font-bold text-gray-900 text-lg">Tuyß║┐n {planDetail.route_code} ΓÇö {planDetail.route_name}</h3>
++                  <p className="text-sm text-slate-500 mt-0.5">Bß║»t ─æß║ºu tß╗½: {new Date(planDetail.operation_date).toLocaleDateString('vi-VN')}</p>
++                  <span className={`mt-1 inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${statusBadge[planDetail.status]}`}>{statusText[planDetail.status]}</span>
+                 </div>
+-                <div className="flex gap-2">
+-                  {isManager && planDetail.status === 'pending_approval' && (
+-                    <button
+-                      onClick={() => {
+-                        setReviewDecision('approve');
+-                        setRejectReason('');
+-                        setReviewError('');
+-                        setShowReviewModal(true);
+-                      }}
+-                      className="bg-green-600 hover:bg-green-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition shadow-md shadow-green-500/10"
+-                    >
+-                      Duyß╗çt / Tß╗½ chß╗æi
+-                    </button>
+-                  )}
+-
++                <div className="flex gap-2 flex-wrap justify-end">
+                   {isDispatcher && planDetail.status === 'draft' && (
+                     <>
+-                      <button
+-                        onClick={() => setShowGenerateModal(true)}
+-                        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition shadow-md shadow-blue-500/10"
+-                      >
+-                        {planDetail.groups?.length > 0 ? 'T├íi sinh chuyß║┐n & Gom nh├│m' : 'Sinh chuyß║┐n xe & Gom nh├│m'}
++                      <button onClick={handleGenerateTrips}
++                        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-4 py-2 rounded-xl transition">
++                        {planDetail.groups?.length > 0 ? '≡ƒöä T├íi sinh 7 ng├áy' : 'ΓÜí Sinh lß╗ïch 7 ng├áy'}
+                       </button>
+                       {planDetail.groups?.length > 0 && (
+-                        <button
+-                          onClick={() => handleAutoAssign(planDetail.plan_id)}
+-                          className="bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition shadow-md shadow-purple-500/10"
+-                        >
+-                          Ph├ón c├┤ng tß╗▒ ─æß╗Öng (Greedy)
++                        <button onClick={handleSubmitPlan}
++                          className="bg-green-600 hover:bg-green-700 text-white font-semibold text-xs px-4 py-2 rounded-xl transition">
++                          Gß╗¡i ph├¬ duyß╗çt
+                         </button>
+                       )}
+                     </>
+                   )}
+-
+-                  {isDispatcher && planDetail.status === 'draft' && planDetail.groups?.length > 0 && (
+-                    <button
+-                      onClick={() => handleSubmitPlanForApproval(planDetail.plan_id)}
+-                      className="bg-green-600 hover:bg-green-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition shadow-md shadow-green-500/10"
+-                    >
+-                      Gß╗¡i kß║┐ hoß║ích ph├¬ duyß╗çt
++                  {isManager && planDetail.status === 'pending_approval' && (
++                    <button onClick={() => { setReviewDecision('approve'); setRejectReason(''); setReviewError(''); setShowReviewModal(true); }}
++                      className="bg-green-600 hover:bg-green-700 text-white font-semibold text-xs px-4 py-2 rounded-xl transition">
++                      Duyß╗çt / Tß╗½ chß╗æi
+                     </button>
+                   )}
+                 </div>
+-                
+-                {planDetail.groups && planDetail.groups.length > 0 && (
+-                  <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-100 flex items-center justify-between">
+-                    <div>
+-                      <h4 className="font-semibold text-blue-800">Nhu cß║ºu T├ái xß║┐ (T├¡nh to├ín dß╗▒a tr├¬n sß╗æ ca & dß╗▒ bß╗ï)</h4>
+-                      <p className="text-sm text-blue-600 mt-1">
+-                        Sß╗æ ca (Main): <span className="font-bold">{planDetail.groups.length}</span> | 
+-                        Dß╗▒ bß╗ï (Standby): <span className="font-bold">{planDetail.standby_drivers?.length || 0}</span>
+-                      </p>
+-                    </div>
+-                    <div className="flex gap-4 text-center">
+-                      <div className="bg-white px-4 py-2 rounded shadow-sm border border-blue-200">
+-                        <div className="text-xs text-gray-500">Cß║ºn cho 1 Ng├áy</div>
+-                        <div className="text-xl font-bold text-blue-700">
+-                          {planDetail.groups.length + (planDetail.standby_drivers?.length || 0)}
+-                        </div>
+-                      </div>
+-                      <div className="bg-white px-4 py-2 rounded shadow-sm border border-blue-200">
+-                        <div className="text-xs text-gray-500">Cß║ºn cho 1 Tuß║ºn</div>
+-                        <div className="text-xl font-bold text-blue-700">
+-                          {Math.ceil((planDetail.groups.length + (planDetail.standby_drivers?.length || 0)) * 7 / 6)}
+-                        </div>
+-                      </div>
+-                    </div>
+-                  </div>
+-                )}
+-
+               </div>
+ 
+               {planDetail.reject_reason && (
+-                <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-xs font-semibold">
+-                  ≡ƒö┤ Kß║┐ hoß║ích bß╗ï tß╗½ chß╗æi duyß╗çt: "{planDetail.reject_reason}"
++                <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 text-xs font-semibold">
++                  ≡ƒö┤ Bß╗ï tß╗½ chß╗æi: "{planDetail.reject_reason}"
+                 </div>
+               )}
+ 
++              {/* Thß╗æng k├¬ */}
+               {planDetail.scheduling_metrics && (
+                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+-                  <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+-                    <div className="text-2xs text-slate-400 font-bold uppercase">Sß╗æ l╞░ß╗út xuß║Ñt bß║┐n mß╗ùi chiß╗üu</div>
+-                    <div className="text-lg font-bold text-slate-800">{planDetail.scheduling_metrics.expected_trips_per_direction}</div>
+-                  </div>
+-                  <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+-                    <div className="text-2xs text-slate-400 font-bold uppercase">Thß╗¥i gian gi├ún c├ích chuyß║┐n</div>
+-                    <div className="text-lg font-bold text-slate-800">{planDetail.scheduling_metrics.headway_minutes}p</div>
+-                  </div>
+-                  <div className="bg-green-50 rounded-xl p-3 border border-green-100">
+-                    <div className="text-2xs text-green-500 font-bold uppercase">Sß╗æ xe vß║¡n doanh</div>
+-                    <div className="text-lg font-bold text-green-700">{planDetail.scheduling_metrics.confirmed_operating_buses}</div>
+-                  </div>
+-                  <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
+-                    <div className="text-2xs text-blue-500 font-bold uppercase">T├ái xß║┐ (Ca s├íng/chiß╗üu)</div>
+-                    <div className="text-lg font-bold text-blue-700">{planDetail.groups?.length || 0}</div>
+-                  </div>
+-                  <div className="bg-purple-50 rounded-xl p-3 border border-purple-100">
+-                    <div className="text-2xs text-purple-500 font-bold uppercase">T├ái xß║┐ Dß╗▒ ph├▓ng (15%)</div>
+-                    <div className="text-lg font-bold text-purple-700">{Math.ceil((planDetail.groups?.length || 0) * 0.15)}</div>
+-                  </div>
++                  {[
++                    { label: 'L╞░ß╗út/chiß╗üu', val: planDetail.scheduling_metrics.expected_trips_per_direction, color: 'slate' },
++                    { label: 'Gi├ún c├ích (ph├║t)', val: `${planDetail.scheduling_metrics.headway_minutes}p`, color: 'slate' },
++                    { label: 'Xe vß║¡n doanh', val: planDetail.scheduling_metrics.confirmed_operating_buses, color: 'green' },
++                    { label: 'Nh├│m/ng├áy', val: operatingGroups.length || 'ΓÇö', color: 'blue' },
++                  ].map(({ label, val, color }) => (
++                    <div key={label} className={`bg-${color}-50 rounded-xl p-3 border border-${color}-100`}>
++                      <div className={`text-2xs text-${color}-400 font-bold uppercase`}>{label}</div>
++                      <div className={`text-lg font-bold text-${color}-700`}>{val}</div>
++                    </div>
++                  ))}
+                 </div>
+               )}
+ 
+-              {/* Trip Groups and Resource Assignment */}
+-              <div>
+-                <h4 className="font-bold text-gray-900 text-sm mb-3">Ph├ón c├┤ng t├ái nguy├¬n theo ca (S├íng / Chiß╗üu)</h4>
+-                {planDetail.groups?.length === 0 ? (
+-                  <div className="text-center py-10 bg-slate-50 rounded-xl text-slate-400 text-xs">
+-                    Ch╞░a c├│ nh├│m chuyß║┐n n├áo. Vui l├▓ng nhß║Ñp "Sinh chuyß║┐n xe & Gom nh├│m".
++              {/* Tab chß╗ìn ng├áy */}
++              {dayKeys.length > 0 && (
++                <div>
++                  <h4 className="font-bold text-gray-800 text-sm mb-2">≡ƒôà Xem theo ng├áy</h4>
++                  <div className="flex gap-2 flex-wrap">
++                    {dayKeys.map(ds => (
++                      <button key={ds}
++                        onClick={() => setSelectedDayStr(ds)}
++                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition border ${selectedDayStr === ds ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'}`}>
++                        {formatDate(ds + 'T00:00:00')}
++                      </button>
++                    ))}
+                   </div>
+-                ) : (
+-                  <div className="space-y-3">
+-                    {planDetail.groups?.map(g => {
+-                      const isUnassigned = !g.bus_id || !g.driver_id;
+-                      return (
+-                        <div 
+-                          key={g.group_id} 
+-                          className={`border border-slate-100 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 cursor-pointer transition ${highlightedDriver && g.driver_name === highlightedDriver ? 'bg-yellow-100 border-yellow-300' : 'bg-white hover:border-slate-200'}`}
+-                          onClick={() => {
+-                            if (g.driver_name) {
+-                              setHighlightedDriver(g.driver_name === highlightedDriver ? null : g.driver_name);
+-                            }
+-                          }}
+-                        >
+-                          <div>
+-                            <div className="font-bold text-slate-800 text-sm">{g.group_name}</div>
+-                            <div className="text-2xs font-semibold text-gray-500 mt-1 font-mono">
+-                              Khung chß║íy: {new Date(g.start_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - {new Date(g.end_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
++                </div>
++              )}
++
++              {/* Ph├ón c├┤ng ng├áy ─æ╞░ß╗úc chß╗ìn */}
++              {selectedDayStr && dayGroups[selectedDayStr] && (
++                <>
++                  <div>
++                    <h4 className="font-bold text-gray-800 text-sm mb-2">≡ƒÜî Ph├ón c├┤ng xe & t├ái xß║┐ ΓÇö {formatDate(selectedDayStr + 'T00:00:00')}</h4>
++                    {operatingGroups.length === 0 ? (
++                      <div className="text-center py-6 bg-slate-50 rounded-xl text-slate-400 text-xs">Ch╞░a c├│ ph├ón c├┤ng</div>
++                    ) : (
++                      <div className="space-y-2">
++                        {operatingGroups.map(g => (
++                          <div key={g.group_id} className="border border-slate-100 bg-slate-50 rounded-xl px-4 py-3 flex justify-between items-center">
++                            <div>
++                              <div className="font-bold text-slate-800 text-sm">{g.group_name}</div>
++                              <div className="text-xs text-gray-500 font-mono mt-0.5">
++                                {formatTime(g.start_time)} ΓåÆ {formatTime(g.end_time)}
++                              </div>
+                             </div>
+-                          </div>
+-                          
+-                          <div className="flex items-center gap-4">
+-                            <div className="text-xs text-right">
++                            <div className="text-xs text-right space-y-0.5">
+                               <div>
+-                                <span className="text-slate-400 font-medium">Xe: </span>
++                                <span className="text-slate-400">Xe: </span>
+                                 <span className={g.license_plate ? 'font-bold text-slate-900' : 'text-red-500 font-bold'}>
+-                                  {g.license_plate || 'Ch╞░a ph├ón c├┤ng'}
++                                  {g.license_plate || 'Ch╞░a g├ín'}
+                                 </span>
+                               </div>
+-                              <div className="mt-0.5">
+-                                <span className="text-slate-400 font-medium">T├ái xß║┐: </span>
++                              <div>
++                                <span className="text-slate-400">T├ái xß║┐: </span>
+                                 <span className={g.driver_name ? 'font-bold text-slate-900' : 'text-red-500 font-bold'}>
+-                                  {g.driver_name || 'Ch╞░a ph├ón c├┤ng'}
++                                  {g.driver_name || 'Ch╞░a g├ín'}
+                                 </span>
+                               </div>
+                             </div>
+-                            
+-                            {isDispatcher && (planDetail.status === 'draft' || planDetail.status === 'approved') && (
+-                              <button
+-                                onClick={(e) => {
+-                                  e.stopPropagation();
+-                                  openAssignModal(g);
+-                                }}
+-                                className={`text-2xs font-bold px-3 py-1.5 rounded-lg transition border ${
+-                                  isUnassigned 
+-                                    ? 'bg-blue-600 hover:bg-blue-700 text-white border-transparent' 
+-                                    : 'bg-white hover:bg-slate-50 text-slate-600 border-slate-200'
+-                                }`}
+-                              >
+-                                {isUnassigned ? 'Ph├ón c├┤ng' : 'Thay ─æß╗òi'}
+-                              </button>
+-                            )}
+                           </div>
+-                        </div>
+-                      );
+-                    })}
++                        ))}
++                      </div>
++                    )}
+                   </div>
+-                )}
+-              </div>
+ 
+-              {/* Individual Trips list */}
+-              <div>
+-                <h4 className="font-bold text-gray-900 text-sm mb-3">Lß╗ïch tr├¼nh chi tiß║┐t c├íc chuyß║┐n ({planDetail.trips?.length || 0} chuyß║┐n)</h4>
+-                {planDetail.trips?.length === 0 ? (
+-                  <div className="text-center py-6 bg-slate-50 rounded-xl text-slate-400 text-xs">Kh├┤ng c├│ lß╗ïch chuyß║┐n</div>
+-                ) : (
+-                  <div className="max-h-60 overflow-y-auto border border-slate-100 rounded-xl divide-y">
+-                    {planDetail.trips?.map(t => {
+-                      const group = planDetail.groups?.find(g => g.group_id === t.group_id);
+-                      return (
+-                        <div 
+-                          key={t.trip_id} 
+-                          className={`px-4 py-3 flex justify-between items-center text-xs hover:bg-slate-50 transition cursor-pointer ${highlightedDriver && group?.driver_name === highlightedDriver ? 'bg-yellow-100' : ''}`}
+-                          onClick={() => {
+-                            if (group?.driver_name) {
+-                              setHighlightedDriver(group.driver_name === highlightedDriver ? null : group.driver_name);
+-                            }
+-                          }}
+-                        >
+-                          <div>
+-                            <span className="font-bold font-mono text-slate-700">Chuyß║┐n #{t.trip_order}</span>
+-                            <span className="text-slate-400 ml-2">({t.direction_type === 'outbound' ? 'Chiß╗üu ─æi' : 'Chiß╗üu vß╗ü'})</span>
+-                            {t.group_name && (
+-                              <span className="ml-3 px-2 py-0.5 rounded-lg text-3xs font-semibold bg-blue-50 text-blue-600 border border-blue-100">
+-                                {t.group_name}
+-                              </span>
+-                            )}
++                  {/* Mß╗æc thß╗¥i gian chuyß║┐n */}
++                  {activeTrips.length > 0 && (
++                    <div>
++                      <h4 className="font-bold text-gray-800 text-sm mb-2">≡ƒòÉ Lß╗ïch chuyß║┐n ({activeTrips.length} chuyß║┐n)</h4>
++                      <div className="max-h-52 overflow-y-auto border border-slate-100 rounded-xl divide-y">
++                        {activeTrips.map(t => (
++                          <div key={t.trip_id} className="px-4 py-2 flex justify-between items-center text-xs hover:bg-slate-50">
++                            <div>
++                              <span className="font-bold font-mono text-slate-700">#{t.trip_order}</span>
++                              <span className="text-slate-400 ml-2">({t.direction_type === 'outbound' ? 'Chiß╗üu ─æi' : 'Chiß╗üu vß╗ü'})</span>
++                              {t.group_name && <span className="ml-2 px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-xs">{t.group_name}</span>}
++                            </div>
++                            <div className="font-semibold text-slate-800 font-mono">
++                              {formatTime(t.scheduled_departure)} ΓåÆ {formatTime(t.scheduled_arrival)}
++                            </div>
+                           </div>
+-                          <div className="font-semibold text-slate-800">
+-                            {new Date(t.scheduled_departure).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - {new Date(t.scheduled_arrival).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
++                        ))}
++                      </div>
++                    </div>
++                  )}
++
++                  {/* Dß╗▒ ph├▓ng ng├áy */}
++                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
++                    <h4 className="font-bold text-amber-800 text-sm mb-2">ΓÜá∩╕Å Dß╗▒ ph├▓ng ng├áy {formatDate(selectedDayStr + 'T00:00:00')}</h4>
++                    {standbyGroups.length === 0 ? (
++                      <p className="text-xs text-amber-600">Ch╞░a c├│ th├┤ng tin dß╗▒ ph├▓ng</p>
++                    ) : (
++                      <div className="space-y-1">
++                        {standbyGroups.map(g => (
++                          <div key={g.group_id} className="flex gap-4 text-xs">
++                            {g.driver_name && <span className="text-amber-800"><span className="font-semibold">T├ái xß║┐ nghß╗ë/dß╗▒ ph├▓ng:</span> {g.driver_name}</span>}
++                            {g.license_plate && <span className="text-amber-800"><span className="font-semibold">Xe dß╗▒ ph├▓ng:</span> {g.license_plate}</span>}
+                           </div>
+-                        </div>
+-                      );
+-                    })}
++                        ))}
++                      </div>
++                    )}
+                   </div>
+-                )}
+-              </div>
++                </>
++              )}
++
++              {planDetail.groups?.length === 0 && (
++                <div className="text-center py-10 bg-slate-50 rounded-xl text-slate-400 text-xs">
++                  Ch╞░a c├│ lß╗ïch. Nhß║Ñn "Sinh lß╗ïch 7 ng├áy" ─æß╗â tß║ío.
++                </div>
++              )}
+             </div>
+           ) : (
+             <div className="bg-white rounded-2xl border border-slate-100 p-16 text-center text-slate-400 font-semibold shadow-sm">
+-              Chß╗ìn mß╗Öt kß║┐ hoß║ích vß║¡n doanh tß╗½ danh s├ích b├¬n tr├íi ─æß╗â xem chi tiß║┐t
++              Chß╗ìn mß╗Öt kß║┐ hoß║ích tß╗½ danh s├ích b├¬n tr├íi ─æß╗â xem chi tiß║┐t
+             </div>
+           )}
+         </div>
+       </div>
+ 
+-      {/* Create Plan Modal */}
++      {/* Modal tß║ío kß║┐ hoß║ích */}
+       <Modal isOpen={showCreateModal} title="Tß║ío kß║┐ hoß║ích vß║¡n doanh mß╗¢i" onClose={() => setShowCreateModal(false)}>
+         <form onSubmit={handleCreatePlan} className="space-y-4">
+           {createError && <AlertBox type="error" message={createError} />}
+-          
+           <div>
+             <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wider">Tuyß║┐n xe bu├╜t *</label>
+-            <select
+-              value={createForm.route_code}
+-              onChange={e => setCreateForm({ ...createForm, route_code: e.target.value })}
+-              required
+-              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+-            >
+-              {routes.map(r => (
+-                <option key={r.route_code} value={r.route_code}>
+-                  Tuyß║┐n {r.route_code} - {r.route_name}
+-                </option>
+-              ))}
++            <select value={createForm.route_code} onChange={e => setCreateForm({ ...createForm, route_code: e.target.value })} required
++              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
++              {routes.map(r => <option key={r.route_code} value={r.route_code}>Tuyß║┐n {r.route_code} - {r.route_name}</option>)}
+             </select>
+           </div>
+-
+           <div>
+-            <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wider">Ng├áy vß║¡n h├ánh *</label>
+-            <input
+-              type="date"
+-              value={createForm.operation_date}
+-              onChange={e => setCreateForm({ ...createForm, operation_date: e.target.value })}
+-              required
+-              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+-            />
++            <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wider">Ng├áy bß║»t ─æß║ºu tuß║ºn *</label>
++            <input type="date" value={createForm.operation_date} onChange={e => setCreateForm({ ...createForm, operation_date: e.target.value })} required
++              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition" />
++            <p className="text-xs text-slate-400 mt-1">Hß╗ç thß╗æng sß║╜ sinh lß╗ïch 7 ng├áy tß╗½ ng├áy n├áy</p>
+           </div>
+-
+-          <div className="flex gap-3 justify-end pt-3">
+-            <button
+-              type="button"
+-              onClick={() => setShowCreateModal(false)}
+-              className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-slate-50 transition"
+-            >
+-              Hß╗ºy
+-            </button>
+-            <button
+-              type="submit"
+-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-md shadow-blue-500/10 transition"
+-            >
+-              Tß║ío kß║┐ hoß║ích
+-            </button>
++          <div className="flex gap-3 justify-end pt-2">
++            <button type="button" onClick={() => setShowCreateModal(false)}
++              className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-slate-50 transition">Hß╗ºy</button>
++            <button type="submit"
++              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-md transition">Tß║ío kß║┐ hoß║ích</button>
+           </div>
+         </form>
+       </Modal>
+ 
+-      {/* Assign Modal */}
+-      <Modal isOpen={showAssignModal} title="Ph├ón c├┤ng xe & t├ái xß║┐" onClose={() => setShowAssignModal(false)}>
+-        {resourcesLoading ? (
+-          <div className="text-center py-10 text-slate-400 font-semibold animate-pulse">─Éang qu├⌐t t├ái nguy├¬n sß║╡n s├áng...</div>
+-        ) : (
+-          <form onSubmit={handleAssignSubmit} className="space-y-4">
+-            {assignError && <AlertBox type="error" message={assignError} />}
+-
+-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-2xs text-blue-700 font-medium leading-relaxed mb-4">
+-              ≡ƒÆí Hß╗ç thß╗æng chß╗ë gß╗úi ├╜ nhß╗»ng xe thuß╗Öc tuyß║┐n n├áy, c├│ trß║íng th├íi hoß║ít ─æß╗Öng (active), v├á t├ái xß║┐ ─æang l├ám viß╗çc (working) kh├┤ng tr├╣ng lß╗ïch hoß║╖c nghß╗ë ph├⌐p.
+-            </div>
+-
+-            <div>
+-              <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wider">Chß╗ìn xe bu├╜t *</label>
+-              <select
+-                value={assignForm.bus_id}
+-                onChange={e => setAssignForm({ ...assignForm, bus_id: e.target.value })}
+-                required
+-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+-              >
+-                <option value="">-- Chß╗ìn xe bu├╜t khß║ú dß╗Ñng --</option>
+-                {availableResources.buses?.map(b => (
+-                  <option key={b.bus_id} value={b.bus_id}>
+-                    {b.license_plate} ({b.seat_count} chß╗ù, {b.bus_role === 'operating' ? 'Xe vß║¡n doanh' : 'Xe dß╗▒ bß╗ï'})
+-                  </option>
+-                ))}
+-              </select>
+-            </div>
+-
+-            <div>
+-              <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wider">Chß╗ìn t├ái xß║┐ *</label>
+-              <select
+-                value={assignForm.driver_id}
+-                onChange={e => setAssignForm({ ...assignForm, driver_id: e.target.value })}
+-                required
+-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+-              >
+-                <option value="">-- Chß╗ìn t├ái xß║┐ khß║ú dß╗Ñng --</option>
+-                {availableResources.drivers?.map(d => (
+-                  <option key={d.driver_id} value={d.driver_id}>
+-                    {d.full_name} (Bß║▒ng {d.license_class})
+-                  </option>
+-                ))}
+-              </select>
+-            </div>
+-
+-            <div className="flex gap-3 justify-end pt-3">
+-              <button
+-                type="button"
+-                onClick={() => setShowAssignModal(false)}
+-                className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-slate-50 transition"
+-              >
+-                Hß╗ºy
+-              </button>
+-              <button
+-                type="submit"
+-                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-md shadow-blue-500/10 transition"
+-              >
+-                X├íc nhß║¡n ph├ón c├┤ng
+-              </button>
+-            </div>
+-          </form>
+-        )}
+-      </Modal>
+-
+-      {/* Review Modal (Manager only) */}
++      {/* Modal duyß╗çt */}
+       <Modal isOpen={showReviewModal} title="Ph├¬ duyß╗çt kß║┐ hoß║ích vß║¡n doanh" onClose={() => setShowReviewModal(false)}>
+         <form onSubmit={handleReviewSubmit} className="space-y-4">
+           {reviewError && <AlertBox type="error" message={reviewError} />}
+-          
+           <div>
+-            <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wider">Quyß║┐t ─æß╗ïnh ph├¬ duyß╗çt *</label>
++            <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wider">Quyß║┐t ─æß╗ïnh *</label>
+             <div className="flex gap-4">
+-              <label className="flex items-center gap-2 font-semibold text-sm text-slate-700 cursor-pointer">
+-                <input
+-                  type="radio"
+-                  name="decision"
+-                  value="approve"
+-                  checked={reviewDecision === 'approve'}
+-                  onChange={() => setReviewDecision('approve')}
+-                  className="w-4 h-4 text-blue-600"
+-                />
+-                Duyß╗çt kß║┐ hoß║ích (approve)
+-              </label>
+-              <label className="flex items-center gap-2 font-semibold text-sm text-slate-700 cursor-pointer">
+-                <input
+-                  type="radio"
+-                  name="decision"
+-                  value="reject"
+-                  checked={reviewDecision === 'reject'}
+-                  onChange={() => setReviewDecision('reject')}
+-                  className="w-4 h-4 text-red-600"
+-                />
+-                Tß╗½ chß╗æi kß║┐ hoß║ích (reject)
+-              </label>
++              {['approve','reject'].map(v => (
++                <label key={v} className="flex items-center gap-2 font-semibold text-sm text-slate-700 cursor-pointer">
++                  <input type="radio" name="decision" value={v} checked={reviewDecision === v} onChange={() => setReviewDecision(v)} className="w-4 h-4" />
++                  {v === 'approve' ? 'Duyß╗çt kß║┐ hoß║ích' : 'Tß╗½ chß╗æi kß║┐ hoß║ích'}
++                </label>
++              ))}
+             </div>
+           </div>
+-
+           {reviewDecision === 'reject' && (
+             <div>
+               <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wider">L├╜ do tß╗½ chß╗æi *</label>
+-              <textarea
+-                value={rejectReason}
+-                onChange={e => setRejectReason(e.target.value)}
+-                required
+-                rows={3}
+-                placeholder="Nhß║¡p l├╜ do tß╗½ chß╗æi kß║┐ hoß║ích n├áy..."
+-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+-              />
++              <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} required rows={3}
++                placeholder="Nhß║¡p l├╜ do..." className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition" />
+             </div>
+           )}
+-
+-          <div className="flex gap-3 justify-end pt-3">
+-            <button
+-              type="button"
+-              onClick={() => setShowReviewModal(false)}
+-              className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-slate-50 transition"
+-            >
+-              Hß╗ºy
+-            </button>
+-            <button
+-              type="submit"
+-              className={`px-5 py-2.5 text-white rounded-xl text-sm font-semibold shadow-md transition ${
+-                reviewDecision === 'approve' 
+-                  ? 'bg-green-600 hover:bg-green-700 shadow-green-500/10' 
+-                  : 'bg-red-600 hover:bg-red-700 shadow-red-500/10'
+-              }`}
+-            >
++          <div className="flex gap-3 justify-end pt-2">
++            <button type="button" onClick={() => setShowReviewModal(false)}
++              className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-slate-50 transition">Hß╗ºy</button>
++            <button type="submit"
++              className={`px-5 py-2.5 text-white rounded-xl text-sm font-semibold shadow-md transition ${reviewDecision === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
+               X├íc nhß║¡n quyß║┐t ─æß╗ïnh
+             </button>
+           </div>
+         </form>
+       </Modal>
+-      {showGenerateModal && (
+-        <GenerateTripsModal
+-          isOpen={showGenerateModal}
+-          onClose={() => setShowGenerateModal(false)}
+-          onGenerate={handleGenerateTrips}
+-          isReGenerate={planDetail?.groups?.length > 0}
+-        />
+-      )}
+-
+     </Layout>
+   );
+ }
+diff --git a/frontend/src/pages/manager/PlanApproval.jsx b/frontend/src/pages/manager/PlanApproval.jsx
+index aade091..443b730 100644
+--- a/frontend/src/pages/manager/PlanApproval.jsx
++++ b/frontend/src/pages/manager/PlanApproval.jsx
+@@ -89,7 +89,8 @@ export default function PlanApproval() {
+     return r ? `Tuyß║┐n ${r.route_code} ΓÇô ${r.route_name}` : `Tuyß║┐n ${code}`;
+   };
+ 
+-  const filteredPlans = plans.filter(p => !filterStatus || p.status === filterStatus);
++  // Manager kh├┤ng thß║Ñy kß║┐ hoß║ích nh├íp
++  const filteredPlans = plans.filter(p => p.status !== 'draft' && (!filterStatus || p.status === filterStatus));
+ 
+   return (
+     <Layout>
+@@ -116,7 +117,6 @@ export default function PlanApproval() {
+                 <option value="pending_approval">Chß╗¥ duyß╗çt</option>
+                 <option value="approved">─É├ú duyß╗çt</option>
+                 <option value="rejected">Bß╗ï tß╗½ chß╗æi</option>
+-                <option value="draft">Nh├íp</option>
+               </select>
+             </div>
+             <div className="max-h-[600px] overflow-y-auto divide-y divide-slate-50">
+diff --git a/frontend/src/pages/manager/RouteDriverManage.jsx b/frontend/src/pages/manager/RouteDriverManage.jsx
+index 3ef8778..6221192 100644
+--- a/frontend/src/pages/manager/RouteDriverManage.jsx
++++ b/frontend/src/pages/manager/RouteDriverManage.jsx
+@@ -81,6 +81,12 @@ export default function RouteDriverManage() {
+       setAddError('Vui l├▓ng chß╗ìn ├¡t nhß║Ñt mß╗Öt t├ái xß║┐');
+       return;
+     }
++    // Giß╗¢i hß║ín sß╗æ t├ái xß║┐
++    const maxDrivers = Number(selectedRoute.confirmed_drivers || selectedRoute.expected_drivers_weekly || 999);
++    if (routeDrivers.length + addDriverIds.length > maxDrivers) {
++      setAddError(`Giß╗¢i hß║ín tß╗æi ─æa ${maxDrivers} t├ái xß║┐ cho tuyß║┐n n├áy. Hiß╗çn c├│ ${routeDrivers.length}.`);
++      return;
++    }
+     try {
+       await Promise.all(addDriverIds.map(id => routeDriverService.addDriverToRoute(selectedRoute.route_code, id)));
+       setAddDriverIds([]);
+@@ -99,6 +105,12 @@ export default function RouteDriverManage() {
+       setAddError('Vui l├▓ng chß╗ìn xe bu├╜t');
+       return;
+     }
++    // Giß╗¢i hß║ín sß╗æ xe
++    const maxTotal = Number(selectedRoute.confirmed_total_buses || selectedRoute.confirmed_operating_buses || 999);
++    if (routeBuses.length >= maxTotal) {
++      setAddError(`Giß╗¢i hß║ín tß╗æi ─æa ${maxTotal} xe cho tuyß║┐n n├áy. Hiß╗çn c├│ ${routeBuses.length}.`);
++      return;
++    }
+     try {
+       await addBusToRoute(selectedRoute.route_code, { bus_id: Number(addBusId), bus_role: addBusRole });
+       setAddBusId('');
+diff --git a/frontend/src/pages/manager/RouteList.jsx b/frontend/src/pages/manager/RouteList.jsx
+index 797bb29..5acff6e 100644
+--- a/frontend/src/pages/manager/RouteList.jsx
++++ b/frontend/src/pages/manager/RouteList.jsx
+@@ -18,10 +18,10 @@ const emptyForm = {
+   inbound_start_point: '',
+   inbound_end_point: '',
+   inbound_distance: '',
+-  travel_time_minutes: 80,
++  outbound_travel: 80,
++  inbound_travel: 80,
+   short_layover_minutes: 10,
+-  long_layover_minutes: 15,
+-  max_driving_minutes: 240,
++  max_driving_minutes: 3, // Defaults to 3 rounds before long rest
+   standby_ratio: 0.15,
+   backup_bus_ratio: 0.20,
+   min_rest_time_minutes: 60,
+@@ -99,10 +99,10 @@ export default function RouteList() {
+       inbound_start_point: r.inbound_start_point || '',
+       inbound_end_point: r.inbound_end_point || '',
+       inbound_distance: r.inbound_distance_km ?? '',
+-      travel_time_minutes: r.travel_time_minutes ?? 80,
++      outbound_travel: r.outbound_travel_time_minutes ?? r.travel_time_minutes ?? 80,
++      inbound_travel: r.inbound_travel_time_minutes ?? r.travel_time_minutes ?? 80,
+       short_layover_minutes: r.short_layover_minutes ?? 10,
+-      long_layover_minutes: r.long_layover_minutes ?? 15,
+-      max_driving_minutes: r.max_driving_minutes ?? 240,
++      max_driving_minutes: r.max_driving_minutes ?? 3,
+       standby_ratio: r.standby_ratio ?? 0.15,
+       backup_bus_ratio: r.backup_bus_ratio ?? 0.20,
+       min_rest_time_minutes: r.min_rest_time_minutes ?? 60,
+@@ -125,7 +125,17 @@ export default function RouteList() {
+       outbound_distance: form.outbound_distance ? Number(form.outbound_distance) : null,
+       inbound_start_point: form.inbound_start_point.trim(),
+       inbound_end_point: form.inbound_end_point.trim(),
+-      inbound_distance: form.inbound_distance ? Number(form.inbound_distance) : null
++      inbound_distance: form.inbound_distance ? Number(form.inbound_distance) : null,
++      outbound_travel: Number(form.outbound_travel),
++      outbound_turnaround: 0,
++      inbound_travel: Number(form.inbound_travel),
++      inbound_turnaround: 0,
++      short_layover_minutes: Number(form.short_layover_minutes),
++      long_layover_minutes: Number(form.min_rest_time_minutes),
++      max_driving_minutes: Number(form.max_driving_minutes),
++      standby_ratio: Number(form.standby_ratio),
++      backup_bus_ratio: Number(form.backup_bus_ratio),
++      min_rest_time_minutes: Number(form.min_rest_time_minutes)
+     };
+   };
+ 
+@@ -180,17 +190,22 @@ export default function RouteList() {
+     const matchStatus = !filterStatus || r.status === filterStatus;
+     return matchSearch && matchStatus;
+   });
+-  const rtt = Number(form.travel_time_minutes) * 2 + Number(form.short_layover_minutes) * 2;
+   const hWay = Number(form.headway_minutes);
+-  const minRest = Number(form.min_rest_time_minutes) || 0;
++  const outTravel = Number(form.outbound_travel) || 80;
++  const inTravel = Number(form.inbound_travel) || 80;
++  const roundTripTravelTime = outTravel + inTravel;
++  const roundsBeforeLongBreak = Number(form.max_driving_minutes) || 3;
++  const shortLayoverMinutes = Number(form.short_layover_minutes) || 10;
++  const longLayoverMinutes = Number(form.min_rest_time_minutes) || 60;
++
++  const cycleTimeMinutes = roundsBeforeLongBreak * roundTripTravelTime + (roundsBeforeLongBreak - 1) * shortLayoverMinutes + 1 * longLayoverMinutes;
++  const avgRoundTripTime = cycleTimeMinutes / roundsBeforeLongBreak;
+   
+-  const editingBaseBuses = (hWay > 0 && rtt > 0) ? Math.ceil(rtt / hWay) : 0;
+-  const editingRecoveryBuses = (hWay > 0) ? Math.ceil(minRest / hWay) : 0;
+-  const editingSuggestedBuses = editingBaseBuses + editingRecoveryBuses;
++  const editingSuggestedBuses = (hWay > 0) ? Math.ceil(avgRoundTripTime / hWay) : 0;
+   const editingBackupBuses = Math.ceil(editingSuggestedBuses * (Number(form.backup_bus_ratio) || 0));
+   const editingTotalBuses = editingSuggestedBuses + editingBackupBuses;
+ 
+-  const mainShifts = editingBaseBuses * 2;
++  const mainShifts = editingSuggestedBuses * 2;
+   const standbyCount = Math.ceil(mainShifts * (Number(form.standby_ratio) || 0));
+   const dailyDrivers = mainShifts + standbyCount;
+   const weeklyDrivers = Math.ceil(dailyDrivers * 7 / 6);
+@@ -326,11 +341,15 @@ export default function RouteList() {
+                     <input value={form.outbound_end_point} onChange={e => setForm({ ...form, outbound_end_point: e.target.value, inbound_start_point: e.target.value })} placeholder="Bß║┐n B" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" required />
+                   </div>
+                 </div>
+-                <div className="space-y-3 mt-3">
++                <div className="space-y-2 mt-2">
+                   <div className="flex items-center justify-between gap-4">
+                     <label className="text-xs font-medium text-gray-700 w-1/3">Cß╗▒ ly (km) *</label>
+                     <input type="number" step="0.1" value={form.outbound_distance} onChange={e => setForm({ ...form, outbound_distance: e.target.value, inbound_distance: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                   </div>
++                  <div className="flex items-center justify-between gap-4">
++                    <label className="text-xs font-medium text-gray-700 w-1/3">TG chß║íy (ph├║t) *</label>
++                    <input type="number" value={form.outbound_travel} onChange={e => setForm({ ...form, outbound_travel: e.target.value, inbound_travel: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
++                  </div>
+                 </div>
+               </div>
+             </div>
+@@ -344,11 +363,15 @@ export default function RouteList() {
+                     <input value={form.inbound_end_point} onChange={e => setForm({ ...form, inbound_end_point: e.target.value })} placeholder="Bß║┐n A" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" required />
+                   </div>
+                 </div>
+-                <div className="space-y-3 mt-3">
++                <div className="space-y-2 mt-2">
+                   <div className="flex items-center justify-between gap-4">
+                     <label className="text-xs font-medium text-gray-700 w-1/3">Cß╗▒ ly (km) *</label>
+                     <input type="number" step="0.1" value={form.inbound_distance} onChange={e => setForm({ ...form, inbound_distance: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                   </div>
++                  <div className="flex items-center justify-between gap-4">
++                    <label className="text-xs font-medium text-gray-700 w-1/3">TG chß║íy (ph├║t) *</label>
++                    <input type="number" value={form.inbound_travel} onChange={e => setForm({ ...form, inbound_travel: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
++                  </div>
+                 </div>
+               </div>
+             </div>
+@@ -475,22 +498,18 @@ export default function RouteList() {
+           <div className="grid grid-cols-2 gap-4 mt-6 border-t pt-4">
+             <h4 className="col-span-2 text-sm font-semibold text-gray-700">Tham sß╗æ lß║¡p lß╗ïch n├óng cao</h4>
+             
+-            <div>
+-              <label className="block text-sm font-medium text-gray-700 mb-1">Thß╗¥i gian chß║íy 1 chiß╗üu (ph├║t)</label>
+-              <input type="number" value={form.travel_time_minutes} onChange={e => setForm({...form, travel_time_minutes: e.target.value})} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
+-            </div>
+             <div>
+               <label className="block text-sm font-medium text-gray-700 mb-1">Nghß╗ë ngß║»n sau mß╗ùi v├▓ng (ph├║t)</label>
+               <input type="number" value={form.short_layover_minutes} onChange={e => setForm({...form, short_layover_minutes: e.target.value})} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
+             </div>
+-            <div>
+-              <label className="block text-sm font-medium text-gray-700 mb-1">Nghß╗ë d├ái / ─én ca (ph├║t)</label>
+-              <input type="number" value={form.long_layover_minutes} onChange={e => setForm({...form, long_layover_minutes: e.target.value})} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
+-            </div>
+             <div>
+               <label className="block text-sm font-medium text-gray-700 mb-1">Sß╗æ v├▓ng chß║íy ─æß╗â nghß╗ë d├ái (V├▓ng)</label>
+               <input type="number" value={form.max_driving_minutes} onChange={e => setForm({...form, max_driving_minutes: e.target.value})} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
+             </div>
++            <div>
++              <label className="block text-sm font-medium text-gray-700 mb-1">Nghß╗ë d├ái & Bß║úo d╞░ß╗íng tß║íi bß║┐n (ph├║t)</label>
++              <input type="number" value={form.min_rest_time_minutes} onChange={e => setForm({...form, min_rest_time_minutes: e.target.value})} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
++            </div>
+             <div>
+               <label className="block text-sm font-medium text-gray-700 mb-1">Tß╗ë lß╗ç dß╗▒ bß╗ï T├ái xß║┐ (V├¡ dß╗Ñ: 0.15)</label>
+               <input type="number" step="0.01" value={form.standby_ratio} onChange={e => setForm({...form, standby_ratio: e.target.value})} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
+@@ -499,10 +518,6 @@ export default function RouteList() {
+               <label className="block text-sm font-medium text-gray-700 mb-1">Tß╗ë lß╗ç Xe dß╗▒ ph├▓ng (V├¡ dß╗Ñ: 0.20)</label>
+               <input type="number" step="0.01" value={form.backup_bus_ratio} onChange={e => setForm({...form, backup_bus_ratio: e.target.value})} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
+             </div>
+-            <div>
+-              <label className="block text-sm font-medium text-gray-700 mb-1">TG bß║úo d╞░ß╗íng tß║íi bß║┐n (ph├║t)</label>
+-              <input type="number" value={form.min_rest_time_minutes} onChange={e => setForm({...form, min_rest_time_minutes: e.target.value})} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
+-            </div>
+           </div>
+ 
+           <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-100 flex items-center justify-between">
+diff --git a/frontend/src/services/planService.js b/frontend/src/services/planService.js
+index 6a86e96..51ea6c7 100644
+--- a/frontend/src/services/planService.js
++++ b/frontend/src/services/planService.js
+@@ -4,6 +4,7 @@ export const getPlans = (params) => api.get('/plans', { params });
+ export const getPlan = (id) => api.get(`/plans/${id}`);
+ export const createPlan = (data) => api.post('/plans', data);
+ export const generateTrips = (planId, data = {}) => api.post(`/plans/${planId}/generate-trips`, data);
++export const deletePlan = (planId) => api.delete(`/plans/${planId}`);
+ export const submitPlan = (planId) => api.post(`/plans/${planId}/submit`);
+ export const reviewPlan = (planId, decisionOrPayload, rejectReason) => {
+   const payload = typeof decisionOrPayload === 'object'
+@@ -12,3 +13,4 @@ export const reviewPlan = (planId, decisionOrPayload, rejectReason) => {
+   return api.post(`/plans/${planId}/review`, payload);
+ };
+ export const autoAssignPlan = (planId) => api.post(`/plans/${planId}/auto-assign`);
++

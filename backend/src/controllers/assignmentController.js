@@ -355,12 +355,8 @@ const assignmentController = {
     try {
       const { groupId } = req.params;
 
-      // Lấy thông tin nhóm chuyến
       const groupRes = await pool.query(
-        `SELECT g.*, p.operation_date, p.route_code 
-         FROM trip_groups g 
-         JOIN operation_plans p ON g.plan_id = p.plan_id 
-         WHERE g.group_id = $1`,
+        "SELECT g.*, p.operation_date, p.route_code FROM trip_groups g JOIN operation_plans p ON g.plan_id = p.plan_id WHERE g.group_id = $1",
         [groupId]
       );
       if (!groupRes.rows.length) {
@@ -371,66 +367,39 @@ const assignmentController = {
       const { is_replacement } = req.query;
       const isReplacement = is_replacement === 'true';
 
-      // 1. Xe khả dụng: active, thuộc tuyến route_code
-      let busQuery = `
-         SELECT b.bus_id, b.license_plate, b.seat_count, rb.bus_role
-         FROM buses b
-         JOIN route_buses rb ON b.bus_id = rb.bus_id
-         WHERE rb.route_code = $1 AND b.status = 'active'
-      `;
+      let busQuery = "SELECT b.bus_id, b.license_plate, b.seat_count, rb.bus_role FROM buses b JOIN route_buses rb ON b.bus_id = rb.bus_id WHERE rb.route_code = $1 AND b.status = 'active'";
       if (!isReplacement) {
-        busQuery += ` AND rb.bus_role = 'operating' ORDER BY b.license_plate`;
+        busQuery += " AND rb.bus_role = 'operating' ORDER BY b.license_plate";
       } else {
-        busQuery += ` ORDER BY rb.bus_role DESC, b.license_plate`; // 'standby' > 'operating' (s > o)
+        busQuery += " ORDER BY rb.bus_role DESC, b.license_plate"; 
       }
 
       const busesRes = await pool.query(busQuery, [group.route_code]);
 
-      // Lọc các xe bị trùng lịch hoặc đã được phân công trong ngày này
+      const d = new Date(group.start_time);
+      const groupDateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+
       const availableBuses = [];
       for (let bus of busesRes.rows) {
         const overlap = await pool.query(
-          `SELECT tg.group_name 
-           FROM assignments a
-           JOIN trip_groups tg ON a.group_id = tg.group_id
-           JOIN operation_plans p ON tg.plan_id = p.plan_id
-           WHERE a.bus_id = $1 AND a.status = 'active' 
-             AND p.operation_date = $2
-             AND tg.group_id != $3`,
-          [bus.bus_id, group.operation_date, groupId]
+          "SELECT tg.group_name FROM assignments a JOIN trip_groups tg ON a.group_id = tg.group_id WHERE a.bus_id = $1 AND a.status = 'active' AND DATE(tg.start_time) = $2 AND tg.group_id != $3",
+          [bus.bus_id, groupDateStr, groupId]
         );
         if (overlap.rows.length === 0) {
           availableBuses.push(bus);
         }
       }
 
-      // 2. Tài xế khả dụng: working, không xin nghỉ vào ngày vận hành này
       const driversRes = await pool.query(
-        `SELECT d.driver_id, d.full_name, d.phone, d.license_class
-         FROM drivers d
-         WHERE d.status = 'working'
-           AND NOT EXISTS (
-             SELECT 1 FROM leave_requests l 
-             WHERE l.driver_id = d.driver_id 
-               AND l.leave_date = $1 
-               AND l.status = 'approved'
-           )
-         ORDER BY d.full_name`,
-        [group.operation_date]
+        "SELECT d.driver_id, d.full_name, d.phone, d.license_class FROM drivers d JOIN route_drivers rd ON d.driver_id = rd.driver_id WHERE rd.route_code = $1 AND rd.status = 'active' AND d.status = 'working' AND NOT EXISTS (SELECT 1 FROM leave_requests l WHERE l.driver_id = d.driver_id AND l.leave_date = $2 AND l.status = 'approved') ORDER BY d.full_name",
+        [group.route_code, groupDateStr]
       );
 
-      // Lọc các tài xế bị trùng lịch hoặc đã được phân công trong ngày này
       const availableDrivers = [];
       for (let driver of driversRes.rows) {
         const overlap = await pool.query(
-          `SELECT tg.group_name 
-           FROM assignments a
-           JOIN trip_groups tg ON a.group_id = tg.group_id
-           JOIN operation_plans p ON tg.plan_id = p.plan_id
-           WHERE a.driver_id = $1 AND a.status = 'active' 
-             AND p.operation_date = $2
-             AND tg.group_id != $3`,
-          [driver.driver_id, group.operation_date, groupId]
+          "SELECT tg.group_name FROM assignments a JOIN trip_groups tg ON a.group_id = tg.group_id WHERE a.driver_id = $1 AND a.status = 'active' AND DATE(tg.start_time) = $2 AND tg.group_id != $3",
+          [driver.driver_id, groupDateStr, groupId]
         );
         if (overlap.rows.length === 0) {
           availableDrivers.push(driver);
@@ -446,11 +415,9 @@ const assignmentController = {
     try {
       await client.query('BEGIN');
       const { planId } = req.params;
-      console.log('autoAssignPlan req keys:', Object.keys(req));
-      console.log('autoAssignPlan req.body:', req.body);
-      const { standbyRatio = 0.15 } = req.body || {};
       const dispatcherId = req.user.id;
 
+      // 1. Lấy thông tin kế hoạch vận doanh
       const planRes = await client.query('SELECT * FROM operation_plans WHERE plan_id = $1', [planId]);
       if (!planRes.rows.length) {
         await client.query('ROLLBACK');
@@ -458,8 +425,14 @@ const assignmentController = {
       }
       const plan = planRes.rows[0];
 
+      // 2. Xóa các phân công cũ và reset trạng thái nhóm chuyến để thực hiện phân công mới (Đảm bảo tính Idempotent)
+      await client.query('DELETE FROM assignments WHERE plan_id = $1', [planId]);
+      await client.query("DELETE FROM trip_groups WHERE plan_id = $1 AND status = 'standby'", [planId]);
+      await client.query("UPDATE trip_groups SET status = 'unassigned' WHERE plan_id = $1", [planId]);
+
+      // 3. Lấy toàn bộ nhóm chuyến vận doanh (operating) chưa được phân công
       const groupsRes = await client.query(
-        "SELECT * FROM trip_groups WHERE plan_id = $1 AND status = 'unassigned' ORDER BY group_name, start_time",
+        "SELECT * FROM trip_groups WHERE plan_id = $1 AND status = 'unassigned' ORDER BY start_time, group_id",
         [planId]
       );
       if (!groupsRes.rows.length) {
@@ -468,199 +441,197 @@ const assignmentController = {
       }
       const groups = groupsRes.rows;
 
-      const vehicleGroupsMap = {};
-      groups.forEach(g => {
-         const baseName = g.group_name.split(' - ')[0];
-         if(!vehicleGroupsMap[baseName]) vehicleGroupsMap[baseName] = [];
-         vehicleGroupsMap[baseName].push(g);
-      });
+      // 4. Lấy cấu hình tuyến đường
+      const routeRes = await client.query('SELECT * FROM routes WHERE route_code = $1', [plan.route_code]);
+      const route = routeRes.rows[0];
 
-      const requiredBuses = Object.keys(vehicleGroupsMap).length;
-      const requiredMainDrivers = groups.length;
-      const requiredStandbyDrivers = Math.ceil(requiredMainDrivers * standbyRatio);
-      const totalDriversNeeded = requiredMainDrivers + requiredStandbyDrivers;
-      const minWeeklyDrivers = Math.ceil((totalDriversNeeded * 7) / 6);
-
-      // Check total route drivers first (Validation for rotation policy)
-      const totalRouteDriversRes = await client.query(
-        `SELECT COUNT(rd.driver_id) FROM route_drivers rd
-         JOIN drivers d ON rd.driver_id = d.driver_id
-         WHERE rd.route_code = $1 AND rd.status = 'active' AND d.status = 'working'`,
-        [plan.route_code]
-      );
-      const totalRouteDrivers = parseInt(totalRouteDriversRes.rows[0].count);
-
-      if (totalRouteDrivers < minWeeklyDrivers) {
-         await client.query('ROLLBACK');
-         return error(res, `Tuyến không đủ tài xế để xoay vòng ca (đảm bảo nghỉ 1 ngày/tuần). Yêu cầu tối thiểu ${minWeeklyDrivers} tài xế, nhưng tuyến chỉ có ${totalRouteDrivers}.`, 400);
-      }
-
-      const routeRow = await client.query('SELECT min_rest_time_minutes FROM routes WHERE route_code = $1', [plan.route_code]);
-      const minRestTime = routeRow.rows[0]?.min_rest_time_minutes || 60;
-
-      const busesRes = await client.query(
-        `SELECT b.bus_id FROM buses b
-         JOIN route_buses rb ON b.bus_id = rb.bus_id
-         WHERE rb.route_code = $1 AND b.status = 'active'`,
-        [plan.route_code]
-      );
-      const availableBuses = busesRes.rows.map(b => b.bus_id);
-
-      const driversRes = await client.query(
-        `SELECT rd.driver_id,
-
-                COALESCE(
-                  (SELECT ($2::date - dDate::date) - 1
-                   FROM generate_series($2::date - INTERVAL '30 days', $2::date - INTERVAL '1 day', '1 day') AS dDate
-                   WHERE NOT EXISTS (
-                     SELECT 1 FROM assignments a 
-                     JOIN operation_plans p ON a.plan_id = p.plan_id
-                     WHERE a.driver_id = rd.driver_id AND p.operation_date = dDate::date AND a.status = 'active'
-                   )
-                   ORDER BY dDate DESC LIMIT 1), 
-                  30
-                ) AS consecutive_shifts
+      // 5. Lấy danh sách tài xế làm việc thuộc tuyến
+      const routeDriversRes = await client.query(
+        `SELECT rd.driver_id, d.full_name
          FROM route_drivers rd
          JOIN drivers d ON rd.driver_id = d.driver_id
-         WHERE rd.route_code = $1 
-           AND rd.status = 'active'
-           AND d.status = 'working'
-           AND NOT EXISTS (
-             SELECT 1 FROM leave_requests l 
-             WHERE l.driver_id = d.driver_id AND l.leave_date = $2 AND l.status = 'approved'
-           )
-         ORDER BY consecutive_shifts ASC, 
-                  ((rd.driver_id + (SELECT extract(epoch FROM $2::date)/86400/7)::int) % (SELECT COUNT(*) FROM route_drivers WHERE route_code=$1 AND status='active')) ASC`,
-        [plan.route_code, plan.operation_date]
+         WHERE rd.route_code = $1 AND rd.status = 'active' AND d.status = 'working'
+         ORDER BY rd.driver_id`,
+        [plan.route_code]
       );
-      
-      const availableDrivers = [];
-      for (const d of driversRes.rows) {
-        const overlap = await client.query(
-          `SELECT 1 FROM assignments a
-           WHERE a.driver_id = $1 AND a.status = 'active' AND a.plan_id = $2`,
-          [d.driver_id, plan.plan_id]
+      const allDrivers = routeDriversRes.rows;
+      if (allDrivers.length === 0) {
+         await client.query('ROLLBACK');
+         return error(res, 'Tuyến chưa có tài xế nào hoạt động, không thể phân công', 400);
+      }
+
+      // 6. Tạo danh sách 7 ngày trong tuần dựa trên ngày bắt đầu kế hoạch
+      const daysList = [];
+      const baseDate = plan.operation_date;
+      const startLocalDate = new Date(
+        baseDate.getFullYear(),
+        baseDate.getMonth(),
+        baseDate.getDate()
+      );
+      for (let d = 0; d < 7; d++) {
+        const cur = new Date(startLocalDate);
+        cur.setDate(startLocalDate.getDate() + d);
+        const y = cur.getFullYear();
+        const m = String(cur.getMonth() + 1).padStart(2, '0');
+        const date = String(cur.getDate()).padStart(2, '0');
+        const dateStr = `${y}-${m}-${date}`;
+        daysList.push(dateStr);
+      }
+
+      // Nhóm các ca chạy theo từng ngày
+      const groupsByDay = {};
+      for (const g of groups) {
+        const d = new Date(g.start_time);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const dt = String(d.getDate()).padStart(2, '0');
+        const dateStr = `${y}-${m}-${dt}`;
+        if (!groupsByDay[dateStr]) groupsByDay[dateStr] = [];
+        groupsByDay[dateStr].push(g);
+      }
+
+      // 7. Kiểm tra tổng số lượng tài xế tối thiểu cần thiết để xoay vòng ca (đảm bảo nghỉ ít nhất 1 ngày/tuần)
+      let maxDailyShifts = 0;
+      daysList.forEach(dateStr => {
+        const shiftsToday = groupsByDay[dateStr] || [];
+        if (shiftsToday.length > maxDailyShifts) {
+          maxDailyShifts = shiftsToday.length;
+        }
+      });
+
+      const minWeeklyDrivers = Math.max(maxDailyShifts, Math.ceil(groups.length / 6));
+      if (allDrivers.length < minWeeklyDrivers) {
+         await client.query('ROLLBACK');
+         return error(res, `Tuyến không đủ tài xế để xoay vòng ca (đảm bảo nghỉ ít nhất 1 ngày/tuần). Yêu cầu tối thiểu ${minWeeklyDrivers} tài xế, nhưng tuyến chỉ có ${allDrivers.length}.`, 400);
+      }
+
+      // 8. Lấy danh sách xe hoạt động của tuyến và ánh xạ vào các slot xe (ví dụ: "Xe 1")
+      const busesRes = await client.query(
+        `SELECT rb.bus_id, b.license_plate, rb.bus_role
+         FROM route_buses rb
+         JOIN buses b ON rb.bus_id = b.bus_id
+         WHERE rb.route_code = $1 AND b.status = 'active'
+         ORDER BY rb.bus_role DESC, b.license_plate`,
+        [plan.route_code]
+      );
+      const operatingBuses = busesRes.rows.filter(b => b.bus_role === 'operating');
+      const standbyBuses = busesRes.rows.filter(b => b.bus_role === 'standby');
+
+      const busMapping = {};
+      const slotNames = new Set();
+      groups.forEach(g => {
+        const baseName = g.group_name.split(' - ')[0];
+        slotNames.add(baseName);
+      });
+      const sortedSlotNames = Array.from(slotNames).sort();
+
+      if (operatingBuses.length < sortedSlotNames.length) {
+         await client.query('ROLLBACK');
+         return error(res, `Tuyến thiếu xe vận doanh. Yêu cầu tối thiểu ${sortedSlotNames.length} xe, hiện chỉ có ${operatingBuses.length} xe hoạt động.`, 400);
+      }
+
+      for (let i = 0; i < sortedSlotNames.length; i++) {
+        busMapping[sortedSlotNames[i]] = operatingBuses[i].bus_id;
+      }
+
+      // 9. Thực hiện xoay vòng ca chạy và gán dự phòng hàng ngày
+      for (let day = 0; day < 7; day++) {
+        const dateStr = daysList[day];
+        const shiftsToday = groupsByDay[dateStr] || [];
+        // Sắp xếp ca chạy theo giờ xuất bến sớm trước muộn sau
+        shiftsToday.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+
+        // Lấy danh sách tài xế đã được duyệt nghỉ phép vào ngày này
+        const leaveRes = await client.query(
+          "SELECT driver_id FROM leave_requests WHERE leave_date = $1 AND status = 'approved'",
+          [dateStr]
         );
-        if (overlap.rows.length === 0) {
-          availableDrivers.push(d.driver_id);
+        const onLeaveIds = leaveRes.rows.map(r => r.driver_id);
+        const driversAvailableToday = allDrivers.filter(d => !onLeaveIds.includes(d.driver_id));
+
+        if (driversAvailableToday.length < shiftsToday.length) {
+           await client.query('ROLLBACK');
+           return error(res, `Ngày ${dateStr} không đủ tài xế đi làm để vận hành. Ca chạy yêu cầu: ${shiftsToday.length}, tài xế đi làm: ${driversAvailableToday.length}`, 400);
+        }
+
+        const M = driversAvailableToday.length;
+        const S = shiftsToday.length;
+        // Mỗi ngày, bắt đầu lấy tài xế từ vị trí dịch chuyển tiếp theo (xoay vòng)
+        const startIndex = day % M;
+
+        const workingDrivers = [];
+        const standbyDrivers = [];
+
+        for (let i = 0; i < S; i++) {
+          const idx = (startIndex + i) % M;
+          workingDrivers.push(driversAvailableToday[idx]);
+        }
+
+        const workingDriverIds = workingDrivers.map(d => d.driver_id);
+        for (const d of driversAvailableToday) {
+          if (!workingDriverIds.includes(d.driver_id)) {
+            standbyDrivers.push(d);
+          }
+        }
+
+        // 9a. Gán tài xế chính thức và xe vận doanh cho các ca chạy chính
+        for (let i = 0; i < S; i++) {
+          const shift = shiftsToday[i];
+          const baseName = shift.group_name.split(' - ')[0];
+          const busId = busMapping[baseName];
+          const driverId = workingDrivers[i].driver_id;
+
+          await client.query(
+            `INSERT INTO assignments (plan_id, group_id, bus_id, driver_id, assignment_type, assigned_by, status)
+             VALUES ($1, $2, $3, $4, 'main', $5, 'active')`,
+            [plan.plan_id, shift.group_id, busId, driverId, dispatcherId]
+          );
+
+          await client.query(
+            `UPDATE trip_groups SET status = 'assigned' WHERE group_id = $1`,
+            [shift.group_id]
+          );
+        }
+
+        // 9b. Gán tài xế dự phòng và xe dự phòng (nếu có)
+        if (standbyDrivers.length > 0) {
+          const formatTimeStr = (tStr) => {
+            if (!tStr) return '05:00:00';
+            const parts = tStr.split(':');
+            const hh = String(parts[0]).padStart(2, '0');
+            const mm = String(parts[1] || '00').padStart(2, '0');
+            const ss = String(parts[2] || '00').padStart(2, '0');
+            return `${hh}:${mm}:${ss}`;
+          };
+
+          const sbStart = `${dateStr}T${formatTimeStr(route.start_time)}`;
+          const sbEnd = `${dateStr}T${formatTimeStr(route.end_time)}`;
+
+          for (let j = 0; j < standbyDrivers.length; j++) {
+            const driverId = standbyDrivers[j].driver_id;
+            const driverName = standbyDrivers[j].full_name || 'Tài xế';
+            const type = j < standbyDrivers.length / 2 ? 'standby_morning' : 'standby_afternoon';
+            const standbyBusId = standbyBuses[j % standbyBuses.length]?.bus_id || null;
+
+            // Tạo riêng biệt một nhóm chuyến dự phòng cho mỗi tài xế dự bị để tránh trùng lặp uq_group_active_assignment
+            const sbRes = await client.query(
+              `INSERT INTO trip_groups (plan_id, group_name, start_time, end_time, status)
+               VALUES ($1, $2, $3, $4, 'standby') RETURNING group_id`,
+              [plan.plan_id, `Dự phòng (Nghỉ) - ${driverName}`, sbStart, sbEnd]
+            );
+            const sbGroupId = sbRes.rows[0].group_id;
+
+            await client.query(
+              `INSERT INTO assignments (plan_id, group_id, bus_id, driver_id, assignment_type, assigned_by, status)
+               VALUES ($1, $2, $3, $4, $5, $6, 'active')`,
+              [plan.plan_id, sbGroupId, standbyBusId, driverId, type, dispatcherId]
+            );
+          }
         }
       }
 
-      if (availableBuses.length < requiredBuses) {
-         await client.query('ROLLBACK');
-         return error(res, `Tuyến thiếu xe. Yêu cầu tối thiểu ${requiredBuses} xe vận doanh, hiện có ${availableBuses.length} tổng xe.`, 400);
-      }
-      if (availableDrivers.length < totalDriversNeeded) {
-         await client.query('ROLLBACK');
-         return error(res, `Tuyến thiếu tài xế. Yêu cầu ${totalDriversNeeded} (Chính: ${requiredMainDrivers}, Dự bị: ${requiredStandbyDrivers}), hiện có ${availableDrivers.length}`, 400);
-      }
-
-      const workingDrivers = availableDrivers.slice(0, totalDriversNeeded);
-
-      const assignmentsToMake = [];
-      
-      const busState = availableBuses.map(bus_id => ({
-          bus_id,
-          availableTime: 0,
-          shiftCount: 0
-      }));
-
-      function timeToMinutes(dateObj) {
-          if (!dateObj) return 0;
-          return dateObj.getHours() * 60 + dateObj.getMinutes();
-      }
-
-      // Sort groups by start_time
-      const sortedGroups = [...groups].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
-
-      for (const g of sortedGroups) {
-          const startMin = timeToMinutes(new Date(g.start_time));
-          const endMin = timeToMinutes(new Date(g.end_time));
-
-          let candidateBuses = busState.filter(b => b.availableTime <= startMin);
-          if (candidateBuses.length === 0) {
-              candidateBuses = busState; // Fallback: Take the one that will be available soonest
-          }
-
-          candidateBuses.sort((a, b) => {
-              if (a.availableTime !== b.availableTime) return a.availableTime - b.availableTime;
-              return a.shiftCount - b.shiftCount;
-          });
-
-          const selectedBus = candidateBuses[0];
-
-          assignmentsToMake.push({
-             type: 'main',
-             group_id: g.group_id,
-             bus_id: selectedBus.bus_id,
-             start_time: g.start_time
-          });
-
-          selectedBus.shiftCount += 1;
-          selectedBus.availableTime = endMin + minRestTime;
-      }
-
-      const baseDateStr = plan.operation_date instanceof Date 
-            ? plan.operation_date.toISOString().split('T')[0] 
-            : new Date(plan.operation_date).toISOString().split('T')[0];
-
-      let earliestMainTime = new Date();
-      if (assignmentsToMake.length > 0) {
-         let earliest = assignmentsToMake[0].start_time;
-         for (const a of assignmentsToMake) {
-             if (a.start_time < earliest) earliest = a.start_time;
-         }
-         earliestMainTime = earliest;
-      }
-
-      for (let i = 0; i < requiredStandbyDrivers; i++) {
-          const type = i < requiredStandbyDrivers / 2 ? 'standby_morning' : 'standby_afternoon';
-          let st = new Date(earliestMainTime.getTime());
-          if (type === 'standby_afternoon') {
-              st = new Date(st.getTime() + 9 * 60 * 60 * 1000); // 9 hours after morning
-          }
-          assignmentsToMake.push({
-              type: type,
-              group_id: null,
-              bus_id: null,
-              start_time: st
-          });
-      }
-
-      // Sort assignments by start_time ASC so drivers progress from Early -> Late over their streak
-      assignmentsToMake.sort((a, b) => {
-         const timeA = a.start_time ? a.start_time.getTime() : Infinity;
-         const timeB = b.start_time ? b.start_time.getTime() : Infinity;
-         return timeA - timeB;
-      });
-
-      if (plan.operation_date === '2026-07-04' || new Date(plan.operation_date).toISOString().startsWith('2026-07-04')) {
-         console.log('--- DEBUG 2026-07-04 ---');
-         console.log('assignmentsToMake:', assignmentsToMake.map(a => `${a.type} ${a.start_time.toISOString()}`));
-      }
-
-
-
-      for (let i = 0; i < assignmentsToMake.length; i++) {
-          const driver_id = workingDrivers[i];
-          const assignment = assignmentsToMake[i];
-          
-          await client.query(
-             `INSERT INTO assignments (plan_id, group_id, bus_id, driver_id, assignment_type, assigned_by, status)
-              VALUES ($1, $2, $3, $4, $5, $6, 'active')`,
-             [plan.plan_id, assignment.group_id, assignment.bus_id, driver_id, assignment.type, dispatcherId]
-          );
-
-          if (assignment.group_id) {
-             await client.query(
-               `UPDATE trip_groups SET status = 'assigned' WHERE group_id = $1`,
-               [assignment.group_id]
-             );
-          }
-      }
-
       await client.query('COMMIT');
-      return success(res, null, 'Phân công tự động thành công (Thuật toán Công Bằng & Dự bị)!');
+      return success(res, null, 'Phân công tự động thành công (Thuật toán xoay vòng và dự bị công bằng)!');
     } catch (err) {
       await client.query('ROLLBACK');
       next(err);
