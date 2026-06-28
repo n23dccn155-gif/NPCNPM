@@ -25,19 +25,17 @@ export default function Topbar() {
 
   const { socket } = useContext(SocketContext);
 
- async function loadNotifications() {
-  try {
-    const res = await getMyNotifications(true);
-    // Đảm bảo notifications luôn là mảng
-    const data = Array.isArray(res.data) ? res.data : [];
-    setNotifications(data);
-  } catch (err) {
-    console.error('Lỗi tải thông báo:', err);
-    setNotifications([]);
+  async function loadNotifications() {
+    try {
+      const res = await getMyNotifications(true);
+      const data = Array.isArray(res.data) ? res.data : [];
+      setNotifications(data);
+    } catch (err) {
+      console.error('Lỗi tải thông báo:', err);
+      setNotifications([]);
+    }
   }
-}
 
-  // Tiếng chuông báo hiệu
   const playSound = () => {
     try {
       const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
@@ -54,13 +52,12 @@ export default function Topbar() {
   useEffect(() => {
     if (socket) {
       const handleNotification = (data) => {
-        // Có thông báo mới
         toast.info(data.title + ': ' + data.content, {
           position: "top-right",
           autoClose: 5000
         });
         playSound();
-        loadNotifications(); // Reload danh sách
+        loadNotifications();
       };
 
       const handleIncident = (data) => {
@@ -152,7 +149,7 @@ export default function Topbar() {
                     Không có thông báo mới
                   </div>
                 ) : (
-                  notifications.map((notif) => (
+                  Array.isArray(notifications) && notifications.map((notif) => (
                     <div
                       key={notif.notification_id}
                       className="px-4 py-3 hover:bg-slate-50 border-b border-slate-50 last:border-b-0 flex gap-2 justify-between items-start"
