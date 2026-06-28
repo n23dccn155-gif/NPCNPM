@@ -1,8 +1,14 @@
 // api.js: Cấu hình Axios và interceptor JWT
 import axios from 'axios';
 
+// Đọc URL từ biến môi trường Vite. Fallback về localhost cho dev.
+// Trước đây hardcode 'http://localhost:5000/api' khiến không linh hoạt khi
+// đổi cổng backend hoặc deploy lên server khác. SocketContext vẫn đọc env riêng
+// (vì socket.io cần URL gốc, không phải URL có /api).
+const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/$/, '');
+
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api',
+  baseURL: `${API_BASE}/api`,
   headers: { 'Content-Type': 'application/json' },
 });
 
