@@ -46,6 +46,18 @@ const busController = {
         'INSERT INTO buses (license_plate, seat_count, status) VALUES ($1, $2, \'active\') RETURNING bus_id, license_plate, seat_count, status',
         [license_plate, seats]
       );
+            // Gửi thông báo cho manager và dispatcher
+const content = `Xe mới ${license_plate} (số chỗ ${seats}) đã được thêm vào hệ thống.`;
+const users = await pool.query("SELECT user_id FROM users WHERE role IN ('manager', 'dispatcher') AND status = 'active'");
+const { broadcast } = require('../sockets/socketManager');
+for (let u of users.rows) {
+  await pool.query(
+    `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Xe mới được thêm', $2)`,
+    [u.user_id, content]
+  );
+}
+broadcast('NEW_NOTIFICATION', { title: 'Xe mới được thêm', content });
+
       return success(res, result.rows[0], 'Thêm xe buýt thành công', 201);
     } catch (err) {
       if (err.code === '23505') return error(res, 'Biển số xe đã tồn tại', 409);
@@ -72,6 +84,18 @@ const busController = {
         [license_plate, seats, busId]
       );
       if (!result.rows.length) return error(res, 'Không tìm thấy xe buýt', 404);
+      // Gửi thông báo cho manager và dispatcher
+const content = `Xe mới ${license_plate} (số chỗ ${seats}) đã được thêm vào hệ thống.`;
+const users = await pool.query("SELECT user_id FROM users WHERE role IN ('manager', 'dispatcher') AND status = 'active'");
+const { broadcast } = require('../sockets/socketManager');
+for (let u of users.rows) {
+  await pool.query(
+    `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Xe mới được thêm', $2)`,
+    [u.user_id, content]
+  );
+}
+broadcast('NEW_NOTIFICATION', { title: 'Xe mới được thêm', content });
+
       return success(res, result.rows[0], 'Cập nhật xe buýt thành công');
     } catch (err) { next(err); }
   },
@@ -89,6 +113,19 @@ const busController = {
         [status, busId]
       );
       if (!result.rows.length) return error(res, 'Không tìm thấy xe buýt', 404);
+      // Thông báo thay đổi trạng thái xe cho Điều phối viên
+      const statusLabel = { active: 'Hoạt động', broken: 'Hỏng', inactive: 'Ngừng hoạt động' };
+      const content = `Xe ${result.rows[0].license_plate} đã chuyển sang trạng thái: ${statusLabel[status] || status}.`;
+      const dispatchers = await pool.query("SELECT user_id FROM users WHERE role = 'dispatcher' AND status = 'active'");
+      for (let disp of dispatchers.rows) {
+        await pool.query(
+          `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Cập nhật trạng thái xe', $2)`,
+          [disp.user_id, content]
+        );
+      }
+      const { broadcast } = require('../sockets/socketManager');
+      broadcast('NEW_NOTIFICATION', { title: 'Cập nhật trạng thái xe', content });
+
       return success(res, result.rows[0], 'Cập nhật trạng thái xe buýt thành công');
     } catch (err) { next(err); }
   },

@@ -2,6 +2,7 @@
 const pool = require('../config/database');
 const bcrypt = require('bcrypt');
 const { success, error } = require('../utils/responseHelper');
+const { emitToUser, broadcast } = require('../sockets/socketManager');
 
 const userController = {
   // Lấy tất cả người dùng
@@ -51,6 +52,20 @@ const userController = {
       }
 
       await client.query('COMMIT');
+
+      // ✅ Gửi thông báo cho manager
+      try {
+        const content = `Tài khoản mới "${username}" (${full_name}) với vai trò ${role} đã được tạo.`;
+        const managers = await pool.query("SELECT user_id FROM users WHERE role = 'manager' AND status = 'active'");
+        for (let mgr of managers.rows) {
+          await pool.query(
+            `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Tài khoản mới được tạo', $2)`,
+            [mgr.user_id, content]
+          );
+        }
+        broadcast('NEW_NOTIFICATION', { title: 'Tài khoản mới được tạo', content });
+      } catch (e) { console.error('Notification error:', e); }
+
       return success(res, newUser, 'Tạo tài khoản thành công', 201);
     } catch (err) {
       await client.query('ROLLBACK');
@@ -95,6 +110,20 @@ const userController = {
       }
 
       await client.query('COMMIT');
+
+      // ✅ Gửi thông báo cho manager
+      try {
+        const content = `Tài khoản "${updatedUser.username}" đã được cập nhật thông tin.`;
+        const managers = await pool.query("SELECT user_id FROM users WHERE role = 'manager' AND status = 'active'");
+        for (let mgr of managers.rows) {
+          await pool.query(
+            `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Cập nhật tài khoản', $2)`,
+            [mgr.user_id, content]
+          );
+        }
+        broadcast('NEW_NOTIFICATION', { title: 'Cập nhật tài khoản', content });
+      } catch (e) { console.error('Notification error:', e); }
+
       return success(res, updatedUser, 'Cập nhật tài khoản thành công');
     } catch (err) {
       await client.query('ROLLBACK');
@@ -120,6 +149,21 @@ const userController = {
       );
 
       if (!result.rows.length) return error(res, 'Không tìm thấy tài khoản', 404);
+
+      // ✅ Gửi thông báo cho manager
+      try {
+        const statusLabel = { active: 'Hoạt động', locked: 'Khóa' };
+        const content = `Tài khoản "${result.rows[0].username}" đã chuyển sang trạng thái: ${statusLabel[status]}.`;
+        const managers = await pool.query("SELECT user_id FROM users WHERE role = 'manager' AND status = 'active'");
+        for (let mgr of managers.rows) {
+          await pool.query(
+            `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Cập nhật trạng thái tài khoản', $2)`,
+            [mgr.user_id, content]
+          );
+        }
+        broadcast('NEW_NOTIFICATION', { title: 'Cập nhật trạng thái tài khoản', content });
+      } catch (e) { console.error('Notification error:', e); }
+
       return success(res, result.rows[0], 'Cập nhật trạng thái tài khoản thành công');
     } catch (err) { next(err); }
   },

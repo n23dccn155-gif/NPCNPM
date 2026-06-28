@@ -1,6 +1,7 @@
 // driverController.js: Quản lý danh sách tài xế theo thiết kế mới
 const pool = require('../config/database');
 const { success, error } = require('../utils/responseHelper');
+const { emitToUser, broadcast } = require('../sockets/socketManager');
 
 const driverController = {
   // Lấy danh sách tài xế
@@ -39,7 +40,7 @@ const driverController = {
     } catch (err) { next(err); }
   },
 
-  // Tạo tài xế mới (lưu ý: tài xế phải được liên kết với một user có role = driver)
+  // Tạo tài xế mới
   create: async (req, res, next) => {
     try {
       const { user_id, full_name, phone, license_class } = req.body;
@@ -47,7 +48,6 @@ const driverController = {
         return error(res, 'Thiếu thông tin user_id hoặc tên tài xế', 400);
       }
 
-      // Kiểm tra user có tồn tại và có role = driver không
       const userRes = await pool.query('SELECT role FROM users WHERE user_id = $1', [user_id]);
       if (!userRes.rows.length) {
         return error(res, 'Không tìm thấy tài khoản người dùng', 404);
@@ -62,6 +62,20 @@ const driverController = {
          RETURNING driver_id, user_id, full_name, phone, license_class, status`,
         [user_id, full_name, phone || null, license_class || 'E']
       );
+
+      // ✅ Thông báo chi tiết
+      try {
+        const content = `Tài xế mới "${full_name}" (ID: ${result.rows[0].driver_id}) đã được thêm vào hệ thống.`;
+        const users = await pool.query("SELECT user_id FROM users WHERE role IN ('manager', 'dispatcher') AND status = 'active'");
+        for (let u of users.rows) {
+          await pool.query(
+            `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Tài xế mới được thêm', $2)`,
+            [u.user_id, content]
+          );
+        }
+        broadcast('NEW_NOTIFICATION', { title: 'Tài xế mới được thêm', content });
+      } catch (e) { console.error('Notification error:', e); }
+
       return success(res, result.rows[0], 'Thêm tài xế thành công', 201);
     } catch (err) {
       if (err.code === '23505') return error(res, 'Tài khoản này đã được liên kết với tài xế khác', 409);
@@ -86,6 +100,21 @@ const driverController = {
         [full_name, phone || null, license_class || 'E', driverId]
       );
       if (!result.rows.length) return error(res, 'Không tìm thấy tài xế', 404);
+
+      // ✅ Thông báo chi tiết
+      try {
+        const driver = result.rows[0];
+        const content = `Tài xế "${driver.full_name}" (ID: ${driver.driver_id}) đã được cập nhật thông tin.`;
+        const users = await pool.query("SELECT user_id FROM users WHERE role IN ('manager', 'dispatcher') AND status = 'active'");
+        for (let u of users.rows) {
+          await pool.query(
+            `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Cập nhật tài xế', $2)`,
+            [u.user_id, content]
+          );
+        }
+        broadcast('NEW_NOTIFICATION', { title: 'Cập nhật tài xế', content });
+      } catch (e) { console.error('Notification error:', e); }
+
       return success(res, result.rows[0], 'Cập nhật tài xế thành công');
     } catch (err) { next(err); }
   },
@@ -98,6 +127,7 @@ const driverController = {
       if (!['working', 'on_leave', 'inactive'].includes(status)) {
         return error(res, 'Trạng thái tài xế không hợp lệ. Phải là working, on_leave hoặc inactive.', 400);
       }
+
       const result = await pool.query(
         `UPDATE drivers 
          SET status = $1 
@@ -106,6 +136,22 @@ const driverController = {
         [status, driverId]
       );
       if (!result.rows.length) return error(res, 'Không tìm thấy tài xế', 404);
+
+      // ✅ Thông báo chi tiết
+      try {
+        const driver = result.rows[0];
+        const statusLabel = { working: 'Đang làm việc', on_leave: 'Nghỉ phép', inactive: 'Ngừng hoạt động' };
+        const content = `Tài xế "${driver.full_name}" (ID: ${driver.driver_id}) đã chuyển sang trạng thái: ${statusLabel[status]}.`;
+        const users = await pool.query("SELECT user_id FROM users WHERE role IN ('manager', 'dispatcher') AND status = 'active'");
+        for (let u of users.rows) {
+          await pool.query(
+            `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Cập nhật trạng thái tài xế', $2)`,
+            [u.user_id, content]
+          );
+        }
+        broadcast('NEW_NOTIFICATION', { title: 'Cập nhật trạng thái tài xế', content });
+      } catch (e) { console.error('Notification error:', e); }
+
       return success(res, result.rows[0], 'Cập nhật trạng thái tài xế thành công');
     } catch (err) { next(err); }
   },

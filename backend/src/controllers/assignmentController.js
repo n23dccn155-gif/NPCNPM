@@ -1,6 +1,7 @@
 // assignmentController.js: Nghiệp vụ phân công xe và tài xế theo thiết kế mới
 const pool = require('../config/database');
 const { success, error } = require('../utils/responseHelper');
+const { emitToUser, broadcast } = require('../sockets/socketManager');
 
 // Hàm kiểm tra các điều kiện phân công cho nhóm chuyến (XL07)
 async function checkGroupAssignmentConditions(group_id, bus_id, driver_id, excluded_assignment_id = null, is_replacement = false) {
@@ -34,8 +35,6 @@ async function checkGroupAssignmentConditions(group_id, bus_id, driver_id, exclu
     issues.push('Xe không thuộc tuyến này');
   } else {
     const routeBus = routeBusRes.rows[0];
-    // Phan cong ban dau chi chon xe operating.
-    // Khi thay the, he thong uu tien standby nhung van cho phep operating con ranh trong tuyen.
     if (!is_replacement && routeBus.bus_role !== 'operating') {
       issues.push('Phân công ban đầu chỉ được chọn xe vận doanh (operating)');
     }
@@ -185,24 +184,43 @@ const assignmentController = {
 
       // Cập nhật trạng thái nhóm chuyến
       await client.query("UPDATE trip_groups SET status = 'assigned' WHERE group_id = $1", [group_id]);
-
-      // Cập nhật trạng thái tất cả các chuyến trong nhóm
       await client.query("UPDATE trips SET status = 'assigned' WHERE group_id = $1", [group_id]);
 
       await client.query('COMMIT');
-      
+
+      // --- Thông báo chi tiết ---
       try {
-        const { emitToUser } = require('../sockets/socketManager');
+        // Lấy thông tin chi tiết
+        const busInfo = await pool.query('SELECT license_plate FROM buses WHERE bus_id = $1', [bus_id]);
+        const driverInfo = await pool.query('SELECT full_name FROM drivers WHERE driver_id = $1', [driver_id]);
+        const groupInfo = await pool.query('SELECT group_name FROM trip_groups WHERE group_id = $1', [group_id]);
+        const licensePlate = busInfo.rows[0]?.license_plate || 'không xác định';
+        const driverName = driverInfo.rows[0]?.full_name || 'không xác định';
+        const groupName = groupInfo.rows[0]?.group_name || 'không xác định';
+
+        // Thông báo cho tài xế được phân công
         const driverUser = await pool.query("SELECT user_id FROM drivers WHERE driver_id = $1", [driver_id]);
         if (driverUser.rows.length) {
-          const content = `Bạn vừa được phân công một lịch chạy mới.`;
+          const content = `Bạn được phân công lái xe ${licensePlate} cho nhóm chuyến ${groupName}.`;
           await pool.query(
             `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Phân công mới', $2)`,
             [driverUser.rows[0].user_id, content]
           );
           emitToUser(driverUser.rows[0].user_id, 'NEW_NOTIFICATION', { title: 'Phân công mới', content });
         }
+
+        // Thông báo cho các manager
+        const managers = await pool.query("SELECT user_id FROM users WHERE role = 'manager' AND status = 'active'");
+        const managerContent = `Điều phối viên đã phân công xe ${licensePlate} - tài xế ${driverName} cho nhóm chuyến ${groupName}.`;
+        for (let mgr of managers.rows) {
+          await pool.query(
+            `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Phân công mới', $2)`,
+            [mgr.user_id, managerContent]
+          );
+        }
+        broadcast('NEW_NOTIFICATION', { title: 'Phân công mới', content: managerContent });
       } catch (e) { console.error('Socket error:', e); }
+
       return success(res, result.rows[0], 'Phân công xe và tài xế thành công', 201);
     } catch (err) {
       await client.query('ROLLBACK');
@@ -236,7 +254,7 @@ const assignmentController = {
       }
       const oldAssignment = activeRes.rows[0];
 
-      // Kiểm tra xem có chuyến nào chưa bắt đầu không. Chỉ thay thế khi còn chuyến chưa chạy.
+      // Kiểm tra xem có chuyến nào chưa bắt đầu không
       const affectedTrips = await client.query(
         `SELECT trip_id FROM trips 
          WHERE group_id = $1 AND actual_departure IS NULL 
@@ -268,51 +286,57 @@ const assignmentController = {
         [group_id, oldAssignment.bus_id, new_driver_id, dispatcher_id]
       );
 
-      // Gửi thông báo cho tài xế mới và cũ
+      await client.query('COMMIT');
+
+      // --- Thông báo chi tiết ---
       const planRes = await client.query(
-        `SELECT p.operation_date, p.route_code FROM trip_groups g JOIN operation_plans p ON g.plan_id = p.plan_id WHERE g.group_id = $1`,
+        `SELECT p.operation_date FROM trip_groups g JOIN operation_plans p ON g.plan_id = p.plan_id WHERE g.group_id = $1`,
         [group_id]
       );
       const dateStr = planRes.rows[0].operation_date.toISOString().split('T')[0];
 
-      const oldDriverUser = await client.query("SELECT user_id FROM drivers WHERE driver_id = $1", [oldAssignment.driver_id]);
-      const newDriverUser = await client.query("SELECT user_id FROM drivers WHERE driver_id = $1", [new_driver_id]);
+      const busInfo = await pool.query('SELECT license_plate FROM buses WHERE bus_id = $1', [oldAssignment.bus_id]);
+      const oldDriverInfo = await pool.query('SELECT full_name FROM drivers WHERE driver_id = $1', [oldAssignment.driver_id]);
+      const newDriverInfo = await pool.query('SELECT full_name FROM drivers WHERE driver_id = $1', [new_driver_id]);
+      const groupInfo = await pool.query('SELECT group_name FROM trip_groups WHERE group_id = $1', [group_id]);
+      const licensePlate = busInfo.rows[0]?.license_plate || 'không xác định';
+      const oldDriverName = oldDriverInfo.rows[0]?.full_name || 'không xác định';
+      const newDriverName = newDriverInfo.rows[0]?.full_name || 'không xác định';
+      const groupName = groupInfo.rows[0]?.group_name || 'không xác định';
 
+      // Thông báo cho tài xế cũ
+      const oldDriverUser = await pool.query("SELECT user_id FROM drivers WHERE driver_id = $1", [oldAssignment.driver_id]);
       if (oldDriverUser.rows.length) {
-        const content = `Lịch phân công ngày ${dateStr} của bạn đã được chuyển cho tài xế khác.`;
-        await client.query(
-          `INSERT INTO notifications (user_id, title, content) 
-           VALUES ($1, 'Thay đổi lịch phân công', $2)`,
+        const content = `Lịch phân công xe ${licensePlate} nhóm ${groupName} ngày ${dateStr} của bạn đã được chuyển cho tài xế khác.`;
+        await pool.query(
+          `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Thay đổi lịch phân công', $2)`,
           [oldDriverUser.rows[0].user_id, content]
         );
-        const { emitToUser } = require('../sockets/socketManager');
         emitToUser(oldDriverUser.rows[0].user_id, 'NEW_NOTIFICATION', { title: 'Thay đổi lịch phân công', content });
       }
+
+      // Thông báo cho tài xế mới
+      const newDriverUser = await pool.query("SELECT user_id FROM drivers WHERE driver_id = $1", [new_driver_id]);
       if (newDriverUser.rows.length) {
-        const content = `Bạn được phân công thay thế cho ngày ${dateStr}.`;
-        await client.query(
-          `INSERT INTO notifications (user_id, title, content) 
-           VALUES ($1, 'Lịch phân công thay thế', $2)`,
+        const content = `Bạn được phân công thay thế tài xế ${oldDriverName} cho xe ${licensePlate} nhóm ${groupName} ngày ${dateStr}.`;
+        await pool.query(
+          `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Lịch phân công thay thế', $2)`,
           [newDriverUser.rows[0].user_id, content]
         );
-        const { emitToUser } = require('../sockets/socketManager');
         emitToUser(newDriverUser.rows[0].user_id, 'NEW_NOTIFICATION', { title: 'Lịch phân công thay thế', content });
       }
 
-      // Gửi thông báo cho Quản lý vận hành
-      const managers = await client.query("SELECT user_id FROM users WHERE role = 'manager' AND status = 'active'");
-      const { broadcast } = require('../sockets/socketManager');
+      // Thông báo cho manager
+      const managers = await pool.query("SELECT user_id FROM users WHERE role = 'manager' AND status = 'active'");
+      const managerContent = `Điều phối đã thay tài xế cho nhóm ${groupName} ngày ${dateStr}: ${oldDriverName} → ${newDriverName} (xe ${licensePlate}).`;
       for (let mgr of managers.rows) {
-        const content = `Điều phối đã thay đổi tài xế cho nhóm chuyến ${check.group.group_name} ngày ${dateStr}.`;
-        await client.query(
-          `INSERT INTO notifications (user_id, title, content) 
-           VALUES ($1, 'Thay đổi tài xế', $2)`,
-          [mgr.user_id, content]
+        await pool.query(
+          `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Thay đổi tài xế', $2)`,
+          [mgr.user_id, managerContent]
         );
       }
-      broadcast('NEW_NOTIFICATION', { title: 'Thay đổi tài xế', content: `Điều phối đã thay đổi tài xế ngày ${dateStr}.` });
+      broadcast('NEW_NOTIFICATION', { title: 'Thay đổi tài xế', content: managerContent });
 
-      await client.query('COMMIT');
       return success(res, result.rows[0], 'Thay thế tài xế thành công');
     } catch (err) {
       await client.query('ROLLBACK');
@@ -322,7 +346,7 @@ const assignmentController = {
     }
   },
 
-  // Thay xe khi xe hong: uu tien xe standby, co the chon xe operating con ranh trong tuyen.
+  // Thay xe khi xe hong
   replaceBus: async (req, res, next) => {
     const client = await pool.connect();
     try {
@@ -346,7 +370,7 @@ const assignmentController = {
       }
       const oldAssignment = activeRes.rows[0];
 
-      // Kiểm tra xe thay thế có hợp lệ không
+      // Kiểm tra xe thay thế
       const check = await checkGroupAssignmentConditions(group_id, new_bus_id, oldAssignment.driver_id, oldAssignment.assignment_id, true);
       if (!check.valid) {
         await client.query('ROLLBACK');
@@ -366,38 +390,46 @@ const assignmentController = {
         [group_id, new_bus_id, oldAssignment.driver_id, dispatcher_id]
       );
 
-      // Gửi thông báo cho tài xế và Quản lý
+      await client.query('COMMIT');
+
+      // --- Thông báo chi tiết ---
       const planRes = await client.query(
-        `SELECT p.operation_date, p.route_code FROM trip_groups g JOIN operation_plans p ON g.plan_id = p.plan_id WHERE g.group_id = $1`,
+        `SELECT p.operation_date FROM trip_groups g JOIN operation_plans p ON g.plan_id = p.plan_id WHERE g.group_id = $1`,
         [group_id]
       );
       const dateStr = planRes.rows[0].operation_date.toISOString().split('T')[0];
 
-      const driverUser = await client.query("SELECT user_id FROM drivers WHERE driver_id = $1", [oldAssignment.driver_id]);
+      const oldBusInfo = await pool.query('SELECT license_plate FROM buses WHERE bus_id = $1', [oldAssignment.bus_id]);
+      const newBusInfo = await pool.query('SELECT license_plate FROM buses WHERE bus_id = $1', [new_bus_id]);
+      const driverInfo = await pool.query('SELECT full_name FROM drivers WHERE driver_id = $1', [oldAssignment.driver_id]);
+      const groupInfo = await pool.query('SELECT group_name FROM trip_groups WHERE group_id = $1', [group_id]);
+      const oldLicense = oldBusInfo.rows[0]?.license_plate || 'không xác định';
+      const newLicense = newBusInfo.rows[0]?.license_plate || 'không xác định';
+      const driverName = driverInfo.rows[0]?.full_name || 'không xác định';
+      const groupName = groupInfo.rows[0]?.group_name || 'không xác định';
+
+      // Thông báo cho tài xế
+      const driverUser = await pool.query("SELECT user_id FROM drivers WHERE driver_id = $1", [oldAssignment.driver_id]);
       if (driverUser.rows.length) {
-        const content = `Xe phân công ngày ${dateStr} của bạn đã được đổi sang xe khác do sự cố.`;
-        await client.query(
-          `INSERT INTO notifications (user_id, title, content) 
-           VALUES ($1, 'Thay đổi xe phân công', $2)`,
+        const content = `Xe phân công ngày ${dateStr} của bạn đã được đổi từ ${oldLicense} sang ${newLicense} do sự cố (nhóm ${groupName}).`;
+        await pool.query(
+          `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Thay đổi xe phân công', $2)`,
           [driverUser.rows[0].user_id, content]
         );
-        const { emitToUser } = require('../sockets/socketManager');
         emitToUser(driverUser.rows[0].user_id, 'NEW_NOTIFICATION', { title: 'Thay đổi xe phân công', content });
       }
 
-      const managers = await client.query("SELECT user_id FROM users WHERE role = 'manager' AND status = 'active'");
-      const { broadcast } = require('../sockets/socketManager');
+      // Thông báo cho manager
+      const managers = await pool.query("SELECT user_id FROM users WHERE role = 'manager' AND status = 'active'");
+      const managerContent = `Điều phối đã thay xe cho nhóm ${groupName} ngày ${dateStr}: ${oldLicense} → ${newLicense} (tài xế ${driverName}).`;
       for (let mgr of managers.rows) {
-        const content = `Điều phối đã thay đổi xe vận doanh cho nhóm chuyến ${check.group.group_name} ngày ${dateStr}.`;
-        await client.query(
-          `INSERT INTO notifications (user_id, title, content) 
-           VALUES ($1, 'Thay đổi xe vận hành', $2)`,
-          [mgr.user_id, content]
+        await pool.query(
+          `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Thay đổi xe vận hành', $2)`,
+          [mgr.user_id, managerContent]
         );
       }
-      broadcast('NEW_NOTIFICATION', { title: 'Thay đổi xe vận hành', content: `Điều phối đã thay đổi xe ngày ${dateStr}.` });
+      broadcast('NEW_NOTIFICATION', { title: 'Thay đổi xe vận hành', content: managerContent });
 
-      await client.query('COMMIT');
       return success(res, result.rows[0], 'Thay thế xe thành công');
     } catch (err) {
       await client.query('ROLLBACK');
@@ -407,12 +439,11 @@ const assignmentController = {
     }
   },
 
-  // Tìm danh sách xe và tài xế khả dụng (không bị trùng lịch và đủ điều kiện) cho nhóm chuyến
+  // Tìm danh sách xe và tài xế khả dụng
   getAvailableResources: async (req, res, next) => {
     try {
       const { groupId } = req.params;
 
-      // Lấy thông tin nhóm chuyến
       const groupRes = await pool.query(
         `SELECT g.*, p.operation_date, p.route_code 
          FROM trip_groups g 
@@ -428,7 +459,7 @@ const assignmentController = {
       const { is_replacement } = req.query;
       const isReplacement = is_replacement === 'true';
 
-      // 1. Xe khả dụng: active, thuộc tuyến route_code
+      // Xe khả dụng
       let busQuery = `
          SELECT b.bus_id, b.license_plate, b.seat_count, rb.bus_role
          FROM buses b
@@ -438,12 +469,10 @@ const assignmentController = {
       if (!isReplacement) {
         busQuery += ` AND rb.bus_role = 'operating' ORDER BY b.license_plate`;
       } else {
-        busQuery += ` ORDER BY rb.bus_role DESC, b.license_plate`; // 'standby' > 'operating' (s > o)
+        busQuery += ` ORDER BY rb.bus_role DESC, b.license_plate`;
       }
 
       const busesRes = await pool.query(busQuery, [group.route_code]);
-
-      // Lọc các xe bị trùng lịch hoặc đã được phân công trong ngày này
       const availableBuses = [];
       for (let bus of busesRes.rows) {
         const overlap = await pool.query(
@@ -461,7 +490,7 @@ const assignmentController = {
         }
       }
 
-      // 2. Tài xế khả dụng: working, không xin nghỉ vào ngày vận hành này
+      // Tài xế khả dụng
       const driversRes = await pool.query(
         `SELECT d.driver_id, d.full_name, d.phone, d.license_class
          FROM drivers d
@@ -476,7 +505,6 @@ const assignmentController = {
         [group.operation_date]
       );
 
-      // Lọc các tài xế bị trùng lịch hoặc đã được phân công trong ngày này
       const availableDrivers = [];
       for (let driver of driversRes.rows) {
         const overlap = await pool.query(

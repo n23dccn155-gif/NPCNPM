@@ -1,6 +1,7 @@
 // leaveRequestController.js: Quản lý yêu cầu nghỉ phép của tài xế theo thiết kế mới
 const pool = require('../config/database');
 const { success, error } = require('../utils/responseHelper');
+const { emitToUser, broadcast } = require('../sockets/socketManager');
 
 const leaveRequestController = {
   // Tài xế xem danh sách đơn xin nghỉ của mình
@@ -61,6 +62,7 @@ const leaveRequestController = {
           [mgr.user_id, `Tài xế ${driverName} xin nghỉ phép ngày ${leave_date}.`]
         );
       }
+      broadcast('NEW_NOTIFICATION', { title: 'Yêu cầu nghỉ phép mới', content: `Tài xế ${driverName} xin nghỉ phép ngày ${leave_date}.` });
 
       return success(res, result.rows[0], 'Gửi yêu cầu nghỉ phép thành công', 201);
     } catch (err) { next(err); }
@@ -130,6 +132,7 @@ const leaveRequestController = {
          VALUES ($1, 'Kết quả xin nghỉ phép', $2)`,
         [driverUser.user_id, `Đơn xin nghỉ phép ngày ${leave.leave_date.toISOString().split('T')[0]} của bạn đã được ${status === 'approved' ? 'chấp nhận' : 'từ chối'}.`]
       );
+      emitToUser(driverUser.user_id, 'NEW_NOTIFICATION', { title: 'Kết quả xin nghỉ phép', content: `Đơn xin nghỉ phép ngày ${leave.leave_date.toISOString().split('T')[0]} của bạn đã được ${status === 'approved' ? 'chấp nhận' : 'từ chối'}.` });
 
       // Nếu duyệt nghỉ phép, kiểm tra xem có ảnh hưởng đến các phân công chạy xe không (XL12)
       if (status === 'approved') {
@@ -150,6 +153,7 @@ const leaveRequestController = {
             [assign.dispatcher_id, `Tài xế ${driverUser.full_name} xin nghỉ phép đột xuất đã được duyệt. Vui lòng thay thế tài xế cho nhóm chuyến ${assign.group_name} (Tuyến ${assign.route_code}) ngày ${leave.leave_date.toISOString().split('T')[0]}.`]
           );
         }
+        broadcast('NEW_NOTIFICATION', { title: 'Cảnh báo phân công', content: `Tài xế ${driverUser.full_name} nghỉ phép được duyệt. Kiểm tra các phân công bị ảnh hưởng ngày ${leave.leave_date.toISOString().split('T')[0]}.` });
       }
 
       await client.query('COMMIT');

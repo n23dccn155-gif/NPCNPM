@@ -284,6 +284,19 @@ const routeController = {
         }
 
         await client.query('COMMIT');
+
+         // ✅ Gửi thông báo sau khi tạo thành công
+      const content = `Tuyến mới ${route_code} - ${route_name} đã được tạo.`;
+      const users = await pool.query("SELECT user_id FROM users WHERE role IN ('manager', 'dispatcher') AND status = 'active'");
+      const { broadcast } = require('../sockets/socketManager');
+      for (let u of users.rows) {
+        await pool.query(
+          `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Tuyến mới được tạo', $2)`,
+          [u.user_id, content]
+        );
+      }
+      broadcast('NEW_NOTIFICATION', { title: 'Tuyến mới được tạo', content });
+
         return success(res, result.rows[0], 'Them tuyen xe thanh cong', 201);
       } catch (err) {
         await client.query('ROLLBACK');
@@ -389,6 +402,19 @@ const routeController = {
         }
 
         await client.query('COMMIT');
+
+         // ✅ Gửi thông báo sau khi update thành công
+      const content = `Tuyến ${routeCode} - ${route_name} đã được cập nhật thông tin.`;
+      const users = await pool.query("SELECT user_id FROM users WHERE role IN ('manager', 'dispatcher') AND status = 'active'");
+      const { broadcast } = require('../sockets/socketManager');
+      for (let u of users.rows) {
+        await pool.query(
+          `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Cập nhật tuyến', $2)`,
+          [u.user_id, content]
+        );
+      }
+      broadcast('NEW_NOTIFICATION', { title: 'Cập nhật tuyến', content });
+
         return success(res, result.rows[0], 'Cap nhat tuyen xe thanh cong');
       } catch (err) {
         await client.query('ROLLBACK');
@@ -418,6 +444,20 @@ const routeController = {
       if (!result.rows.length) {
         return error(res, 'Khong tim thay tuyen xe', 404);
       }
+
+      // ✅ Gửi thông báo sau khi cập nhật trạng thái thành công
+    const statusLabel = { active: 'Hoạt động', inactive: 'Ngừng hoạt động' };
+    const content = `Tuyến ${routeCode} đã chuyển sang trạng thái: ${statusLabel[status]}.`;
+    const users = await pool.query("SELECT user_id FROM users WHERE role IN ('manager', 'dispatcher') AND status = 'active'");
+    const { broadcast } = require('../sockets/socketManager');
+    for (let u of users.rows) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Cập nhật trạng thái tuyến', $2)`,
+        [u.user_id, content]
+      );
+    }
+    broadcast('NEW_NOTIFICATION', { title: 'Cập nhật trạng thái tuyến', content });
+
 
       return success(res, result.rows[0], 'Cap nhat trang thai tuyen xe thanh cong');
     } catch (err) {
@@ -492,6 +532,19 @@ const routeController = {
         ]
       );
 
+       // ✅ Gửi thông báo
+    const typeLabel = { outbound: 'đi', inbound: 'về' };
+    const content = `Hướng ${typeLabel[direction_type]} của tuyến ${routeCode} đã được tạo (${start_point} → ${end_point}).`;
+    const users = await pool.query("SELECT user_id FROM users WHERE role IN ('manager', 'dispatcher') AND status = 'active'");
+    const { broadcast } = require('../sockets/socketManager');
+    for (let u of users.rows) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Hướng tuyến mới', $2)`,
+        [u.user_id, content]
+      );
+    }
+    broadcast('NEW_NOTIFICATION', { title: 'Hướng tuyến mới', content });
+
       return success(res, result.rows[0], 'Them huong tuyen thanh cong', 201);
     } catch (err) {
       if (err.code === '23505') {
@@ -546,6 +599,20 @@ const routeController = {
         return error(res, 'Khong tim thay huong tuyen', 404);
       }
 
+      // ✅ Gửi thông báo
+    const direction = result.rows[0];
+    const typeLabel = { outbound: 'đi', inbound: 'về' };
+    const content = `Hướng ${typeLabel[direction.direction_type]} của tuyến ${routeCode} đã được cập nhật.`;
+    const users = await pool.query("SELECT user_id FROM users WHERE role IN ('manager', 'dispatcher') AND status = 'active'");
+    const { broadcast } = require('../sockets/socketManager');
+    for (let u of users.rows) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Cập nhật hướng tuyến', $2)`,
+        [u.user_id, content]
+      );
+    }
+    broadcast('NEW_NOTIFICATION', { title: 'Cập nhật hướng tuyến', content });
+
       return success(res, result.rows[0], 'Cap nhat huong tuyen thanh cong');
     } catch (err) {
       next(err);
@@ -580,6 +647,18 @@ const routeController = {
         [direction_id, stop_order, stop_name, minute_from_start]
       );
 
+      // ✅ Gửi thông báo
+    const content = `Điểm dừng "${stop_name}" đã được thêm vào tuyến ${routeCode} (hướng ${typeLabel[directionType]}).`;
+    const users = await pool.query("SELECT user_id FROM users WHERE role IN ('manager', 'dispatcher') AND status = 'active'");
+    const { broadcast } = require('../sockets/socketManager');
+    for (let u of users.rows) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Thêm điểm dừng mới', $2)`,
+        [u.user_id, content]
+      );
+    }
+    broadcast('NEW_NOTIFICATION', { title: 'Thêm điểm dừng mới', content });
+
       return success(res, result.rows[0], 'Them diem dung thanh cong', 201);
     } catch (err) {
       if (err.code === '23505') {
@@ -612,6 +691,19 @@ const routeController = {
         return error(res, 'Khong tim thay diem dung', 404);
       }
 
+      // ✅ Gửi thông báo
+    const content = `Điểm dừng "${stop_name}" trên tuyến ${routeCode} (hướng ${typeLabel[directionType]}) đã được cập nhật.`;
+    const users = await pool.query("SELECT user_id FROM users WHERE role IN ('manager', 'dispatcher') AND status = 'active'");
+    const { broadcast } = require('../sockets/socketManager');
+    for (let u of users.rows) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Cập nhật điểm dừng', $2)`,
+        [u.user_id, content]
+      );
+    }
+    broadcast('NEW_NOTIFICATION', { title: 'Cập nhật điểm dừng', content });
+
+
       return success(res, result.rows[0], 'Cap nhat diem dung thanh cong');
     } catch (err) {
       next(err);
@@ -626,6 +718,18 @@ const routeController = {
       if (!result.rows.length) {
         return error(res, 'Khong tim thay diem dung', 404);
       }
+
+      // ✅ Gửi thông báo
+    const content = `Điểm dừng "${stop.stop_name}" trên tuyến ${routeCode} (hướng ${typeLabel[directionType]}) đã bị xóa.`;
+    const users = await pool.query("SELECT user_id FROM users WHERE role IN ('manager', 'dispatcher') AND status = 'active'");
+    const { broadcast } = require('../sockets/socketManager');
+    for (let u of users.rows) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Xóa điểm dừng', $2)`,
+        [u.user_id, content]
+      );
+    }
+    broadcast('NEW_NOTIFICATION', { title: 'Xóa điểm dừng', content });
 
       return success(res, null, 'Xoa diem dung thanh cong');
     } catch (err) {
@@ -662,6 +766,18 @@ const routeController = {
         [routeCode, bus_id, bus_role]
       );
 
+      // ✅ Gửi thông báo
+    const content = `Xe ${busRes.rows[0].license_plate} đã được bố trí vào tuyến ${routeCode} với vai trò ${bus_role === 'operating' ? 'vận doanh' : 'dự phòng'}.`;
+    const users = await pool.query("SELECT user_id FROM users WHERE role IN ('manager', 'dispatcher') AND status = 'active'");
+    const { broadcast } = require('../sockets/socketManager');
+    for (let u of users.rows) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Bố trí xe vào tuyến', $2)`,
+        [u.user_id, content]
+      );
+    }
+    broadcast('NEW_NOTIFICATION', { title: 'Bố trí xe vào tuyến', content });
+
       return success(res, result.rows[0], 'Bo tri xe vao tuyen thanh cong', 201);
     } catch (err) {
       next(err);
@@ -696,6 +812,20 @@ const routeController = {
       if (!result.rows.length) {
         return error(res, 'Khong tim thay bo tri xe nay tren tuyen', 404);
       }
+
+       // ✅ Gửi thông báo
+    const busRes = await pool.query('SELECT license_plate FROM buses WHERE bus_id = $1', [busId]);
+    const licensePlate = busRes.rows.length ? busRes.rows[0].license_plate : busId;
+    const content = `Xe ${licensePlate} đã được gỡ khỏi tuyến ${routeCode}.`;
+    const users = await pool.query("SELECT user_id FROM users WHERE role IN ('manager', 'dispatcher') AND status = 'active'");
+    const { broadcast } = require('../sockets/socketManager');
+    for (let u of users.rows) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Gỡ xe khỏi tuyến', $2)`,
+        [u.user_id, content]
+      );
+    }
+    broadcast('NEW_NOTIFICATION', { title: 'Gỡ xe khỏi tuyến', content });
 
       return success(res, null, 'Go xe khoi tuyen thanh cong');
     } catch (err) {

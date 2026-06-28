@@ -1,5 +1,6 @@
 const pool = require('../config/database');
 const { success, error } = require('../utils/responseHelper');
+const { emitToUser, broadcast } = require('../sockets/socketManager');
 
 function timeToMinutes(value) {
   const [hours, minutes] = String(value).split(':').map(Number);
@@ -204,6 +205,17 @@ const planController = {
         [route_code, operation_date, dispatcherId]
       );
 
+      // ✅ Gửi thông báo cho manager
+const content = `Kế hoạch vận doanh mới cho tuyến ${route_code} ngày ${operation_date} đã được tạo.`;
+const managers = await pool.query("SELECT user_id FROM users WHERE role = 'manager' AND status = 'active'");
+for (let mgr of managers.rows) {
+  await pool.query(
+    `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Kế hoạch mới được tạo', $2)`,
+    [mgr.user_id, content]
+  );
+}
+broadcast('NEW_NOTIFICATION', { title: 'Kế hoạch mới được tạo', content });
+
       return success(res, result.rows[0], 'Tạo kế hoạch vận doanh thành công', 201);
     } catch (err) {
       next(err);
@@ -351,6 +363,27 @@ const planController = {
       }
 
       await client.query('COMMIT');
+
+      // ✅ Gửi thông báo cho dispatcher và manager
+const dateStr = plan.operation_date.toISOString().split('T')[0];
+const content = `Kế hoạch tuyến ${plan.route_code} ngày ${dateStr} đã sinh ${allGeneratedTrips.length} chuyến và ${confirmedOperatingBuses} nhóm xoay vòng.`;
+// Gửi cho dispatcher (người tạo kế hoạch)
+await client.query(
+  `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Sinh chuyến thành công', $2)`,
+  [plan.created_by, content]
+);
+emitToUser(plan.created_by, 'NEW_NOTIFICATION', { title: 'Sinh chuyến thành công', content });
+
+// Gửi cho manager
+const managers = await client.query("SELECT user_id FROM users WHERE role = 'manager' AND status = 'active'");
+for (let mgr of managers.rows) {
+  await client.query(
+    `INSERT INTO notifications (user_id, title, content) VALUES ($1, 'Sinh chuyến thành công', $2)`,
+    [mgr.user_id, content]
+  );
+}
+broadcast('NEW_NOTIFICATION', { title: 'Sinh chuyến thành công', content });
+      
       return success(res, {
         trips_generated: allGeneratedTrips.length,
         groups_generated: confirmedOperatingBuses,
@@ -413,6 +446,13 @@ const planController = {
         );
       }
 
+      // Real-time: notify all managers about pending approval
+      broadcast('NEW_NOTIFICATION', {
+        title: 'Kế hoạch chờ duyệt',
+        content: `Kế hoạch vận doanh tuyến ${plan.route_code} ngày ${dateStr} đang chờ duyệt.`,
+        plan_id: planId
+      });
+
       return success(res, updateRes.rows[0], 'Gửi duyệt kế hoạch thành công');
     } catch (err) {
       next(err);
@@ -455,6 +495,13 @@ const planController = {
           [plan.created_by, `Kế hoạch vận doanh tuyến ${plan.route_code} ngày ${dateStr} đã được duyệt.`]
         );
 
+        // Real-time: notify dispatcher that plan was approved
+        emitToUser(plan.created_by, 'NEW_NOTIFICATION', {
+          title: 'Kế hoạch được duyệt',
+          content: `Kế hoạch vận doanh tuyến ${plan.route_code} ngày ${dateStr} đã được duyệt.`,
+          plan_id: planId
+        });
+
         const assignedDrivers = await pool.query(
           `SELECT DISTINCT d.user_id
            FROM assignments a
@@ -470,6 +517,13 @@ const planController = {
              VALUES ($1, 'Lịch chạy xe mới', $2)`,
             [driver.user_id, `Bạn có lịch phân công chuyến xe mới vào ngày ${dateStr}.`]
           );
+
+          // Real-time: notify each assigned driver
+          emitToUser(driver.user_id, 'NEW_NOTIFICATION', {
+            title: 'Lịch chạy xe mới',
+            content: `Bạn có lịch phân công chuyến xe mới vào ngày ${dateStr}.`,
+            plan_id: planId
+          });
         }
 
         return success(res, null, 'Duyệt kế hoạch vận doanh thành công');
@@ -491,6 +545,13 @@ const planController = {
          VALUES ($1, 'Kế hoạch bị từ chối', $2)`,
         [plan.created_by, `Kế hoạch vận doanh tuyến ${plan.route_code} ngày ${dateStr} bị từ chối. Lý do: ${reject_reason}`]
       );
+
+      // Real-time: notify dispatcher that plan was rejected
+      emitToUser(plan.created_by, 'NEW_NOTIFICATION', {
+        title: 'Kế hoạch bị từ chối',
+        content: `Kế hoạch vận doanh tuyến ${plan.route_code} ngày ${dateStr} bị từ chối. Lý do: ${reject_reason}`,
+        plan_id: planId
+      });
 
       return success(res, null, 'Từ chối kế hoạch vận doanh thành công');
     } catch (err) {
