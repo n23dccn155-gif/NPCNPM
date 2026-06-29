@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import { PageHeader, Modal, AlertBox } from '../../components/UI';
-import { getPlans, getPlan, createPlan, generateTrips, submitPlan, reviewPlan } from '../../services/planService';
+import { getPlans, getPlan, createPlan, generateTrips, submitPlan, reviewPlan, autoAssignPlan } from '../../services/planService';
 import { getRoutes } from '../../services/routeService';
 import { getAvailableResources, assignGroup, replaceDriver, replaceBus } from '../../services/assignmentService';
 import { useAuth } from '../../context/AuthContext';
+import GenerateTripsModal from '../../components/GenerateTripsModal';
 
 export default function AutoSchedulerPage() {
   const { user } = useAuth();
@@ -19,10 +20,13 @@ export default function AutoSchedulerPage() {
   const [selectedPlanId, setSelectedPlanId] = useState(null);
   const [planDetail, setPlanDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [highlightedDriver, setHighlightedDriver] = useState(null);
   
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createForm, setCreateForm] = useState({ route_code: '', operation_date: new Date().toISOString().split('T')[0] });
   const [createError, setCreateError] = useState('');
+
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
 
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assigningGroup, setAssigningGroup] = useState(null);
@@ -89,17 +93,33 @@ export default function AutoSchedulerPage() {
     }
   };
 
-  const handleGenerateTrips = async (planId) => {
+  const handleGenerateTrips = async (formData) => {
     setDetailLoading(true);
     try {
-      await generateTrips(planId);
+      await generateTrips(selectedPlanId, formData);
+      setShowGenerateModal(false);
       setSuccessMsg('Đã sinh chuyến xe và gom nhóm tự động thành công.');
       setTimeout(() => setSuccessMsg(''), 4000);
-      loadPlanDetail(planId);
+      loadPlanDetail(selectedPlanId);
       loadPlans();
     } catch (err) {
       setErrorMsg(err.response?.data?.message || 'Lỗi sinh chuyến');
       setTimeout(() => setErrorMsg(''), 4000);
+      setDetailLoading(false);
+    }
+  };
+
+  const handleAutoAssign = async (planId) => {
+    setDetailLoading(true);
+    try {
+      await autoAssignPlan(planId);
+      setSuccessMsg('Đã phân công xe và tài xế tự động (Greedy) thành công.');
+      setTimeout(() => setSuccessMsg(''), 4000);
+      loadPlanDetail(planId);
+      loadPlans();
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || 'Lỗi khi phân công tự động');
+      setTimeout(() => setErrorMsg(''), 6000);
       setDetailLoading(false);
     }
   };
@@ -312,12 +332,22 @@ export default function AutoSchedulerPage() {
                   )}
 
                   {isDispatcher && planDetail.status === 'draft' && (
-                    <button
-                      onClick={() => handleGenerateTrips(planDetail.plan_id)}
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition shadow-md shadow-blue-500/10"
-                    >
-                      {planDetail.groups?.length > 0 ? 'Tái sinh chuyến & Gom nhóm' : 'Sinh chuyến xe & Gom nhóm'}
-                    </button>
+                    <>
+                      <button
+                        onClick={() => setShowGenerateModal(true)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition shadow-md shadow-blue-500/10"
+                      >
+                        {planDetail.groups?.length > 0 ? 'Tái sinh chuyến & Gom nhóm' : 'Sinh chuyến xe & Gom nhóm'}
+                      </button>
+                      {planDetail.groups?.length > 0 && (
+                        <button
+                          onClick={() => handleAutoAssign(planDetail.plan_id)}
+                          className="bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition shadow-md shadow-purple-500/10"
+                        >
+                          Phân công tự động (Greedy)
+                        </button>
+                      )}
+                    </>
                   )}
 
                   {isDispatcher && planDetail.status === 'draft' && planDetail.groups?.length > 0 && (
@@ -329,6 +359,33 @@ export default function AutoSchedulerPage() {
                     </button>
                   )}
                 </div>
+                
+                {planDetail.groups && planDetail.groups.length > 0 && (
+                  <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-100 flex items-center justify-between">
+                    <div>
+                      <h4 className="font-semibold text-blue-800">Nhu cầu Tài xế (Tính toán dựa trên số ca & dự bị)</h4>
+                      <p className="text-sm text-blue-600 mt-1">
+                        Số ca (Main): <span className="font-bold">{planDetail.groups.length}</span> | 
+                        Dự bị (Standby): <span className="font-bold">{planDetail.standby_drivers?.length || 0}</span>
+                      </p>
+                    </div>
+                    <div className="flex gap-4 text-center">
+                      <div className="bg-white px-4 py-2 rounded shadow-sm border border-blue-200">
+                        <div className="text-xs text-gray-500">Cần cho 1 Ngày</div>
+                        <div className="text-xl font-bold text-blue-700">
+                          {planDetail.groups.length + (planDetail.standby_drivers?.length || 0)}
+                        </div>
+                      </div>
+                      <div className="bg-white px-4 py-2 rounded shadow-sm border border-blue-200">
+                        <div className="text-xs text-gray-500">Cần cho 1 Tuần</div>
+                        <div className="text-xl font-bold text-blue-700">
+                          {Math.ceil((planDetail.groups.length + (planDetail.standby_drivers?.length || 0)) * 7 / 6)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
               </div>
 
               {planDetail.reject_reason && (
@@ -347,20 +404,24 @@ export default function AutoSchedulerPage() {
                     <div className="text-2xs text-slate-400 font-bold uppercase">Thời gian giãn cách chuyến</div>
                     <div className="text-lg font-bold text-slate-800">{planDetail.scheduling_metrics.headway_minutes}p</div>
                   </div>
-                  <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                    <div className="text-2xs text-slate-400 font-bold uppercase">Vòng xe</div>
-                    <div className="text-lg font-bold text-slate-800">{planDetail.scheduling_metrics.round_trip_time_minutes}p</div>
-                  </div>
                   <div className="bg-green-50 rounded-xl p-3 border border-green-100">
                     <div className="text-2xs text-green-500 font-bold uppercase">Số xe vận doanh</div>
                     <div className="text-lg font-bold text-green-700">{planDetail.scheduling_metrics.confirmed_operating_buses}</div>
+                  </div>
+                  <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
+                    <div className="text-2xs text-blue-500 font-bold uppercase">Tài xế (Ca sáng/chiều)</div>
+                    <div className="text-lg font-bold text-blue-700">{planDetail.groups?.length || 0}</div>
+                  </div>
+                  <div className="bg-purple-50 rounded-xl p-3 border border-purple-100">
+                    <div className="text-2xs text-purple-500 font-bold uppercase">Tài xế Dự phòng (15%)</div>
+                    <div className="text-lg font-bold text-purple-700">{Math.ceil((planDetail.groups?.length || 0) * 0.15)}</div>
                   </div>
                 </div>
               )}
 
               {/* Trip Groups and Resource Assignment */}
               <div>
-                <h4 className="font-bold text-gray-900 text-sm mb-3">Phân công tài nguyên theo nhóm chuyến</h4>
+                <h4 className="font-bold text-gray-900 text-sm mb-3">Phân công tài nguyên theo ca (Sáng / Chiều)</h4>
                 {planDetail.groups?.length === 0 ? (
                   <div className="text-center py-10 bg-slate-50 rounded-xl text-slate-400 text-xs">
                     Chưa có nhóm chuyến nào. Vui lòng nhấp "Sinh chuyến xe & Gom nhóm".
@@ -370,7 +431,15 @@ export default function AutoSchedulerPage() {
                     {planDetail.groups?.map(g => {
                       const isUnassigned = !g.bus_id || !g.driver_id;
                       return (
-                        <div key={g.group_id} className="border border-slate-100 hover:border-slate-200 bg-white rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4 transition">
+                        <div 
+                          key={g.group_id} 
+                          className={`border border-slate-100 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 cursor-pointer transition ${highlightedDriver && g.driver_name === highlightedDriver ? 'bg-yellow-100 border-yellow-300' : 'bg-white hover:border-slate-200'}`}
+                          onClick={() => {
+                            if (g.driver_name) {
+                              setHighlightedDriver(g.driver_name === highlightedDriver ? null : g.driver_name);
+                            }
+                          }}
+                        >
                           <div>
                             <div className="font-bold text-slate-800 text-sm">{g.group_name}</div>
                             <div className="text-2xs font-semibold text-gray-500 mt-1 font-mono">
@@ -396,7 +465,10 @@ export default function AutoSchedulerPage() {
                             
                             {isDispatcher && (planDetail.status === 'draft' || planDetail.status === 'approved') && (
                               <button
-                                onClick={() => openAssignModal(g)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openAssignModal(g);
+                                }}
                                 className={`text-2xs font-bold px-3 py-1.5 rounded-lg transition border ${
                                   isUnassigned 
                                     ? 'bg-blue-600 hover:bg-blue-700 text-white border-transparent' 
@@ -421,22 +493,33 @@ export default function AutoSchedulerPage() {
                   <div className="text-center py-6 bg-slate-50 rounded-xl text-slate-400 text-xs">Không có lịch chuyến</div>
                 ) : (
                   <div className="max-h-60 overflow-y-auto border border-slate-100 rounded-xl divide-y">
-                    {planDetail.trips?.map(t => (
-                      <div key={t.trip_id} className="px-4 py-3 flex justify-between items-center text-xs hover:bg-slate-50 transition">
-                        <div>
-                          <span className="font-bold font-mono text-slate-700">Chuyến #{t.trip_order}</span>
-                          <span className="text-slate-400 ml-2">({t.direction_type === 'outbound' ? 'Chiều đi' : 'Chiều về'})</span>
-                          {t.group_name && (
-                            <span className="ml-3 px-2 py-0.5 rounded-lg text-3xs font-semibold bg-blue-50 text-blue-600 border border-blue-100">
-                              {t.group_name}
-                            </span>
-                          )}
+                    {planDetail.trips?.map(t => {
+                      const group = planDetail.groups?.find(g => g.group_id === t.group_id);
+                      return (
+                        <div 
+                          key={t.trip_id} 
+                          className={`px-4 py-3 flex justify-between items-center text-xs hover:bg-slate-50 transition cursor-pointer ${highlightedDriver && group?.driver_name === highlightedDriver ? 'bg-yellow-100' : ''}`}
+                          onClick={() => {
+                            if (group?.driver_name) {
+                              setHighlightedDriver(group.driver_name === highlightedDriver ? null : group.driver_name);
+                            }
+                          }}
+                        >
+                          <div>
+                            <span className="font-bold font-mono text-slate-700">Chuyến #{t.trip_order}</span>
+                            <span className="text-slate-400 ml-2">({t.direction_type === 'outbound' ? 'Chiều đi' : 'Chiều về'})</span>
+                            {t.group_name && (
+                              <span className="ml-3 px-2 py-0.5 rounded-lg text-3xs font-semibold bg-blue-50 text-blue-600 border border-blue-100">
+                                {t.group_name}
+                              </span>
+                            )}
+                          </div>
+                          <div className="font-semibold text-slate-800">
+                            {new Date(t.scheduled_departure).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - {new Date(t.scheduled_arrival).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                          </div>
                         </div>
-                        <div className="font-semibold text-slate-800">
-                          {new Date(t.scheduled_departure).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - {new Date(t.scheduled_arrival).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -632,6 +715,15 @@ export default function AutoSchedulerPage() {
           </div>
         </form>
       </Modal>
+      {showGenerateModal && (
+        <GenerateTripsModal
+          isOpen={showGenerateModal}
+          onClose={() => setShowGenerateModal(false)}
+          onGenerate={handleGenerateTrips}
+          isReGenerate={planDetail?.groups?.length > 0}
+        />
+      )}
+
     </Layout>
   );
 }

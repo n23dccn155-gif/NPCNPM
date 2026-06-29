@@ -77,20 +77,42 @@ const tripController = {
       const driverId = driverRes.rows[0].driver_id;
       const dateStr = req.query.date || new Date().toISOString().split('T')[0];
 
+      // Get assignment type for the day
+      const assignmentRes = await pool.query(
+        `SELECT a.assignment_type 
+         FROM assignments a
+         JOIN operation_plans p ON a.plan_id = p.plan_id
+         WHERE a.driver_id = $1 AND p.operation_date = $2 AND p.status = 'approved' AND a.status = 'active'`,
+        [driverId, dateStr]
+      );
+      
+      // Check if driver has an approved leave for this date
+      const leaveRes = await pool.query(
+        "SELECT * FROM leave_requests WHERE driver_id = $1 AND leave_date = $2 AND status = 'approved'",
+        [driverId, dateStr]
+      );
+
+      let assignmentType = 'off';
+      if (leaveRes.rows.length > 0) {
+        assignmentType = 'leave';
+      } else if (assignmentRes.rows.length > 0) {
+        assignmentType = assignmentRes.rows[0].assignment_type;
+      }
+
       const result = await pool.query(
-        `SELECT t.*, tg.group_name, rd.direction_type, rd.start_point, rd.end_point, b.license_plate
+        `SELECT t.*, tg.group_name, rd.direction_type, rd.start_point, rd.end_point, b.bus_id, b.license_plate
          FROM trips t
          JOIN operation_plans p ON t.plan_id = p.plan_id
          JOIN trip_groups tg ON t.group_id = tg.group_id
          JOIN assignments a ON tg.group_id = a.group_id AND a.status = 'active'
          JOIN buses b ON a.bus_id = b.bus_id
          JOIN route_directions rd ON t.direction_id = rd.direction_id
-         WHERE a.driver_id = $1 AND DATE(t.scheduled_departure) = $2 AND p.status = 'approved'
+         WHERE a.driver_id = $1 AND p.operation_date = $2 AND p.status = 'approved'
          ORDER BY t.scheduled_departure`,
         [driverId, dateStr]
       );
 
-      return success(res, result.rows);
+      return success(res, { assignment_type: assignmentType, trips: result.rows });
     } catch (err) { next(err); }
   },
 

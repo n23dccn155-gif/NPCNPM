@@ -19,10 +19,11 @@ export default function IncidentReport() {
       const todayStr = new Date().toISOString().split('T')[0];
       const [incRes, tripsRes] = await Promise.all([
         getMyIncidents(),
-        getMyTrips(todayStr).catch(() => ({ data: [] }))
+        getMyTrips(todayStr).catch(() => ({ data: { data: { trips: [] } } }))
       ]);
       setIncidents(incRes.data?.data || incRes.data || []);
-      setMyTripsToday(tripsRes.data?.data || tripsRes.data || []);
+      const tripData = tripsRes.data?.data || tripsRes.data;
+      setMyTripsToday(tripData?.trips || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -52,6 +53,10 @@ export default function IncidentReport() {
     setFormError('');
     if (!form.description.trim()) {
       setFormError('Vui lòng nhập mô tả sự cố');
+      return;
+    }
+    if (form.incident_type === 'bus_broken' && !form.bus_id) {
+      setFormError('Vui lòng chọn xe buýt đang bị hỏng để hệ thống xử lý');
       return;
     }
     try {

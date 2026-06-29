@@ -47,7 +47,15 @@ CREATE TABLE routes (
     end_time TIME NOT NULL,
     expected_trips_per_day INT NOT NULL,
     headway_minutes NUMERIC(6,2) NOT NULL,
-    confirmed_operating_buses INT NOT NULL
+    confirmed_operating_buses INT NOT NULL,
+    travel_time_minutes INT DEFAULT 0,
+    short_layover_minutes INT DEFAULT 0,
+    long_layover_minutes INT DEFAULT 0,
+    max_driving_minutes INT DEFAULT 240,
+    standby_ratio NUMERIC(4,2) DEFAULT 0.1,
+    inbound_start_time TIME,
+    backup_bus_ratio NUMERIC(4,2) DEFAULT 0.20,
+    min_rest_time_minutes INT DEFAULT 60
 );
 
 -- 3. Bảng route_directions: Lưu thông tin lượt đi và lượt về của tuyến
@@ -97,6 +105,14 @@ CREATE TABLE route_buses (
     bus_role VARCHAR(20) NOT NULL -- operating, standby
 );
 
+-- 7b. Bảng route_drivers: Lưu thông tin tài xế thuộc tuyến
+CREATE TABLE route_drivers (
+    route_driver_id SERIAL PRIMARY KEY,
+    route_code VARCHAR(20) NOT NULL,
+    driver_id INT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'active'
+);
+
 -- 8. Bảng operation_plans: Lưu kế hoạch vận doanh theo tuyến và ngày
 CREATE TABLE operation_plans (
     plan_id SERIAL PRIMARY KEY,
@@ -137,9 +153,11 @@ CREATE TABLE trips (
 -- 11. Bảng assignments: Lưu phân công xe và tài xế cho nhóm chuyến
 CREATE TABLE assignments (
     assignment_id SERIAL PRIMARY KEY,
-    group_id INT NOT NULL,
-    bus_id INT NOT NULL,
-    driver_id INT NOT NULL,
+    plan_id INT NOT NULL,
+    group_id INT,
+    bus_id INT,
+    driver_id INT,
+    assignment_type VARCHAR(20) NOT NULL DEFAULT 'main', -- main, standby_morning, standby_afternoon
     assigned_by INT NOT NULL,
     status VARCHAR(30) NOT NULL DEFAULT 'active' -- active, replaced, cancelled
 );
@@ -162,7 +180,8 @@ CREATE TABLE incident_reports (
     trip_id INT,
     incident_type VARCHAR(30) NOT NULL, -- bus_broken, delay, cancelled, other
     description TEXT,
-    status VARCHAR(20) NOT NULL DEFAULT 'pending' -- pending, processing, resolved
+    status VARCHAR(20) NOT NULL DEFAULT 'pending', -- pending, processing, resolved
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 14. Bảng notifications: Lưu thông báo nội bộ dạng chuông

@@ -9,6 +9,6 @@ router.get('/', auth, busController.getAll);
 router.get('/:busId', auth, busController.getOne);
 router.post('/', auth, role(['manager']), busController.create);
 router.put('/:busId', auth, role(['manager']), busController.update);
-router.patch('/:busId/status', auth, role(['manager']), busController.updateStatus);
+router.patch('/:busId/status', auth, role(['manager', 'dispatcher']), busController.updateStatus);
 
 module.exports = router;

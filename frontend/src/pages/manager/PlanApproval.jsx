@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Layout from '../../components/Layout';
 import { PageHeader, Modal, AlertBox } from '../../components/UI';
-import { getPlans, getPlan, reviewPlan } from '../../services/planService';
+import { getPlans, getPlan, reviewPlan, reviewBatchPlans } from '../../services/planService';
 import { getRoutes } from '../../services/routeService';
 
 export default function PlanApproval() {
@@ -9,6 +9,7 @@ export default function PlanApproval() {
   const [loading, setLoading] = useState(true);
   const [routes, setRoutes] = useState([]);
 
+  const [selectedGroup, setSelectedGroup] = useState(null);
   const [selectedPlanId, setSelectedPlanId] = useState(null);
   const [planDetail, setPlanDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -17,6 +18,7 @@ export default function PlanApproval() {
   const [reviewDecision, setReviewDecision] = useState('approve');
   const [rejectReason, setRejectReason] = useState('');
   const [reviewError, setReviewError] = useState('');
+  const [highlightedDriver, setHighlightedDriver] = useState(null);
 
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -50,6 +52,11 @@ export default function PlanApproval() {
       .finally(() => setDetailLoading(false));
   };
 
+  const handleGroupClick = (group) => {
+    setSelectedGroup(group);
+    loadPlanDetail(group.id);
+  };
+
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
     setReviewError('');
@@ -58,11 +65,16 @@ export default function PlanApproval() {
       return;
     }
     try {
-      await reviewPlan(planDetail.plan_id, { decision: reviewDecision, reject_reason: rejectReason });
+      if (selectedGroup && selectedGroup.count > 1) {
+        await reviewBatchPlans({ planIds: selectedGroup.planIds, decision: reviewDecision, reject_reason: rejectReason });
+      } else {
+        await reviewPlan(planDetail.plan_id, { decision: reviewDecision, reject_reason: rejectReason });
+      }
       setShowReviewModal(false);
       setSuccessMsg(reviewDecision === 'approve' ? 'Đã duyệt kế hoạch vận doanh thành công.' : 'Đã từ chối kế hoạch vận doanh.');
       setTimeout(() => setSuccessMsg(''), 4000);
-      loadPlanDetail(planDetail.plan_id);
+      setSelectedGroup(null);
+      setPlanDetail(null);
       loadPlans();
     } catch (err) {
       setReviewError(err.response?.data?.message || 'Lỗi khi phê duyệt kế hoạch');
@@ -89,6 +101,64 @@ export default function PlanApproval() {
   };
 
   const filteredPlans = plans.filter(p => !filterStatus || p.status === filterStatus);
+
+  const groupedPlans = useMemo(() => {
+    const sorted = [...filteredPlans].sort((a, b) => {
+      if (a.route_code !== b.route_code) return a.route_code.localeCompare(b.route_code);
+      return new Date(a.operation_date) - new Date(b.operation_date);
+    });
+
+    const groups = [];
+    let currentGroup = null;
+
+    sorted.forEach(plan => {
+      const planDate = new Date(plan.operation_date);
+      planDate.setHours(0, 0, 0, 0);
+
+      if (!currentGroup) {
+        currentGroup = {
+          id: plan.plan_id,
+          route_code: plan.route_code,
+          status: plan.status,
+          startDate: planDate,
+          endDate: planDate,
+          count: 1,
+          planIds: [plan.plan_id],
+          plansList: [{ id: plan.plan_id, date: planDate }],
+          representativePlan: plan
+        };
+        groups.push(currentGroup);
+      } else {
+        const diffDays = Math.round((planDate - currentGroup.endDate) / (1000 * 60 * 60 * 24));
+        
+        if (
+          plan.route_code === currentGroup.route_code &&
+          plan.status === currentGroup.status &&
+          diffDays === 1
+        ) {
+          currentGroup.endDate = planDate;
+          currentGroup.count += 1;
+          currentGroup.planIds.push(plan.plan_id);
+          currentGroup.plansList.push({ id: plan.plan_id, date: planDate });
+        } else {
+          currentGroup = {
+            id: plan.plan_id,
+            route_code: plan.route_code,
+            status: plan.status,
+            startDate: planDate,
+            endDate: planDate,
+            count: 1,
+            planIds: [plan.plan_id],
+            plansList: [{ id: plan.plan_id, date: planDate }],
+            representativePlan: plan
+          };
+          groups.push(currentGroup);
+        }
+      }
+    });
+
+    return groups;
+  }, [filteredPlans]);
 
   return (
     <Layout>
@@ -121,28 +191,32 @@ export default function PlanApproval() {
             <div className="max-h-[600px] overflow-y-auto divide-y divide-slate-50">
               {loading ? (
                 <div className="text-center py-10 text-slate-400 animate-pulse font-semibold">Đang tải...</div>
-              ) : filteredPlans.length === 0 ? (
+              ) : groupedPlans.length === 0 ? (
                 <div className="text-center py-10 text-slate-400 text-sm">Không có kế hoạch nào</div>
               ) : (
-                filteredPlans.map(p => (
+                groupedPlans.map((g, idx) => (
                   <button
-                    key={p.plan_id}
-                    onClick={() => loadPlanDetail(p.plan_id)}
+                    key={`${g.id}-${idx}`}
+                    onClick={() => handleGroupClick(g)}
                     className={`w-full text-left px-5 py-3.5 transition-all ${
-                      selectedPlanId === p.plan_id
+                      selectedGroup?.id === g.id
                         ? 'bg-blue-50 border-l-4 border-blue-600'
                         : 'hover:bg-slate-50 border-l-4 border-transparent'
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <div className="font-bold text-sm text-slate-800">{getRouteName(p.route_code)}</div>
+                        <div className="font-bold text-sm text-slate-800">{getRouteName(g.route_code)}</div>
                         <div className="text-xs text-slate-500 mt-0.5 font-mono">
-                          Ngày: {new Date(p.operation_date).toLocaleDateString('vi-VN')}
+                          {g.count > 1 ? (
+                            `Từ ${g.startDate.toLocaleDateString('vi-VN')} đến ${g.endDate.toLocaleDateString('vi-VN')} (${g.count} ngày)`
+                          ) : (
+                            `Ngày: ${g.startDate.toLocaleDateString('vi-VN')}`
+                          )}
                         </div>
                       </div>
-                      <span className={`px-2 py-0.5 rounded-lg text-2xs font-bold ${statusColor[p.status]}`}>
-                        {statusLabel[p.status]}
+                      <span className={`px-2 py-0.5 rounded-lg text-2xs font-bold ${statusColor[g.status]}`}>
+                        {statusLabel[g.status]}
                       </span>
                     </div>
                   </button>
@@ -166,7 +240,11 @@ export default function PlanApproval() {
                   <div>
                     <h3 className="font-bold text-lg text-slate-800">{getRouteName(planDetail.route_code)}</h3>
                     <p className="text-xs text-slate-500 mt-1 font-mono">
-                      Ngày vận hành: {new Date(planDetail.operation_date).toLocaleDateString('vi-VN')}
+                      {selectedGroup?.count > 1 ? (
+                        `Ngày vận hành: Từ ${selectedGroup.startDate.toLocaleDateString('vi-VN')} đến ${selectedGroup.endDate.toLocaleDateString('vi-VN')} (${selectedGroup.count} ngày)`
+                      ) : (
+                        `Ngày vận hành: ${new Date(planDetail.operation_date).toLocaleDateString('vi-VN')}`
+                      )}
                       {planDetail.submitted_by_name && ` • Gửi bởi: ${planDetail.submitted_by_name}`}
                     </p>
                   </div>
@@ -184,7 +262,7 @@ export default function PlanApproval() {
                         }}
                         className="bg-green-600 hover:bg-green-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition shadow-md shadow-green-500/10"
                       >
-                        Duyệt / Từ chối
+                        {selectedGroup?.count > 1 ? `Duyệt ${selectedGroup.count} kế hoạch` : 'Duyệt / Từ chối'}
                       </button>
                     )}
                   </div>
@@ -196,6 +274,27 @@ export default function PlanApproval() {
                   </div>
                 )}
               </div>
+
+              {/* Date Selector for Batch */}
+              {selectedGroup?.count > 1 && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 overflow-x-auto whitespace-nowrap">
+                  <div className="flex gap-2">
+                    {selectedGroup.plansList.map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => loadPlanDetail(p.id)}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition ${
+                          selectedPlanId === p.id 
+                            ? 'bg-blue-600 border-blue-600 text-white' 
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        {p.date.toLocaleDateString('vi-VN')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {planDetail.scheduling_metrics && (
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
@@ -229,7 +328,15 @@ export default function PlanApproval() {
                 ) : (
                   <div className="space-y-3">
                     {planDetail.groups.map(g => (
-                      <div key={g.group_id} className="border border-slate-100 bg-white rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                      <div 
+                        key={g.group_id} 
+                        className={`border border-slate-100 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 cursor-pointer transition ${highlightedDriver && g.driver_name === highlightedDriver ? 'bg-yellow-100 border-yellow-300' : 'bg-white'}`}
+                        onClick={() => {
+                          if (g.driver_name) {
+                            setHighlightedDriver(g.driver_name === highlightedDriver ? null : g.driver_name);
+                          }
+                        }}
+                      >
                         <div>
                           <div className="font-bold text-slate-800 text-sm">{g.group_name}</div>
                           <div className="text-2xs font-semibold text-gray-500 mt-1 font-mono">
@@ -263,22 +370,33 @@ export default function PlanApproval() {
                   <div className="text-center py-6 bg-slate-50 rounded-xl text-slate-400 text-xs">Không có lịch chuyến</div>
                 ) : (
                   <div className="max-h-60 overflow-y-auto border border-slate-100 rounded-xl divide-y">
-                    {planDetail.trips.map(t => (
-                      <div key={t.trip_id} className="px-4 py-3 flex justify-between items-center text-xs hover:bg-slate-50 transition">
-                        <div>
-                          <span className="font-bold font-mono text-slate-700">Chuyến #{t.trip_order}</span>
-                          <span className="text-slate-400 ml-2">({t.direction_type === 'outbound' ? 'Chiều đi' : 'Chiều về'})</span>
-                          {t.group_name && (
-                            <span className="ml-3 px-2 py-0.5 rounded-lg text-3xs font-semibold bg-blue-50 text-blue-600 border border-blue-100">
-                              {t.group_name}
-                            </span>
-                          )}
+                    {planDetail.trips.map(t => {
+                      const group = planDetail.groups?.find(g => g.group_id === t.group_id);
+                      return (
+                        <div 
+                          key={t.trip_id} 
+                          className={`px-4 py-3 flex justify-between items-center text-xs hover:bg-slate-50 transition cursor-pointer ${highlightedDriver && group?.driver_name === highlightedDriver ? 'bg-yellow-100' : ''}`}
+                          onClick={() => {
+                            if (group?.driver_name) {
+                              setHighlightedDriver(group.driver_name === highlightedDriver ? null : group.driver_name);
+                            }
+                          }}
+                        >
+                          <div>
+                            <span className="font-bold font-mono text-slate-700">Chuyến #{t.trip_order}</span>
+                            <span className="text-slate-400 ml-2">({t.direction_type === 'outbound' ? 'Chiều đi' : 'Chiều về'})</span>
+                            {t.group_name && (
+                              <span className="ml-3 px-2 py-0.5 rounded-lg text-3xs font-semibold bg-blue-50 text-blue-600 border border-blue-100">
+                                {t.group_name}
+                              </span>
+                            )}
+                          </div>
+                          <div className="font-semibold text-slate-800">
+                            {new Date(t.scheduled_departure).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} – {new Date(t.scheduled_arrival).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                          </div>
                         </div>
-                        <div className="font-semibold text-slate-800">
-                          {new Date(t.scheduled_departure).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} – {new Date(t.scheduled_arrival).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

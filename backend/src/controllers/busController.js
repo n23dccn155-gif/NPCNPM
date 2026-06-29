@@ -6,14 +6,27 @@ const busController = {
   // Lấy danh sách xe buýt
   getAll: async (req, res, next) => {
     try {
-      const { status } = req.query;
-      let query = 'SELECT bus_id, license_plate, seat_count, status FROM buses';
+      const { status, route_code } = req.query;
+      let query = 'SELECT b.bus_id, b.license_plate, b.seat_count, b.status FROM buses b';
       const params = [];
-      if (status) {
-        query += ' WHERE status = $1';
-        params.push(status);
+      const conditions = [];
+
+      if (route_code) {
+        query += ' JOIN route_buses rb ON b.bus_id = rb.bus_id';
+        params.push(route_code);
+        conditions.push(`rb.route_code = $${params.length}`);
       }
-      query += ' ORDER BY bus_id';
+
+      if (status) {
+        params.push(status);
+        conditions.push(`b.status = $${params.length}`);
+      }
+
+      if (conditions.length > 0) {
+        query += ` WHERE ${conditions.join(' AND ')}`;
+      }
+
+      query += ' ORDER BY b.bus_id';
       const result = await pool.query(query, params);
       return success(res, result.rows);
     } catch (err) { next(err); }
@@ -113,6 +126,16 @@ broadcast('NEW_NOTIFICATION', { title: 'Xe mới được thêm', content });
         [status, busId]
       );
       if (!result.rows.length) return error(res, 'Không tìm thấy xe buýt', 404);
+if (status === 'active') {
+        const assignmentController = require('./assignmentController');
+        const rbRes = await pool.query("SELECT route_code FROM route_buses WHERE bus_id = $1", [busId]);
+        if (rbRes.rows.length > 0) {
+           const routeCode = rbRes.rows[0].route_code;
+           // Run asynchronously to calculate for tomorrow onwards (skipToday = true)
+           assignmentController.autoReallocateBuses(routeCode, -1, new Date(), true).catch(e => console.error(e));
+        }
+      }
+
       // Thông báo thay đổi trạng thái xe cho Điều phối viên
       const statusLabel = { active: 'Hoạt động', broken: 'Hỏng', inactive: 'Ngừng hoạt động' };
       const content = `Xe ${result.rows[0].license_plate} đã chuyển sang trạng thái: ${statusLabel[status] || status}.`;
