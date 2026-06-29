@@ -11,6 +11,7 @@ import Login from './pages/auth/Login';
 // Shared
 import Dashboard from './pages/shared/Dashboard';
 import Profile from './pages/shared/Profile';
+import NotificationHistory from './pages/shared/NotificationHistory';
 
 // Manager
 import RouteList from './pages/manager/RouteList';
@@ -61,6 +62,7 @@ function App() {
           {/* Shared Routes - accessible by all roles */}
           <Route path="/dashboard" element={<PrivateRoute allowedRoles={ALL_ROLES}><Dashboard /></PrivateRoute>} />
           <Route path="/profile" element={<PrivateRoute allowedRoles={ALL_ROLES}><Profile /></PrivateRoute>} />
+          <Route path="/notifications" element={<PrivateRoute allowedRoles={ALL_ROLES}><NotificationHistory /></PrivateRoute>} />
 
           {/* Manager Routes */}
           <Route path="/manager" element={<Navigate to="/manager/routes" replace />} />
