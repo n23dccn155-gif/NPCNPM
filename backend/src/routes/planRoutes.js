@@ -6,7 +6,9 @@ const assignmentController = require('../controllers/assignmentController');
 const auth = require('../middlewares/authMiddleware');
 const role = require('../middlewares/roleMiddleware');
 
+router.get('/latest-date/:routeCode', auth, planController.getLatestDate);
 router.get('/', auth, planController.getAll);
+router.post('/review-batch', auth, role(['manager']), planController.reviewBatchPlan);
 router.get('/:planId', auth, planController.getOne);
 router.post('/', auth, role(['dispatcher']), planController.create);
 router.post('/:planId/generate-trips', auth, role(['dispatcher']), planController.generateTrips);

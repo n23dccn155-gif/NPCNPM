@@ -12,3 +12,4 @@ export const reviewPlan = (planId, decisionOrPayload, rejectReason) => {
   return api.post(`/plans/${planId}/review`, payload);
 };
 export const autoAssignPlan = (planId) => api.post(`/plans/${planId}/auto-assign`);
+export const reviewBatchPlans = (data) => api.post(`/plans/review-batch`, data);

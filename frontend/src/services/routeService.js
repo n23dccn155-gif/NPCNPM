@@ -9,3 +9,4 @@ export const createRouteDirection = (code, data) => api.post(`/routes/${code}/di
 export const updateRouteDirection = (code, directionId, data) => api.put(`/routes/${code}/directions/${directionId}`, data);
 export const deleteRoute = (code) => api.delete(`/routes/${code}`);
 export const generateSchedule = (code, data) => api.post(`/routes/${code}/generate-schedule`, data);
+export const getLatestScheduledDate = (code) => api.get(`/plans/latest-date/${code}`);

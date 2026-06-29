@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import { PageHeader, ConfirmDialog, AlertBox, Modal } from '../../components/UI';
-import { getRoutes, generateSchedule } from '../../services/routeService';
+import { getRoutes, generateSchedule, getLatestScheduledDate } from '../../services/routeService';
 import routeDriverService from '../../services/routeDriverService';
 import { getDrivers } from '../../services/driverService';
 import { getRouteBuses, addBusToRoute, removeBusFromRoute } from '../../services/routeBusService';
@@ -111,6 +111,24 @@ export default function RouteDriverManage() {
   const [generating, setGenerating] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({ startDate: new Date().toISOString().split('T')[0], cycles: 1 });
+  const [latestDate, setLatestDate] = useState(null);
+  const [isCheckingOverlap, setIsCheckingOverlap] = useState(false);
+
+  const openScheduleModal = async () => {
+    setShowScheduleModal(true);
+    setIsCheckingOverlap(true);
+    setLatestDate(null);
+    try {
+      const res = await getLatestScheduledDate(selectedRoute.route_code);
+      if (res.data?.data?.latest_date) {
+        setLatestDate(res.data.data.latest_date);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsCheckingOverlap(false);
+    }
+  };
 
   const handleGenerateSchedule = async (e) => {
     if (e) e.preventDefault();
@@ -120,7 +138,7 @@ export default function RouteDriverManage() {
     setSuccessMsg('');
     try {
       const res = await generateSchedule(selectedRoute.route_code, scheduleForm);
-      setSuccessMsg(res.data.message || 'Sinh lịch thành công!');
+      setSuccessMsg('Đã tạo lịch và gửi lên Manager để chờ phê duyệt thành công!');
       setShowScheduleModal(false);
     } catch (err) {
       setError(err.response?.data?.message || 'Lỗi khi sinh lịch');
@@ -176,11 +194,13 @@ export default function RouteDriverManage() {
 
           <div className="lg:col-span-3 space-y-6">
             {selectedRoute ? (() => {
-              const travelTime = Number(selectedRoute.travel_time_minutes || 0);
+              const outboundTravel = Number(selectedRoute.outbound_travel_time_minutes || 0);
+              const inboundTravel = Number(selectedRoute.inbound_travel_time_minutes || 0);
               const shortLayover = Number(selectedRoute.short_layover_minutes || 0);
               const headway = Number(selectedRoute.headway_minutes || 1);
               const minRestTime = Number(selectedRoute.min_rest_time_minutes || 60);
-              const baseBuses = (headway > 0 && travelTime > 0) ? Math.ceil((travelTime * 2 + shortLayover * 2) / headway) : 0;
+              const rtt = outboundTravel + inboundTravel + (shortLayover * 2);
+              const baseBuses = (headway > 0 && rtt > 0) ? Math.ceil(rtt / headway) : 0;
               
               const requiredRecoveryBuses = headway > 0 ? Math.ceil(minRestTime / headway) : 0;
               const suggestedOperatingBuses = baseBuses + requiredRecoveryBuses;
@@ -206,7 +226,7 @@ export default function RouteDriverManage() {
                         <button onClick={() => setActiveTab('buses')} className={`font-semibold pb-1 border-b-2 ${activeTab === 'buses' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>Xe Buýt ({routeBuses.length}/{requiredTotalBuses})</button>
                      </div>
                      <button
-                        onClick={() => setShowScheduleModal(true)}
+                        onClick={openScheduleModal}
                         disabled={generating || !isReady}
                         className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 ${isReady && !generating ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
                       >
@@ -357,11 +377,32 @@ export default function RouteDriverManage() {
             <input 
               type="date" 
               required
-              disabled={generating}
+              disabled={generating || isCheckingOverlap}
               value={scheduleForm.startDate}
               onChange={e => setScheduleForm({...scheduleForm, startDate: e.target.value})}
-              className="w-full border p-2 rounded-lg"
+              className={`w-full border p-2 rounded-lg ${(latestDate && new Date(scheduleForm.startDate) <= new Date(latestDate)) ? 'border-red-500 bg-red-50' : ''}`}
             />
+            {latestDate && new Date(scheduleForm.startDate) <= new Date(latestDate) && (
+              <div className="mt-2 text-sm text-red-600 bg-red-50 border border-red-200 p-2 rounded-lg">
+                <span className="font-semibold">Cảnh báo:</span> Ngày bắt đầu này bị trùng với lịch đã xếp trước đó. 
+                Vui lòng chọn từ ngày <strong>{(() => {
+                  const d = new Date(latestDate);
+                  d.setDate(d.getDate() + 1);
+                  return d.toLocaleDateString('vi-VN');
+                })()}</strong> trở đi.
+                <button 
+                  type="button"
+                  onClick={() => {
+                    const d = new Date(latestDate);
+                    d.setDate(d.getDate() + 1);
+                    setScheduleForm({...scheduleForm, startDate: d.toISOString().split('T')[0]});
+                  }}
+                  className="ml-2 font-medium underline text-red-700 hover:text-red-900"
+                >
+                  Dùng ngày gợi ý
+                </button>
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Số lượng chu kỳ muốn xếp</label>
@@ -374,10 +415,24 @@ export default function RouteDriverManage() {
               className="w-full border p-2 rounded-lg"
             />
           </div>
+          {scheduleForm.startDate && scheduleForm.cycles > 0 && routeDrivers.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Ngày kết thúc dự kiến</label>
+              <div className="w-full border border-gray-200 p-2 rounded-lg bg-gray-50 text-gray-700 font-medium">
+                {(() => {
+                  const numDays = scheduleForm.cycles * routeDrivers.length;
+                  const endDate = new Date(scheduleForm.startDate);
+                  endDate.setDate(endDate.getDate() + numDays - 1);
+                  return endDate.toLocaleDateString('vi-VN');
+                })()}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Tổng cộng: {scheduleForm.cycles * routeDrivers.length} ngày (với {routeDrivers.length} tài xế hiện tại)</p>
+            </div>
+          )}
           <div className="flex justify-end gap-3 mt-6">
             <button type="button" onClick={() => setShowScheduleModal(false)} disabled={generating} className="px-4 py-2 text-gray-600 font-medium">Hủy</button>
-            <button type="submit" disabled={generating} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">
-              {generating ? 'Đang chạy...' : 'Sinh lịch ngay'}
+            <button type="submit" disabled={generating || isCheckingOverlap || (latestDate && new Date(scheduleForm.startDate) <= new Date(latestDate))} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+              {generating ? 'Đang gửi...' : 'Gửi Manager duyệt'}
             </button>
           </div>
         </form>

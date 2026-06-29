@@ -201,6 +201,7 @@ export default function ScheduleCalendar() {
                 <th className="p-3">Mã nhóm</th>
                 <th className="p-3">Biển số</th>
                 <th className="p-3">Tài xế</th>
+                <th className="p-3 text-center">Trạng thái</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -245,6 +246,17 @@ export default function ScheduleCalendar() {
                           </button>
                         )}
                       </div>
+                    </td>
+                    <td className="p-3 text-center">
+                      {t.status === 'completed' ? (
+                        <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-md border border-green-200">Hoàn thành</span>
+                      ) : t.status === 'running' ? (
+                        <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-200">Đang chạy</span>
+                      ) : t.status === 'cancelled' ? (
+                        <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded-md border border-red-200">Đã hủy</span>
+                      ) : (
+                        <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-md border border-amber-200">Chưa chạy</span>
+                      )}
                     </td>
                   </tr>
                 );

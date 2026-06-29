@@ -18,7 +18,8 @@ const emptyForm = {
   inbound_start_point: '',
   inbound_end_point: '',
   inbound_distance: '',
-  travel_time_minutes: 80,
+  outbound_travel_time_minutes: 80,
+  inbound_travel_time_minutes: 80,
   short_layover_minutes: 10,
   long_layover_minutes: 15,
   max_driving_minutes: 240,
@@ -99,7 +100,8 @@ export default function RouteList() {
       inbound_start_point: r.inbound_start_point || '',
       inbound_end_point: r.inbound_end_point || '',
       inbound_distance: r.inbound_distance_km ?? '',
-      travel_time_minutes: r.travel_time_minutes ?? 80,
+      outbound_travel_time_minutes: r.outbound_travel_time_minutes ?? 80,
+      inbound_travel_time_minutes: r.inbound_travel_time_minutes ?? 80,
       short_layover_minutes: r.short_layover_minutes ?? 10,
       long_layover_minutes: r.long_layover_minutes ?? 15,
       max_driving_minutes: r.max_driving_minutes ?? 240,
@@ -113,7 +115,7 @@ export default function RouteList() {
   };
 
   const buildPayload = () => {
-    const rtt = (Number(form.travel_time_minutes) * 2) + (Number(form.short_layover_minutes) * 2);
+    const rtt = Number(form.outbound_travel_time_minutes) + Number(form.inbound_travel_time_minutes) + (Number(form.short_layover_minutes) * 2);
     const hWay = Number(form.headway_minutes);
     const baseBuses = (hWay > 0 && rtt > 0) ? Math.ceil(rtt / hWay) : 0;
     const recoveryBuses = Math.ceil(baseBuses * (Number(form.standby_ratio) || 0));
@@ -131,7 +133,9 @@ export default function RouteList() {
       outbound_distance: form.outbound_distance ? Number(form.outbound_distance) : null,
       inbound_start_point: form.inbound_start_point.trim(),
       inbound_end_point: form.inbound_end_point.trim(),
-      inbound_distance: form.inbound_distance ? Number(form.inbound_distance) : null
+      inbound_distance: form.inbound_distance ? Number(form.inbound_distance) : null,
+      outbound_travel_time_minutes: Number(form.outbound_travel_time_minutes),
+      inbound_travel_time_minutes: Number(form.inbound_travel_time_minutes)
     };
   };
 
@@ -186,7 +190,7 @@ export default function RouteList() {
     const matchStatus = !filterStatus || r.status === filterStatus;
     return matchSearch && matchStatus;
   });
-  const rtt = Number(form.travel_time_minutes) * 2 + Number(form.short_layover_minutes) * 2;
+  const rtt = Number(form.outbound_travel_time_minutes) + Number(form.inbound_travel_time_minutes) + Number(form.short_layover_minutes) * 2;
   const hWay = Number(form.headway_minutes);
   const minRest = Number(form.min_rest_time_minutes) || 0;
   
@@ -337,6 +341,10 @@ export default function RouteList() {
                     <label className="text-xs font-medium text-gray-700 w-1/3">Cự ly (km) *</label>
                     <input type="number" step="0.1" value={form.outbound_distance} onChange={e => setForm({ ...form, outbound_distance: e.target.value, inbound_distance: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <label className="text-xs font-medium text-gray-700 w-1/3">TG chạy (phút) *</label>
+                    <input type="number" value={form.outbound_travel_time_minutes} onChange={e => setForm({ ...form, outbound_travel_time_minutes: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -354,6 +362,10 @@ export default function RouteList() {
                   <div className="flex items-center justify-between gap-4">
                     <label className="text-xs font-medium text-gray-700 w-1/3">Cự ly (km) *</label>
                     <input type="number" step="0.1" value={form.inbound_distance} onChange={e => setForm({ ...form, inbound_distance: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <label className="text-xs font-medium text-gray-700 w-1/3">TG chạy (phút) *</label>
+                    <input type="number" value={form.inbound_travel_time_minutes} onChange={e => setForm({ ...form, inbound_travel_time_minutes: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                 </div>
               </div>
@@ -449,10 +461,7 @@ export default function RouteList() {
           <div className="grid grid-cols-2 gap-4 mt-6 border-t pt-4">
             <h4 className="col-span-2 text-sm font-semibold text-gray-700">Tham số lập lịch nâng cao</h4>
             
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Thời gian chạy (phút)</label>
-              <input type="number" value={form.travel_time_minutes} onChange={e => setForm({...form, travel_time_minutes: e.target.value})} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
-            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Nghỉ ngắn tại bến (phút)</label>
               <input type="number" value={form.short_layover_minutes} onChange={e => setForm({...form, short_layover_minutes: e.target.value})} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />

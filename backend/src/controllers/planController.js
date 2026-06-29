@@ -64,6 +64,21 @@ async function getRouteDirections(client, routeCode) {
 }
 
 const planController = {
+  getLatestDate: async (req, res, next) => {
+    const client = await pool.connect();
+    try {
+      const { routeCode } = req.params;
+      const result = await client.query(
+        'SELECT MAX(operation_date) as latest_date FROM operation_plans WHERE route_code = $1',
+        [routeCode]
+      );
+      return success(res, result.rows[0], 'Success');
+    } catch (err) {
+      next(err);
+    } finally {
+      client.release();
+    }
+  },
   getAll: async (req, res, next) => {
     try {
       const { route_code, status, date } = req.query;
@@ -292,8 +307,6 @@ const planController = {
 
       const routeRes = await client.query('SELECT * FROM routes WHERE route_code = $1', [plan.route_code]);
       const route = routeRes.rows[0];
-      
-      const travel_time = route.travel_time_minutes || 80;
       const headway_minutes = route.headway_minutes || 15;
       const short_layover = route.short_layover_minutes || 10;
       const long_layover = route.long_layover_minutes || 15;
@@ -306,6 +319,10 @@ const planController = {
         await client.query('ROLLBACK');
         return error(res, 'Tuyến chưa cấu hình đủ lượt đi và lượt về', 400);
       }
+
+      const outbound_travel_time = Number(outbound.travel_time_minutes) || 80;
+      const inbound_travel_time = Number(inbound.travel_time_minutes) || 80;
+
 
       const startMin = timeToMinutes(route.start_time); // e.g. 05:00
       const endMin = timeToMinutes(route.end_time);     // e.g. 21:30
@@ -325,7 +342,7 @@ const planController = {
       const dateStr = `${y}-${m}-${d}`;
       
       const buses = [];
-      const requiredBuses = Math.ceil((travel_time * 2 + short_layover * 2) / headway_minutes);
+      const requiredBuses = Math.ceil((outbound_travel_time + inbound_travel_time + short_layover * 2) / headway_minutes);
       
       for (let i = 0; i < requiredBuses; i++) {
         let startLoc = i % 2 === 0 ? 'A' : 'B';
@@ -364,7 +381,8 @@ const planController = {
                   break; 
               }
               
-              let arrTime = currentTime + travel_time;
+              let current_travel_time = currentLoc === 'A' ? outbound_travel_time : inbound_travel_time;
+              let arrTime = currentTime + current_travel_time;
               let t = {
                   direction_id: currentLoc === 'A' ? outbound.direction_id : inbound.direction_id,
                   startLoc: currentLoc,
@@ -377,7 +395,7 @@ const planController = {
               currentDriver.trips.push(t);
               allGeneratedTrips.push(t);
               
-              drivingSinceRest += travel_time;
+              drivingSinceRest += current_travel_time;
               
               let layover = short_layover;
               if (drivingSinceRest >= max_driving_minutes) {
@@ -388,7 +406,8 @@ const planController = {
               currentLoc = currentLoc === 'A' ? 'B' : 'A';
               currentTime = arrTime + layover;
               
-              if (currentLoc === 'A' && currentDriver.trips.length >= 5 && currentTime < endMin - 120) {
+              const halfTime = bus.startTime + (endMin - bus.startTime) / 2;
+              if (currentLoc === 'A' && currentTime >= halfTime && shiftCount === 1 && currentTime < endMin - 120) {
                   currentDriver.endTime = currentDriver.trips[currentDriver.trips.length-1].endTime;
                   allDrivers.push(currentDriver);
                   
@@ -406,7 +425,7 @@ const planController = {
           
           if (currentDriver && currentDriver.trips.length > 0) {
               if (currentLoc === 'B') {
-                  let arrTime = currentTime + travel_time;
+                  let arrTime = currentTime + inbound_travel_time;
                   let t = {
                       direction_id: inbound.direction_id,
                       startLoc: 'B',
@@ -610,6 +629,91 @@ const planController = {
       return success(res, null, 'Từ chối kế hoạch vận doanh thành công');
     } catch (err) {
       next(err);
+    }
+  },
+
+  reviewBatchPlan: async (req, res, next) => {
+    const { planIds, decision, reject_reason } = req.body;
+    const managerId = req.user.id;
+
+    if (!Array.isArray(planIds) || planIds.length === 0) {
+      return error(res, 'Danh sách kế hoạch không hợp lệ', 400);
+    }
+    if (!['approve', 'reject'].includes(decision)) {
+      return error(res, 'Quyết định không hợp lệ', 400);
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      let successCount = 0;
+      for (const planId of planIds) {
+        const planRes = await client.query('SELECT * FROM operation_plans WHERE plan_id = $1', [planId]);
+        if (!planRes.rows.length) continue;
+        const plan = planRes.rows[0];
+
+        if (plan.status !== 'pending_approval') continue;
+
+        const y = plan.operation_date.getFullYear();
+        const m = String(plan.operation_date.getMonth() + 1).padStart(2, '0');
+        const d = String(plan.operation_date.getDate()).padStart(2, '0');
+        const dateStr = `${y}-${m}-${d}`;
+
+        if (decision === 'approve') {
+          await client.query(
+            `UPDATE operation_plans
+             SET status = 'approved', reviewed_by = $1, reject_reason = NULL
+             WHERE plan_id = $2`,
+            [managerId, planId]
+          );
+
+          await client.query(
+            `INSERT INTO notifications (user_id, title, content)
+             VALUES ($1, 'Kế hoạch được duyệt', $2)`,
+            [plan.created_by, `Kế hoạch vận doanh tuyến ${plan.route_code} ngày ${dateStr} đã được duyệt.`]
+          );
+
+          const assignedDrivers = await client.query(
+            `SELECT DISTINCT d.user_id
+             FROM assignments a
+             JOIN trip_groups tg ON a.group_id = tg.group_id
+             JOIN drivers d ON a.driver_id = d.driver_id
+             WHERE tg.plan_id = $1 AND a.status = 'active'`,
+            [planId]
+          );
+
+          for (const driver of assignedDrivers.rows) {
+            await client.query(
+              `INSERT INTO notifications (user_id, title, content)
+               VALUES ($1, 'Lịch làm việc mới', $2)`,
+              [driver.user_id, `Bạn có lịch làm việc mới vào ngày ${dateStr}.`]
+            );
+          }
+        } else {
+          await client.query(
+            `UPDATE operation_plans
+             SET status = 'rejected', reviewed_by = $1, reject_reason = $2
+             WHERE plan_id = $3`,
+            [managerId, reject_reason, planId]
+          );
+
+          await client.query(
+            `INSERT INTO notifications (user_id, title, content)
+             VALUES ($1, 'Kế hoạch bị từ chối', $2)`,
+            [plan.created_by, `Kế hoạch vận doanh tuyến ${plan.route_code} ngày ${dateStr} bị từ chối. Lý do: ${reject_reason}`]
+          );
+        }
+        successCount++;
+      }
+
+      await client.query('COMMIT');
+      return success(res, { processed: successCount }, 'Phê duyệt hàng loạt thành công');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      next(err);
+    } finally {
+      client.release();
     }
   }
 };

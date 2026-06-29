@@ -57,6 +57,17 @@ const batchController = {
       let successCount = 0;
       let errorCount = 0;
 
+      // Check for overlap before starting
+      const endDate = addDays(startDate, NUM_DAYS - 1);
+      const overlapRes = await pool.query(
+        'SELECT operation_date FROM operation_plans WHERE route_code = $1 AND operation_date >= $2 AND operation_date <= $3 LIMIT 1',
+        [routeCode, startDate, endDate]
+      );
+      if (overlapRes.rows.length > 0) {
+        const overlapDate = new Date(overlapRes.rows[0].operation_date).toLocaleDateString('vi-VN');
+        return error(res, `Đã có lịch tồn tại trong khoảng thời gian từ ${new Date(startDate).toLocaleDateString('vi-VN')} đến ${new Date(endDate).toLocaleDateString('vi-VN')} (ngày trùng: ${overlapDate}). Không thể ghi đè.`, 400);
+      }
+
       // Import the internal functions from planController and assignmentController
       // Since they are written to respond to Express req/res, we can mock req/res OR write direct DB logic.
       // Writing direct DB logic is better. Or we can just import them and mock req, res.
@@ -116,8 +127,8 @@ const batchController = {
             assignmentCtrl.autoAssignPlan(mockReq, mockRes, reject);
           });
 
-          // 4. Mark plan as approved
-          await pool.query('UPDATE operation_plans SET status = $1 WHERE plan_id = $2', ['approved', planId]);
+          // 4. Mark plan as pending_approval
+          await pool.query('UPDATE operation_plans SET status = $1 WHERE plan_id = $2', ['pending_approval', planId]);
           
           successCount++;
         } catch (e) {

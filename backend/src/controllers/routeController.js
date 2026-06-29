@@ -237,7 +237,8 @@ const routeController = {
         expected_trips_per_day = 60,
         headway_minutes,
         confirmed_operating_buses = 10,
-        travel_time_minutes = 80,
+        outbound_travel_time_minutes = 80,
+        inbound_travel_time_minutes = 80,
         short_layover_minutes = 10,
         long_layover_minutes = 15,
         max_driving_minutes = 240,
@@ -296,7 +297,7 @@ const routeController = {
             expected_trips_per_day,
             routeHeadway,
             confirmed_operating_buses,
-            travel_time_minutes,
+            outbound_travel_time_minutes,
             short_layover_minutes,
             long_layover_minutes,
             max_driving_minutes,
@@ -311,14 +312,14 @@ const routeController = {
           await client.query(
             `INSERT INTO route_directions (route_code, direction_type, start_point, end_point, distance_km, travel_time_minutes, turnaround_time_minutes)
              VALUES ($1, 'outbound', $2, $3, $4, $5, $6)`,
-            [route_code, req.body.outbound_start_point, req.body.outbound_end_point, req.body.outbound_distance || null, travel_time_minutes, short_layover_minutes]
+            [route_code, req.body.outbound_start_point, req.body.outbound_end_point, req.body.outbound_distance || null, outbound_travel_time_minutes, short_layover_minutes]
           );
         }
         if (req.body.inbound_start_point) {
           await client.query(
             `INSERT INTO route_directions (route_code, direction_type, start_point, end_point, distance_km, travel_time_minutes, turnaround_time_minutes)
              VALUES ($1, 'inbound', $2, $3, $4, $5, $6)`,
-            [route_code, req.body.inbound_start_point, req.body.inbound_end_point, req.body.inbound_distance || null, travel_time_minutes, short_layover_minutes]
+            [route_code, req.body.inbound_start_point, req.body.inbound_end_point, req.body.inbound_distance || null, inbound_travel_time_minutes, short_layover_minutes]
           );
         }
 
@@ -348,7 +349,8 @@ const routeController = {
         expected_trips_per_day = 60,
         headway_minutes,
         confirmed_operating_buses = 10,
-        travel_time_minutes = 80,
+        outbound_travel_time_minutes = 80,
+        inbound_travel_time_minutes = 80,
         short_layover_minutes = 10,
         long_layover_minutes = 15,
         max_driving_minutes = 240,
@@ -406,7 +408,7 @@ const routeController = {
             routeHeadway,
             confirmed_operating_buses,
             routeCode,
-            travel_time_minutes,
+            outbound_travel_time_minutes,
             short_layover_minutes,
             long_layover_minutes,
             max_driving_minutes,
@@ -428,7 +430,7 @@ const routeController = {
              VALUES ($1, 'outbound', $2, $3, $4, $5, $6)
              ON CONFLICT (route_code, direction_type)
              DO UPDATE SET start_point = EXCLUDED.start_point, end_point = EXCLUDED.end_point, distance_km = EXCLUDED.distance_km, travel_time_minutes = EXCLUDED.travel_time_minutes, turnaround_time_minutes = EXCLUDED.turnaround_time_minutes`,
-            [routeCode, req.body.outbound_start_point, req.body.outbound_end_point, req.body.outbound_distance || null, travel_time_minutes, short_layover_minutes]
+            [routeCode, req.body.outbound_start_point, req.body.outbound_end_point, req.body.outbound_distance || null, outbound_travel_time_minutes, short_layover_minutes]
           );
         }
         if (req.body.inbound_start_point) {
@@ -437,7 +439,7 @@ const routeController = {
              VALUES ($1, 'inbound', $2, $3, $4, $5, $6)
              ON CONFLICT (route_code, direction_type)
              DO UPDATE SET start_point = EXCLUDED.start_point, end_point = EXCLUDED.end_point, distance_km = EXCLUDED.distance_km, travel_time_minutes = EXCLUDED.travel_time_minutes, turnaround_time_minutes = EXCLUDED.turnaround_time_minutes`,
-            [routeCode, req.body.inbound_start_point, req.body.inbound_end_point, req.body.inbound_distance || null, travel_time_minutes, short_layover_minutes]
+            [routeCode, req.body.inbound_start_point, req.body.inbound_end_point, req.body.inbound_distance || null, inbound_travel_time_minutes, short_layover_minutes]
           );
         }
 
