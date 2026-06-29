@@ -314,32 +314,26 @@ const planController = {
 
       const routeRes = await client.query('SELECT * FROM routes WHERE route_code = $1', [plan.route_code]);
       const route = routeRes.rows[0];
+      const headway_minutes = route.headway_minutes || 15;
+      const short_layover = route.short_layover_minutes || 10;
+      const long_layover = route.long_layover_minutes || 15;
+      const max_driving_minutes = route.max_driving_minutes || 240;
+      const standby_ratio = route.standby_ratio || 0.15;
+      
       const { outbound, inbound } = await getRouteDirections(client, plan.route_code);
 
       if (!outbound || !inbound) {
         await client.query('ROLLBACK');
         return error(res, 'Tuyến chưa cấu hình đủ lượt đi và lượt về', 400);
       }
-      if (Number(route.expected_trips_per_day) < 2) {
-        await client.query('ROLLBACK');
-        return error(res, 'Số lượt xuất bến dự kiến mỗi chiều phải lớn hơn hoặc bằng 2', 400);
-      }
-      if (!Number.isFinite(Number(route.headway_minutes)) || Number(route.headway_minutes) <= 0) {
-        await client.query('ROLLBACK');
-        return error(res, 'Tuyến chưa có giãn cách khai thác hợp lệ', 400);
-      }
 
-      const metrics = calculateSchedulingMetrics(route, outbound, inbound);
-      const confirmedOperatingBuses = Number(route.confirmed_operating_buses);
+      const outbound_travel_time = Number(outbound.travel_time_minutes) || 80;
+      const inbound_travel_time = Number(inbound.travel_time_minutes) || 80;
 
-      if (!Number.isInteger(confirmedOperatingBuses) || confirmedOperatingBuses < 1) {
-        await client.query('ROLLBACK');
-        return error(res, 'Số xe vận doanh xác nhận phải lớn hơn hoặc bằng 1', 400);
-      }
-      if (confirmedOperatingBuses > metrics.generatedTripsPerDirection) {
-        await client.query('ROLLBACK');
-        return error(res, 'Số xe vận doanh xác nhận không được lớn hơn số cặp lượt xuất bến trong ngày', 400);
-      }
+
+      const startMin = timeToMinutes(route.start_time); // e.g. 05:00
+      const endMin = timeToMinutes(route.end_time);     // e.g. 21:30
+      const inboundStartMin = route.inbound_start_time ? timeToMinutes(route.inbound_start_time) : startMin + 30;
 
       await client.query(
         `DELETE FROM assignments
@@ -349,90 +343,169 @@ const planController = {
       await client.query('DELETE FROM trips WHERE plan_id = $1', [planId]);
       await client.query('DELETE FROM trip_groups WHERE plan_id = $1', [planId]);
 
-      const dateStr = plan.operation_date.toISOString().split('T')[0];
-      const tripsByGroup = Array.from({ length: confirmedOperatingBuses }, () => []);
-      const allGeneratedTrips = [];
+      const y = plan.operation_date.getFullYear();
+      const m = String(plan.operation_date.getMonth() + 1).padStart(2, '0');
+      const d = String(plan.operation_date.getDate()).padStart(2, '0');
+      const dateStr = `${y}-${m}-${d}`;
+      
+      const firstArrivalAtB = startMin + outbound_travel_time + short_layover;
+      const requiredBusesB = Math.max(0, Math.ceil((firstArrivalAtB - inboundStartMin) / headway_minutes));
+      
+      const firstArrivalAtA = inboundStartMin + inbound_travel_time + short_layover;
+      const requiredBusesA = Math.max(0, Math.ceil((firstArrivalAtA - startMin) / headway_minutes));
 
-      // Sinh chuyến theo headway_minutes đều nhau: mỗi chuyến cách nhau đúng headway_minutes
-      for (let i = 0; i < metrics.generatedTripsPerDirection; i++) {
-        const outboundDepartureMinute = Math.round(metrics.startMin + metrics.headwayMinutes * i);
-        const outboundArrivalMinute = outboundDepartureMinute + Number(outbound.travel_time_minutes);
-        const inboundDepartureMinute = outboundArrivalMinute + Number(outbound.turnaround_time_minutes);
-        const inboundArrivalMinute = inboundDepartureMinute + Number(inbound.travel_time_minutes);
-        const groupIndex = i % confirmedOperatingBuses;
+      const buses = [];
+      let busIdCounter = 1;
 
-        const outboundTrip = {
-          direction_id: outbound.direction_id,
-          pair_index: i + 1,
-          group_index: groupIndex,
-          scheduled_departure: buildTimestamp(dateStr, outboundDepartureMinute),
-          scheduled_arrival: buildTimestamp(dateStr, outboundArrivalMinute)
-        };
-        const inboundTrip = {
-          direction_id: inbound.direction_id,
-          pair_index: i + 1,
-          group_index: groupIndex,
-          scheduled_departure: buildTimestamp(dateStr, inboundDepartureMinute),
-          scheduled_arrival: buildTimestamp(dateStr, inboundArrivalMinute)
-        };
-
-        allGeneratedTrips.push(outboundTrip, inboundTrip);
-        tripsByGroup[groupIndex].push(outboundTrip, inboundTrip);
+      // Gán các xe xuất phát từ A
+      for (let i = 0; i < requiredBusesA; i++) {
+        buses.push({
+            id: busIdCounter++,
+            startLoc: 'A',
+            startTime: startMin + (i * headway_minutes)
+        });
       }
 
-      // Gán trip_order toàn cục theo giờ xuất bến
+      // Gán các xe xuất phát từ B
+      for (let i = 0; i < requiredBusesB; i++) {
+        buses.push({
+            id: busIdCounter++,
+            startLoc: 'B',
+            startTime: inboundStartMin + (i * headway_minutes)
+        });
+      }
+
+      const allDrivers = [];
+      const allGeneratedTrips = [];
+
+      buses.forEach(bus => {
+          let currentLoc = bus.startLoc;
+          let currentTime = bus.startTime;
+          let drivingSinceRest = 0;
+          let shiftCount = 1;
+          
+          let currentDriver = {
+              busId: bus.id,
+              shiftName: `Ca ${shiftCount}`,
+              startLoc: currentLoc,
+              startTime: currentTime,
+              trips: []
+          };
+          
+          while (currentTime <= endMin) {
+              if (currentLoc === 'A' && currentTime > endMin - 60) {
+                  break; 
+              }
+              
+              let current_travel_time = currentLoc === 'A' ? outbound_travel_time : inbound_travel_time;
+              let arrTime = currentTime + current_travel_time;
+              let t = {
+                  direction_id: currentLoc === 'A' ? outbound.direction_id : inbound.direction_id,
+                  startLoc: currentLoc,
+                  startTime: currentTime,
+                  endLoc: currentLoc === 'A' ? 'B' : 'A',
+                  endTime: arrTime,
+                  scheduled_departure: buildTimestamp(dateStr, currentTime),
+                  scheduled_arrival: buildTimestamp(dateStr, arrTime)
+              };
+              currentDriver.trips.push(t);
+              allGeneratedTrips.push(t);
+              
+              drivingSinceRest += current_travel_time;
+              
+              let layover = short_layover;
+              if (drivingSinceRest >= max_driving_minutes) {
+                  layover = long_layover;
+                  drivingSinceRest = 0;
+              }
+              
+              currentLoc = currentLoc === 'A' ? 'B' : 'A';
+              currentTime = arrTime + layover;
+              
+              const halfTime = bus.startTime + (endMin - bus.startTime) / 2;
+              if (currentLoc === 'A' && currentTime >= halfTime && shiftCount === 1 && currentTime < endMin - 120) {
+                  currentDriver.endTime = currentDriver.trips[currentDriver.trips.length-1].endTime;
+                  allDrivers.push(currentDriver);
+                  
+                  shiftCount++;
+                  currentDriver = {
+                      busId: bus.id,
+                      shiftName: `Ca ${shiftCount}`,
+                      startLoc: currentLoc,
+                      startTime: currentTime,
+                      trips: []
+                  };
+                  drivingSinceRest = 0; 
+              }
+          }
+          
+          if (currentDriver && currentDriver.trips.length > 0) {
+              if (currentLoc === 'B') {
+                  let arrTime = currentTime + inbound_travel_time;
+                  let t = {
+                      direction_id: inbound.direction_id,
+                      startLoc: 'B',
+                      startTime: currentTime,
+                      endLoc: 'A',
+                      endTime: arrTime,
+                      scheduled_departure: buildTimestamp(dateStr, currentTime),
+                      scheduled_arrival: buildTimestamp(dateStr, arrTime)
+                  };
+                  currentDriver.trips.push(t);
+                  allGeneratedTrips.push(t);
+                  currentLoc = 'A';
+                  currentTime = arrTime + short_layover;
+              }
+              currentDriver.endTime = currentDriver.trips[currentDriver.trips.length-1].endTime;
+              allDrivers.push(currentDriver);
+          }
+      });
+
       allGeneratedTrips
         .sort((a, b) => new Date(a.scheduled_departure) - new Date(b.scheduled_departure))
         .forEach((trip, index) => {
           trip.trip_order = index + 1;
         });
 
-      // Tạo trip_groups và ghi trips vào DB
-      for (let groupIndex = 0; groupIndex < confirmedOperatingBuses; groupIndex++) {
-        const tripsInGroup = tripsByGroup[groupIndex].sort(
-          (a, b) => new Date(a.scheduled_departure) - new Date(b.scheduled_departure)
-        );
-        if (tripsInGroup.length === 0) continue;
+      for (const d of allDrivers) {
+          const groupName = `Xe ${d.busId} - ${d.shiftName}`;
+          const groupStart = buildTimestamp(dateStr, d.startTime);
+          const groupEnd = buildTimestamp(dateStr, d.endTime);
 
-        const groupStart = tripsInGroup[0].scheduled_departure;
-        const groupEnd = tripsInGroup.reduce((latest, trip) => (
-          new Date(trip.scheduled_arrival) > new Date(latest) ? trip.scheduled_arrival : latest
-        ), tripsInGroup[0].scheduled_arrival);
-
-        const groupRes = await client.query(
-          `INSERT INTO trip_groups (plan_id, group_name, start_time, end_time, status)
-           VALUES ($1, $2, $3, $4, 'unassigned')
-           RETURNING group_id`,
-          [planId, `Nhóm xe ${groupIndex + 1}`, groupStart, groupEnd]
-        );
-        const groupId = groupRes.rows[0].group_id;
-
-        for (const trip of tripsInGroup) {
-          await client.query(
-            `INSERT INTO trips (
-               plan_id, direction_id, group_id, trip_order,
-               scheduled_departure, scheduled_arrival, status
-             ) VALUES ($1, $2, $3, $4, $5, $6, 'scheduled')`,
-            [
-              planId, trip.direction_id, groupId, trip.trip_order,
-              trip.scheduled_departure, trip.scheduled_arrival
-            ]
+          const groupRes = await client.query(
+            `INSERT INTO trip_groups (plan_id, group_name, start_time, end_time, status)
+             VALUES ($1, $2, $3, $4, 'unassigned')
+             RETURNING group_id`,
+            [planId, groupName, groupStart, groupEnd]
           );
-        }
+          const groupId = groupRes.rows[0].group_id;
+
+          for (const trip of d.trips) {
+              await client.query(
+                `INSERT INTO trips (
+                   plan_id, direction_id, group_id, trip_order,
+                   scheduled_departure, scheduled_arrival, status
+                 ) VALUES ($1, $2, $3, $4, $5, $6, 'scheduled')`,
+                [
+                  planId, trip.direction_id, groupId, trip.trip_order,
+                  trip.scheduled_departure, trip.scheduled_arrival
+                ]
+              );
+          }
       }
+
+      const mainDrivers = allDrivers.length;
+      const standbyDrivers = Math.ceil(mainDrivers * standby_ratio);
+      const totalDailyDrivers = mainDrivers + standbyDrivers;
+      const totalWeeklyDrivers = Math.ceil((totalDailyDrivers * 7) / 6);
 
       await client.query('COMMIT');
       return success(res, {
         trips_generated: allGeneratedTrips.length,
-        groups_generated: confirmedOperatingBuses,
-        expected_trips_per_direction: metrics.expectedTripsPerDirection,
-        generated_trips_per_direction: metrics.generatedTripsPerDirection,
-        calculated_headway_minutes: Number(metrics.calculatedHeadwayMinutes.toFixed(2)),
-        average_headway_minutes: Number(metrics.headwayMinutes.toFixed(2)),
-        headway_minutes: Number(metrics.headwayMinutes.toFixed(2)),
-        round_trip_time_minutes: metrics.roundTripTimeMinutes,
-        suggested_operating_buses: metrics.suggestedOperatingBuses,
-        confirmed_operating_buses: confirmedOperatingBuses
+        groups_generated: requiredBusesA + requiredBusesB,
+        total_shifts: mainDrivers,
+        daily_drivers_needed: totalDailyDrivers,
+        weekly_drivers_needed: totalWeeklyDrivers
       }, 'Sinh chuyến và nhóm xoay vòng thành công');
     } catch (err) {
       await client.query('ROLLBACK');

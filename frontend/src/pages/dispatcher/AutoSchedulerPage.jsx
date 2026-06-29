@@ -99,8 +99,13 @@ export default function AutoSchedulerPage() {
     setDetailLoading(true);
     try {
       await generateTrips(selectedPlanId, formData);
+      try {
+        await autoAssignPlan(selectedPlanId);
+      } catch (assignErr) {
+        console.error('Lỗi khi phân công tự động:', assignErr);
+      }
       setShowGenerateModal(false);
-      setSuccessMsg('Đã sinh chuyến xe và gom nhóm tự động thành công.');
+      setSuccessMsg('Đã sinh chuyến xe, gom nhóm và tự động xếp xe/tài xế thành công.');
       setTimeout(() => setSuccessMsg(''), 4000);
       loadPlanDetail(selectedPlanId);
       loadPlans();
