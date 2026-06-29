@@ -32,6 +32,7 @@ import TripManage from './pages/dispatcher/TripManage';
 import AffectedTrips from './pages/dispatcher/AffectedTrips';
 import IncidentManage from './pages/dispatcher/IncidentManage';
 import AssignmentList from './pages/dispatcher/AssignmentList';
+import GpsTracking from './pages/dispatcher/GpsTracking';
 
 // Driver
 import MyAssignmentsPage from './pages/driver/MyAssignmentsPage';
@@ -86,6 +87,7 @@ function App() {
           <Route path="/dispatcher/affected-trips" element={<PrivateRoute allowedRoles={['dispatcher']}><AffectedTrips /></PrivateRoute>} />
           <Route path="/dispatcher/incidents" element={<PrivateRoute allowedRoles={['dispatcher']}><IncidentManage /></PrivateRoute>} />
           <Route path="/dispatcher/assignments" element={<PrivateRoute allowedRoles={['dispatcher']}><AssignmentList /></PrivateRoute>} />
+          <Route path="/dispatcher/gps" element={<PrivateRoute allowedRoles={['dispatcher', 'manager']}><GpsTracking /></PrivateRoute>} />
 
           {/* Driver Routes */}
           <Route path="/driver" element={<Navigate to="/driver/schedule" replace />} />

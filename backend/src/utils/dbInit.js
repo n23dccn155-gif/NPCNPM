@@ -27,6 +27,7 @@ async function initDb() {
     '../../../database/schema.sql',
     '../../../database/constraints.sql',
     '../../../database/indexes.sql',
+    '../../../database/tables_gps.sql',
     '../../../database/seed.sql'
   ];
 

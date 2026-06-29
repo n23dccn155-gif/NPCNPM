@@ -14,6 +14,7 @@ const leaveRequestRoutes = require('./routes/leaveRequestRoutes');
 const incidentRoutes = require('./routes/incidentRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const gpsRoutes = require('./routes/gpsRoutes');
 
 const errorMiddleware = require('./middlewares/errorMiddleware');
 
@@ -42,6 +43,7 @@ app.use('/api/leave-requests', leaveRequestRoutes);
 app.use('/api/incidents', incidentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/gps', gpsRoutes);
 
 // Error handler (always last)
 app.use(errorMiddleware);
