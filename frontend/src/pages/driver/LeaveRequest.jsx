@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
+import { formatDate } from '../../utils/format';
 import { PageHeader, AlertBox, Modal } from '../../components/UI';
 import { getMyLeaves, createLeave } from '../../services/leaveService';
 
@@ -97,7 +98,7 @@ export default function LeaveRequest() {
                   leaves.map(l => (
                     <tr key={l.leave_id} className="hover:bg-slate-50 transition">
                       <td className="px-6 py-4 font-bold text-gray-900">
-                        {new Date(l.leave_date).toLocaleDateString('vi-VN')}
+                        {formatDate(l.leave_date)}
                       </td>
                       <td className="px-6 py-4 text-gray-600 max-w-xs truncate" title={l.reason}>
                         {l.reason || '—'}
@@ -126,9 +127,9 @@ export default function LeaveRequest() {
               type="date"
               value={form.leave_date}
               onChange={e => setForm({ ...form, leave_date: e.target.value })}
-              required
               min={new Date().toISOString().split('T')[0]}
-              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
             />
           </div>
 

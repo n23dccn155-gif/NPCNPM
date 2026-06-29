@@ -17,7 +17,6 @@ import LeaveApproval from './pages/manager/LeaveApproval';
 import Reports from './pages/manager/Reports';
 import UserList from './pages/manager/UserList';
 import RouteDriverManage from './pages/manager/RouteDriverManage';
-import DirectionStopManage from './pages/manager/DirectionStopManage';
 import PlanApproval from './pages/manager/PlanApproval';
 
 // Dispatcher
@@ -64,7 +63,6 @@ function App() {
           <Route path="/manager/users" element={<PrivateRoute allowedRoles={['manager']}><UserList /></PrivateRoute>} />
           <Route path="/manager/leave-requests" element={<PrivateRoute allowedRoles={['manager']}><LeaveApproval /></PrivateRoute>} />
           <Route path="/manager/reports" element={<PrivateRoute allowedRoles={['manager']}><Reports /></PrivateRoute>} />
-          <Route path="/manager/direction-stops" element={<PrivateRoute allowedRoles={['manager']}><DirectionStopManage /></PrivateRoute>} />
           <Route path="/manager/plan-approval" element={<PrivateRoute allowedRoles={['manager']}><PlanApproval /></PrivateRoute>} />
 
           {/* Dispatcher Routes */}

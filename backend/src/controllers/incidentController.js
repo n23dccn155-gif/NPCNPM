@@ -97,8 +97,8 @@ const incidentController = {
         
         for (let disp of dispatchers.rows) {
           await client.query(
-            `INSERT INTO notifications (user_id, title, content) 
-             VALUES ($1, 'Sự cố khẩn cấp', $2)`,
+            `INSERT INTO notifications (user_id, title, content, redirect_url) 
+             VALUES ($1, 'Sự cố khẩn cấp', $2, '/dispatcher/incidents')`,
             [disp.user_id, content]
           );
         }
@@ -189,8 +189,8 @@ const incidentController = {
       const reporterId = incident.reported_by;
       if (reporterId) {
         await pool.query(
-          `INSERT INTO notifications (user_id, title, content) 
-           VALUES ($1, 'Cập nhật xử lý sự cố', $2)`,
+          `INSERT INTO notifications (user_id, title, content, redirect_url) 
+           VALUES ($1, 'Cập nhật xử lý sự cố', $2, '/driver/incidents')`,
           [reporterId, `Báo cáo sự cố của bạn đã được chuyển sang trạng thái: ${status}.`]
         );
       }

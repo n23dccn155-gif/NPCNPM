@@ -6,7 +6,7 @@ const busController = {
   // Lấy danh sách xe buýt
   getAll: async (req, res, next) => {
     try {
-      const { status, route_code } = req.query;
+      const { status, route_code, exclude_assigned } = req.query;
       let query = 'SELECT b.bus_id, b.license_plate, b.seat_count, b.status FROM buses b';
       const params = [];
       const conditions = [];
@@ -20,6 +20,10 @@ const busController = {
       if (status) {
         params.push(status);
         conditions.push(`b.status = $${params.length}`);
+      }
+
+      if (exclude_assigned === 'true') {
+        conditions.push(`b.bus_id NOT IN (SELECT bus_id FROM route_buses)`);
       }
 
       if (conditions.length > 0) {

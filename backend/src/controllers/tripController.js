@@ -174,8 +174,8 @@ const tripController = {
           const dispatcherId = planRes.rows[0].created_by;
           const routeCode = planRes.rows[0].route_code;
           await pool.query(
-            `INSERT INTO notifications (user_id, title, content) 
-             VALUES ($1, 'Cảnh báo trễ chuyến', $2)`,
+            `INSERT INTO notifications (user_id, title, content, redirect_url) 
+             VALUES ($1, 'Cảnh báo trễ chuyến', $2, '/dispatcher/calendar')`,
             [dispatcherId, `Chuyến thứ ${trip.trip_order} (Tuyến ${routeCode}) xuất bến trễ ${delayMinutes} phút.`]
           );
         }
@@ -262,8 +262,8 @@ const tripController = {
 
       if (assignmentRes.rows.length) {
         await pool.query(
-          `INSERT INTO notifications (user_id, title, content) 
-           VALUES ($1, 'Hủy chuyến xe', $2)`,
+          `INSERT INTO notifications (user_id, title, content, redirect_url) 
+           VALUES ($1, 'Hủy chuyến xe', $2, '/driver/schedule')`,
           [assignmentRes.rows[0].user_id, `Chuyến thứ ${trip.trip_order} trong ca chạy của bạn đã bị hủy. Lý do: ${reason}`]
         );
       }

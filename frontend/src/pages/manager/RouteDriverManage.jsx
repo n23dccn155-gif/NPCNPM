@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout';
+import { formatDate } from '../../utils/format';
 import { PageHeader, ConfirmDialog, AlertBox, Modal } from '../../components/UI';
 import { getRoutes, generateSchedule, getLatestScheduledDate } from '../../services/routeService';
 import routeDriverService from '../../services/routeDriverService';
@@ -8,6 +10,7 @@ import { getRouteBuses, addBusToRoute, removeBusFromRoute } from '../../services
 import { getBuses } from '../../services/busService';
 
 export default function RouteDriverManage() {
+  const navigate = useNavigate();
   const [routes, setRoutes] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [buses, setBuses] = useState([]);
@@ -32,7 +35,11 @@ export default function RouteDriverManage() {
   const [confirm, setConfirm] = useState({ open: false, type: '', item: null });
 
   useEffect(() => {
-    Promise.all([getRoutes(), getDrivers(), getBuses()])
+    Promise.all([
+      getRoutes(),
+      getDrivers({ exclude_assigned: true }),
+      getBuses({ exclude_assigned: true })
+    ])
       .then(([routeRes, driverRes, busRes]) => {
         const routeData = routeRes.data?.data || routeRes.data || [];
         setRoutes(routeData);
@@ -83,6 +90,9 @@ export default function RouteDriverManage() {
       await Promise.all(addDriverIds.map(id => routeDriverService.addDriverToRoute(selectedRoute.route_code, id)));
       setAddDriverIds([]);
       loadRouteData(selectedRoute.route_code);
+      // Re-fetch unassigned drivers
+      const driverRes = await getDrivers({ exclude_assigned: true });
+      setDrivers(driverRes.data?.data || driverRes.data || []);
       setSuccessMsg(`Thêm ${addDriverIds.length} tài xế thành công`);
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err) {
@@ -101,6 +111,9 @@ export default function RouteDriverManage() {
       await Promise.all(addBusIds.map(id => addBusToRoute(selectedRoute.route_code, { bus_id: id, bus_role: 'operating' })));
       setAddBusIds([]);
       loadRouteData(selectedRoute.route_code);
+      // Re-fetch unassigned buses
+      const busRes = await getBuses({ exclude_assigned: true });
+      setBuses(busRes.data?.data || busRes.data || []);
       setSuccessMsg(`Thêm ${addBusIds.length} xe buýt thành công`);
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err) {
@@ -138,8 +151,17 @@ export default function RouteDriverManage() {
     setSuccessMsg('');
     try {
       const res = await generateSchedule(selectedRoute.route_code, scheduleForm);
-      setSuccessMsg('Đã tạo lịch và gửi lên Manager để chờ phê duyệt thành công!');
-      setShowScheduleModal(false);
+      setSuccessMsg('Đã sinh lịch trình nháp thành công! Hệ thống đang chuyển hướng tới trang Lịch biểu...');
+      setTimeout(() => {
+        setShowScheduleModal(false);
+        navigate('/dispatcher/calendar', {
+          state: {
+            routeCode: selectedRoute.route_code,
+            date: scheduleForm.startDate,
+            viewMode: 'draft'
+          }
+        });
+      }, 2000);
     } catch (err) {
       setError(err.response?.data?.message || 'Lỗi khi sinh lịch');
     } finally {
@@ -151,10 +173,17 @@ export default function RouteDriverManage() {
     try {
       if (confirm.type === 'driver') {
         await routeDriverService.removeDriverFromRoute(selectedRoute.route_code, confirm.item.driver_id);
+        loadRouteData(selectedRoute.route_code);
+        // Re-fetch unassigned drivers
+        const driverRes = await getDrivers({ exclude_assigned: true });
+        setDrivers(driverRes.data?.data || driverRes.data || []);
       } else {
         await removeBusFromRoute(selectedRoute.route_code, confirm.item.bus_id);
+        loadRouteData(selectedRoute.route_code);
+        // Re-fetch unassigned buses
+        const busRes = await getBuses({ exclude_assigned: true });
+        setBuses(busRes.data?.data || busRes.data || []);
       }
-      loadRouteData(selectedRoute.route_code);
       setConfirm({ open: false, type: '', item: null });
       setSuccessMsg('Đã gỡ thành công');
       setTimeout(() => setSuccessMsg(''), 3000);
@@ -445,7 +474,7 @@ export default function RouteDriverManage() {
                 Vui lòng chọn từ ngày <strong>{(() => {
                   const d = new Date(latestDate);
                   d.setDate(d.getDate() + 1);
-                  return d.toLocaleDateString('vi-VN');
+                  return formatDate(d);
                 })()}</strong> trở đi.
                 <button 
                   type="button"
@@ -480,7 +509,7 @@ export default function RouteDriverManage() {
                   const numDays = scheduleForm.cycles * routeDrivers.length;
                   const endDate = new Date(scheduleForm.startDate);
                   endDate.setDate(endDate.getDate() + numDays - 1);
-                  return endDate.toLocaleDateString('vi-VN');
+                  return formatDate(endDate);
                 })()}
               </div>
               <p className="text-xs text-gray-500 mt-1">Tổng cộng: {scheduleForm.cycles * routeDrivers.length} ngày (với {routeDrivers.length} tài xế hiện tại)</p>
@@ -489,7 +518,7 @@ export default function RouteDriverManage() {
           <div className="flex justify-end gap-3 mt-6">
             <button type="button" onClick={() => setShowScheduleModal(false)} disabled={generating} className="px-4 py-2 text-gray-600 font-medium">Hủy</button>
             <button type="submit" disabled={generating || isCheckingOverlap || (latestDate && new Date(scheduleForm.startDate) <= new Date(latestDate))} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed">
-              {generating ? 'Đang gửi...' : 'Gửi Manager duyệt'}
+              {generating ? 'Đang xử lý...' : 'Sinh lịch trình & Phân ca'}
             </button>
           </div>
         </form>

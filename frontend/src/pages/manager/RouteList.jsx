@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import { PageHeader, StatusBadge, ConfirmDialog, Modal, AlertBox } from '../../components/UI';
-import { getRoutes, createRoute, updateRoute, updateRouteStatus, deleteRoute } from '../../services/routeService';
+import { getRoutes, getRoute, createRoute, updateRoute, updateRouteStatus, deleteRoute } from '../../services/routeService';
 
 const emptyForm = {
   route_code: '',
@@ -62,6 +62,9 @@ export default function RouteList() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
 
+  const [outboundMiddleStops, setOutboundMiddleStops] = useState([]);
+  const [inboundMiddleStops, setInboundMiddleStops] = useState([]);
+
   const load = async () => {
     try {
       const res = await getRoutes();
@@ -78,11 +81,13 @@ export default function RouteList() {
   const openAdd = () => {
     setEditing(null);
     setForm(emptyForm);
+    setOutboundMiddleStops([]);
+    setInboundMiddleStops([]);
     setFormError('');
     setShowModal(true);
   };
 
-  const openEdit = (r) => {
+  const openEdit = async (r) => {
     console.log('Editing route object:', r);
     setEditing(r);
     setForm({
@@ -111,7 +116,36 @@ export default function RouteList() {
       min_rest_time_minutes: r.min_rest_time_minutes ?? 60,
     });
     setFormError('');
+    setOutboundMiddleStops([]);
+    setInboundMiddleStops([]);
     setShowModal(true);
+
+    try {
+      const res = await getRoute(r.route_code);
+      const fullRoute = res.data?.data || res.data || {};
+      const outboundDir = fullRoute.directions?.find(d => d.direction_type === 'outbound');
+      const inboundDir = fullRoute.directions?.find(d => d.direction_type === 'inbound');
+
+      const outboundStops = outboundDir?.stops || [];
+      const inboundStops = inboundDir?.stops || [];
+
+      const outboundMax = outboundStops.length > 0 ? Math.max(...outboundStops.map(s => s.stop_order)) : 0;
+      const outboundMiddles = outboundStops
+        .filter(s => s.stop_order > 1 && s.stop_order < outboundMax)
+        .sort((a, b) => a.stop_order - b.stop_order)
+        .map(s => ({ id: s.stop_id, stop_name: s.stop_name, minute_from_start: s.minute_from_start }));
+
+      const inboundMax = inboundStops.length > 0 ? Math.max(...inboundStops.map(s => s.stop_order)) : 0;
+      const inboundMiddles = inboundStops
+        .filter(s => s.stop_order > 1 && s.stop_order < inboundMax)
+        .sort((a, b) => a.stop_order - b.stop_order)
+        .map(s => ({ id: s.stop_id, stop_name: s.stop_name, minute_from_start: s.minute_from_start }));
+
+      setOutboundMiddleStops(outboundMiddles);
+      setInboundMiddleStops(inboundMiddles);
+    } catch (err) {
+      console.error('Lỗi khi tải chi tiết điểm dừng:', err);
+    }
   };
 
   const buildPayload = () => {
@@ -120,6 +154,34 @@ export default function RouteList() {
     const baseBuses = (hWay > 0 && rtt > 0) ? Math.ceil(rtt / hWay) : 0;
     const recoveryBuses = Math.ceil(baseBuses * (Number(form.standby_ratio) || 0));
     const autoConfirmedBuses = baseBuses + recoveryBuses;
+
+    const outbound_stops = [
+      { stop_order: 1, stop_name: (form.outbound_start_point || '').trim(), minute_from_start: 0 },
+      ...outboundMiddleStops.map((s, idx) => ({
+        stop_order: idx + 2,
+        stop_name: (s.stop_name || '').trim(),
+        minute_from_start: Number(s.minute_from_start)
+      })),
+      {
+        stop_order: outboundMiddleStops.length + 2,
+        stop_name: (form.outbound_end_point || '').trim(),
+        minute_from_start: Number(form.outbound_travel_time_minutes)
+      }
+    ];
+
+    const inbound_stops = [
+      { stop_order: 1, stop_name: (form.inbound_start_point || '').trim(), minute_from_start: 0 },
+      ...inboundMiddleStops.map((s, idx) => ({
+        stop_order: idx + 2,
+        stop_name: (s.stop_name || '').trim(),
+        minute_from_start: Number(s.minute_from_start)
+      })),
+      {
+        stop_order: inboundMiddleStops.length + 2,
+        stop_name: (form.inbound_end_point || '').trim(),
+        minute_from_start: Number(form.inbound_travel_time_minutes)
+      }
+    ];
 
     return {
       route_name: form.route_name.trim(),
@@ -135,7 +197,9 @@ export default function RouteList() {
       inbound_end_point: form.inbound_end_point.trim(),
       inbound_distance: form.inbound_distance ? Number(form.inbound_distance) : null,
       outbound_travel_time_minutes: Number(form.outbound_travel_time_minutes),
-      inbound_travel_time_minutes: Number(form.inbound_travel_time_minutes)
+      inbound_travel_time_minutes: Number(form.inbound_travel_time_minutes),
+      outbound_stops,
+      inbound_stops
     };
   };
 
@@ -298,7 +362,7 @@ export default function RouteList() {
         {filtered.length === 0 && <div className="text-center py-12 text-gray-400">Không tìm thấy tuyến xe nào</div>}
       </div>
 
-      <Modal isOpen={showModal} title={editing ? 'Sửa tuyến xe' : 'Thêm tuyến xe'} onClose={() => setShowModal(false)}>
+      <Modal isOpen={showModal} size="max-w-4xl" title={editing ? 'Sửa tuyến xe' : 'Thêm tuyến xe'} onClose={() => setShowModal(false)}>
         <form onSubmit={handleSave} className="space-y-4">
           {formError && <AlertBox type="error" message={formError} />}
           {!editing && (
@@ -326,9 +390,9 @@ export default function RouteList() {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="border border-gray-100 p-3 rounded-xl bg-gray-50">
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">Lượt đi (Outbound)</h4>
+            <div className="border border-gray-100 p-3 rounded-xl bg-gray-50 flex flex-col justify-between">
               <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Lượt đi (Outbound)</h4>
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">Điểm đầu - cuối *</label>
                   <div className="flex gap-2">
@@ -347,10 +411,101 @@ export default function RouteList() {
                   </div>
                 </div>
               </div>
+
+              <div className="mt-4 pt-3 border-t border-gray-200">
+                <div className="flex justify-between items-center mb-2">
+                  <h5 className="text-xs font-bold text-gray-700">Điểm dừng Lượt đi</h5>
+                  <button
+                    type="button"
+                    onClick={() => setOutboundMiddleStops([...outboundMiddleStops, { id: Date.now() + Math.random(), stop_name: '', minute_from_start: '' }])}
+                    className="text-2xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded"
+                  >
+                    + Thêm điểm trung gian
+                  </button>
+                </div>
+                
+                <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+                  {/* First stop - locked */}
+                  <div className="flex items-center gap-1.5 bg-white p-1.5 rounded border border-gray-100 text-xs">
+                    <span className="w-4 h-4 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center font-mono font-bold text-3xs">1</span>
+                    <input
+                      value={form.outbound_start_point || ''}
+                      disabled
+                      placeholder="Bến đầu"
+                      className="flex-1 bg-gray-50 border rounded px-1.5 py-0.5 text-2xs text-gray-500 outline-none"
+                    />
+                    <input
+                      value="0"
+                      disabled
+                      className="w-10 bg-gray-50 border rounded px-1.5 py-0.5 text-2xs text-gray-500 text-center outline-none"
+                    />
+                    <span className="text-3xs text-gray-400">phút</span>
+                    <div className="w-5"></div>
+                  </div>
+
+                  {/* Middle stops */}
+                  {outboundMiddleStops.map((stop, index) => (
+                    <div key={stop.id} className="flex items-center gap-1.5 bg-white p-1.5 rounded border border-gray-200 text-xs">
+                      <span className="w-4 h-4 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-mono font-bold text-3xs">{index + 2}</span>
+                      <input
+                        value={stop.stop_name}
+                        onChange={e => {
+                          const list = [...outboundMiddleStops];
+                          list[index].stop_name = e.target.value;
+                          setOutboundMiddleStops(list);
+                        }}
+                        placeholder="Tên điểm dừng"
+                        required
+                        className="flex-1 border rounded px-1.5 py-0.5 text-2xs focus:ring-1 focus:ring-blue-500 outline-none"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        value={stop.minute_from_start}
+                        onChange={e => {
+                          const list = [...outboundMiddleStops];
+                          list[index].minute_from_start = e.target.value;
+                          setOutboundMiddleStops(list);
+                        }}
+                        placeholder="Phút"
+                        required
+                        className="w-12 border rounded px-1 py-0.5 text-2xs focus:ring-1 focus:ring-blue-500 text-center outline-none"
+                      />
+                      <span className="text-3xs text-gray-400">phút</span>
+                      <button
+                        type="button"
+                        onClick={() => setOutboundMiddleStops(outboundMiddleStops.filter(s => s.id !== stop.id))}
+                        className="text-red-500 hover:text-red-700 w-5 flex justify-center text-xs"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Last stop - locked */}
+                  <div className="flex items-center gap-1.5 bg-white p-1.5 rounded border border-gray-100 text-xs">
+                    <span className="w-4 h-4 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center font-mono font-bold text-3xs">{outboundMiddleStops.length + 2}</span>
+                    <input
+                      value={form.outbound_end_point || ''}
+                      disabled
+                      placeholder="Bến cuối"
+                      className="flex-1 bg-gray-50 border rounded px-1.5 py-0.5 text-2xs text-gray-500 outline-none"
+                    />
+                    <input
+                      value={form.outbound_travel_time_minutes || ''}
+                      disabled
+                      className="w-10 bg-gray-50 border rounded px-1.5 py-0.5 text-2xs text-gray-500 text-center outline-none"
+                    />
+                    <span className="text-3xs text-gray-400">phút</span>
+                    <div className="w-5"></div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="border border-gray-100 p-3 rounded-xl bg-gray-50">
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">Lượt về (Inbound)</h4>
+
+            <div className="border border-gray-100 p-3 rounded-xl bg-gray-50 flex flex-col justify-between">
               <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Lượt về (Inbound)</h4>
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">Điểm đầu - cuối *</label>
                   <div className="flex gap-2">
@@ -366,6 +521,96 @@ export default function RouteList() {
                   <div className="flex items-center justify-between gap-4">
                     <label className="text-xs font-medium text-gray-700 w-1/3">TG chạy (phút) *</label>
                     <input type="number" value={form.inbound_travel_time_minutes} onChange={e => setForm({ ...form, inbound_travel_time_minutes: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-gray-200">
+                <div className="flex justify-between items-center mb-2">
+                  <h5 className="text-xs font-bold text-gray-700">Điểm dừng Lượt về</h5>
+                  <button
+                    type="button"
+                    onClick={() => setInboundMiddleStops([...inboundMiddleStops, { id: Date.now() + Math.random(), stop_name: '', minute_from_start: '' }])}
+                    className="text-2xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded"
+                  >
+                    + Thêm điểm trung gian
+                  </button>
+                </div>
+                
+                <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+                  {/* First stop - locked */}
+                  <div className="flex items-center gap-1.5 bg-white p-1.5 rounded border border-gray-100 text-xs">
+                    <span className="w-4 h-4 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center font-mono font-bold text-3xs">1</span>
+                    <input
+                      value={form.inbound_start_point || ''}
+                      disabled
+                      placeholder="Bến đầu"
+                      className="flex-1 bg-gray-50 border rounded px-1.5 py-0.5 text-2xs text-gray-500 outline-none"
+                    />
+                    <input
+                      value="0"
+                      disabled
+                      className="w-10 bg-gray-50 border rounded px-1.5 py-0.5 text-2xs text-gray-500 text-center outline-none"
+                    />
+                    <span className="text-3xs text-gray-400">phút</span>
+                    <div className="w-5"></div>
+                  </div>
+
+                  {/* Middle stops */}
+                  {inboundMiddleStops.map((stop, index) => (
+                    <div key={stop.id} className="flex items-center gap-1.5 bg-white p-1.5 rounded border border-gray-200 text-xs">
+                      <span className="w-4 h-4 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-mono font-bold text-3xs">{index + 2}</span>
+                      <input
+                        value={stop.stop_name}
+                        onChange={e => {
+                          const list = [...inboundMiddleStops];
+                          list[index].stop_name = e.target.value;
+                          setInboundMiddleStops(list);
+                        }}
+                        placeholder="Tên điểm dừng"
+                        required
+                        className="flex-1 border rounded px-1.5 py-0.5 text-2xs focus:ring-1 focus:ring-blue-500 outline-none"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        value={stop.minute_from_start}
+                        onChange={e => {
+                          const list = [...inboundMiddleStops];
+                          list[index].minute_from_start = e.target.value;
+                          setInboundMiddleStops(list);
+                        }}
+                        placeholder="Phút"
+                        required
+                        className="w-12 border rounded px-1 py-0.5 text-2xs focus:ring-1 focus:ring-blue-500 text-center outline-none"
+                      />
+                      <span className="text-3xs text-gray-400">phút</span>
+                      <button
+                        type="button"
+                        onClick={() => setInboundMiddleStops(inboundMiddleStops.filter(s => s.id !== stop.id))}
+                        className="text-red-500 hover:text-red-700 w-5 flex justify-center text-xs"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Last stop - locked */}
+                  <div className="flex items-center gap-1.5 bg-white p-1.5 rounded border border-gray-100 text-xs">
+                    <span className="w-4 h-4 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center font-mono font-bold text-3xs">{inboundMiddleStops.length + 2}</span>
+                    <input
+                      value={form.inbound_end_point || ''}
+                      disabled
+                      placeholder="Bến cuối"
+                      className="flex-1 bg-gray-50 border rounded px-1.5 py-0.5 text-2xs text-gray-500 outline-none"
+                    />
+                    <input
+                      value={form.inbound_travel_time_minutes || ''}
+                      disabled
+                      className="w-10 bg-gray-50 border rounded px-1.5 py-0.5 text-2xs text-gray-500 text-center outline-none"
+                    />
+                    <span className="text-3xs text-gray-400">phút</span>
+                    <div className="w-5"></div>
                   </div>
                 </div>
               </div>

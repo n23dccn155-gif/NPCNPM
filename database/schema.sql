@@ -192,5 +192,6 @@ CREATE TABLE notifications (
     title VARCHAR(255) NOT NULL,
     content TEXT NOT NULL,
     is_read BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    redirect_url VARCHAR(255)
 );

@@ -24,7 +24,7 @@ export default function Topbar() {
   async function loadNotifications() {
     try {
       const res = await getMyNotifications(true); // Chỉ lấy chưa đọc
-      setNotifications(res.data);
+      setNotifications(res.data?.data || res.data || []);
     } catch (err) {
       console.error('Lỗi tải thông báo:', err);
     }
@@ -45,6 +45,19 @@ export default function Topbar() {
       setNotifications(prev => prev.filter(n => n.notification_id !== id));
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleNotificationClick = async (notif) => {
+    try {
+      await markNotificationAsRead(notif.notification_id);
+      setNotifications(prev => prev.filter(n => n.notification_id !== notif.notification_id));
+      setShowNotif(false);
+      if (notif.redirect_url) {
+        navigate(notif.redirect_url);
+      }
+    } catch (err) {
+      console.error('Lỗi khi click thông báo:', err);
     }
   };
 
@@ -112,7 +125,8 @@ export default function Topbar() {
                   notifications.map((notif) => (
                     <div
                       key={notif.notification_id}
-                      className="px-4 py-3 hover:bg-slate-50 border-b border-slate-50 last:border-b-0 flex gap-2 justify-between items-start"
+                      onClick={() => handleNotificationClick(notif)}
+                      className="px-4 py-3 hover:bg-slate-50 border-b border-slate-50 last:border-b-0 flex gap-2 justify-between items-start cursor-pointer transition-colors"
                     >
                       <div className="flex-1">
                         <div className="font-semibold text-gray-800 text-xs">{notif.title}</div>
@@ -122,8 +136,11 @@ export default function Topbar() {
                         </div>
                       </div>
                       <button
-                        onClick={() => handleMarkAsRead(notif.notification_id)}
-                        className="text-[11px] text-blue-500 hover:text-blue-700 font-medium ml-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMarkAsRead(notif.notification_id);
+                        }}
+                        className="text-[11px] text-blue-500 hover:text-blue-700 font-medium ml-2 flex-shrink-0"
                       >
                         Đã đọc
                       </button>

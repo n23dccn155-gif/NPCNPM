@@ -6,17 +6,28 @@ const driverController = {
   // Lấy danh sách tài xế
   getAll: async (req, res, next) => {
     try {
-      const { status } = req.query;
+      const { status, exclude_assigned } = req.query;
       let query = `
         SELECT d.driver_id, d.user_id, d.full_name, d.phone, d.license_class, d.status, u.username 
         FROM drivers d 
         LEFT JOIN users u ON d.user_id = u.user_id
       `;
       const params = [];
+      const conditions = [];
+
       if (status) {
-        query += ' WHERE d.status = $1';
         params.push(status);
+        conditions.push(`d.status = $${params.length}`);
       }
+
+      if (exclude_assigned === 'true') {
+        conditions.push(`d.driver_id NOT IN (SELECT driver_id FROM route_drivers)`);
+      }
+
+      if (conditions.length > 0) {
+        query += ' WHERE ' + conditions.join(' AND ');
+      }
+
       query += ' ORDER BY d.driver_id';
       const result = await pool.query(query, params);
       return success(res, result.rows);

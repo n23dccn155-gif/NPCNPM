@@ -309,18 +309,40 @@ const routeController = {
         );
 
         if (req.body.outbound_start_point) {
-          await client.query(
+          const dirRes = await client.query(
             `INSERT INTO route_directions (route_code, direction_type, start_point, end_point, distance_km, travel_time_minutes, turnaround_time_minutes)
-             VALUES ($1, 'outbound', $2, $3, $4, $5, $6)`,
+             VALUES ($1, 'outbound', $2, $3, $4, $5, $6)
+             RETURNING direction_id`,
             [route_code, req.body.outbound_start_point, req.body.outbound_end_point, req.body.outbound_distance || null, outbound_travel_time_minutes, short_layover_minutes]
           );
+          const dirId = dirRes.rows[0].direction_id;
+          if (req.body.outbound_stops && Array.isArray(req.body.outbound_stops)) {
+            for (const stop of req.body.outbound_stops) {
+              await client.query(
+                `INSERT INTO bus_stops (direction_id, stop_order, stop_name, minute_from_start)
+                 VALUES ($1, $2, $3, $4)`,
+                [dirId, Number(stop.stop_order), stop.stop_name.trim(), Number(stop.minute_from_start)]
+              );
+            }
+          }
         }
         if (req.body.inbound_start_point) {
-          await client.query(
+          const dirRes = await client.query(
             `INSERT INTO route_directions (route_code, direction_type, start_point, end_point, distance_km, travel_time_minutes, turnaround_time_minutes)
-             VALUES ($1, 'inbound', $2, $3, $4, $5, $6)`,
+             VALUES ($1, 'inbound', $2, $3, $4, $5, $6)
+             RETURNING direction_id`,
             [route_code, req.body.inbound_start_point, req.body.inbound_end_point, req.body.inbound_distance || null, inbound_travel_time_minutes, short_layover_minutes]
           );
+          const dirId = dirRes.rows[0].direction_id;
+          if (req.body.inbound_stops && Array.isArray(req.body.inbound_stops)) {
+            for (const stop of req.body.inbound_stops) {
+              await client.query(
+                `INSERT INTO bus_stops (direction_id, stop_order, stop_name, minute_from_start)
+                 VALUES ($1, $2, $3, $4)`,
+                [dirId, Number(stop.stop_order), stop.stop_name.trim(), Number(stop.minute_from_start)]
+              );
+            }
+          }
         }
 
         await client.query('COMMIT');
@@ -425,22 +447,46 @@ const routeController = {
         }
 
         if (req.body.outbound_start_point) {
-          await client.query(
+          const dirRes = await client.query(
             `INSERT INTO route_directions (route_code, direction_type, start_point, end_point, distance_km, travel_time_minutes, turnaround_time_minutes)
              VALUES ($1, 'outbound', $2, $3, $4, $5, $6)
              ON CONFLICT (route_code, direction_type)
-             DO UPDATE SET start_point = EXCLUDED.start_point, end_point = EXCLUDED.end_point, distance_km = EXCLUDED.distance_km, travel_time_minutes = EXCLUDED.travel_time_minutes, turnaround_time_minutes = EXCLUDED.turnaround_time_minutes`,
+             DO UPDATE SET start_point = EXCLUDED.start_point, end_point = EXCLUDED.end_point, distance_km = EXCLUDED.distance_km, travel_time_minutes = EXCLUDED.travel_time_minutes, turnaround_time_minutes = EXCLUDED.turnaround_time_minutes
+             RETURNING direction_id`,
             [routeCode, req.body.outbound_start_point, req.body.outbound_end_point, req.body.outbound_distance || null, outbound_travel_time_minutes, short_layover_minutes]
           );
+          const dirId = dirRes.rows[0].direction_id;
+          await client.query('DELETE FROM bus_stops WHERE direction_id = $1', [dirId]);
+          if (req.body.outbound_stops && Array.isArray(req.body.outbound_stops)) {
+            for (const stop of req.body.outbound_stops) {
+              await client.query(
+                `INSERT INTO bus_stops (direction_id, stop_order, stop_name, minute_from_start)
+                 VALUES ($1, $2, $3, $4)`,
+                [dirId, Number(stop.stop_order), stop.stop_name.trim(), Number(stop.minute_from_start)]
+              );
+            }
+          }
         }
         if (req.body.inbound_start_point) {
-          await client.query(
+          const dirRes = await client.query(
             `INSERT INTO route_directions (route_code, direction_type, start_point, end_point, distance_km, travel_time_minutes, turnaround_time_minutes)
              VALUES ($1, 'inbound', $2, $3, $4, $5, $6)
              ON CONFLICT (route_code, direction_type)
-             DO UPDATE SET start_point = EXCLUDED.start_point, end_point = EXCLUDED.end_point, distance_km = EXCLUDED.distance_km, travel_time_minutes = EXCLUDED.travel_time_minutes, turnaround_time_minutes = EXCLUDED.turnaround_time_minutes`,
+             DO UPDATE SET start_point = EXCLUDED.start_point, end_point = EXCLUDED.end_point, distance_km = EXCLUDED.distance_km, travel_time_minutes = EXCLUDED.travel_time_minutes, turnaround_time_minutes = EXCLUDED.turnaround_time_minutes
+             RETURNING direction_id`,
             [routeCode, req.body.inbound_start_point, req.body.inbound_end_point, req.body.inbound_distance || null, inbound_travel_time_minutes, short_layover_minutes]
           );
+          const dirId = dirRes.rows[0].direction_id;
+          await client.query('DELETE FROM bus_stops WHERE direction_id = $1', [dirId]);
+          if (req.body.inbound_stops && Array.isArray(req.body.inbound_stops)) {
+            for (const stop of req.body.inbound_stops) {
+              await client.query(
+                `INSERT INTO bus_stops (direction_id, stop_order, stop_name, minute_from_start)
+                 VALUES ($1, $2, $3, $4)`,
+                [dirId, Number(stop.stop_order), stop.stop_name.trim(), Number(stop.minute_from_start)]
+              );
+            }
+          }
         }
 
         await client.query('COMMIT');
