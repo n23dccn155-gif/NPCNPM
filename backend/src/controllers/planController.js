@@ -49,6 +49,85 @@ function calculateSchedulingMetrics(route, outbound, inbound) {
   };
 }
 
+// ─── THUẬT TOÁN FIFO XẾP LỊCH ──────────────────────────────────────────────
+//
+// Mỗi headway phút BẮT BUỘC có 1 chuyến từ A và 1 chuyến từ B.
+// Xe nào đứng đầu FIFO của bến đó mà readyAt <= giờ xuất bến → chạy chuyến đó.
+// Nếu FIFO rỗng hoặc xe chưa kịp về → sinh xe mới tại bến.
+// Sau khi đến đích + hết layover → vào cuối FIFO của bến đích.
+// Kết quả: tripsByVehicle[vehicleIdx] = [...trips], tổng số xe dùng = số xe mới sinh.
+//
+function runFifoScheduling({ startMin, endMin, headwayMinutes, outboundTravel, outboundLayover, inboundTravel, inboundLayover }) {
+  // Danh sách giờ xuất bến bắt buộc từ đầu ngày đến cuối ngày
+  const departureTimes = [];
+  for (let t = startMin; t <= endMin; t += headwayMinutes) {
+    departureTimes.push(Math.round(t * 100) / 100);
+  }
+
+  // FIFO_A: hàng chờ xe ở bến A, FIFO_B: hàng chờ xe ở bến B
+  // Mỗi phần tử: { vehicleIdx, readyAt }
+  const fifoA = [];
+  const fifoB = [];
+
+  let vehicleCount = 0;
+  // tripsByVehicle[vehicleIdx] = array of trip objects
+  const tripsByVehicle = [];
+
+  function newVehicle() {
+    const idx = vehicleCount++;
+    tripsByVehicle.push([]);
+    return idx;
+  }
+
+  for (const depTime of departureTimes) {
+    // --- Chuyến từ A tại thời điểm depTime ---
+    let vehicleA;
+    // Lấy xe sớm nhất trong FIFO_A mà readyAt <= depTime
+    const readyInA = fifoA.filter(v => v.readyAt <= depTime);
+    if (readyInA.length > 0) {
+      // Lấy xe vào FIFO sớm nhất (đầu hàng)
+      vehicleA = readyInA[0];
+      fifoA.splice(fifoA.indexOf(vehicleA), 1);
+      vehicleA = vehicleA.vehicleIdx;
+    } else {
+      // Không có xe kịp → sinh xe mới tại A
+      vehicleA = newVehicle();
+    }
+    const arrAtB = depTime + outboundTravel;
+    const readyAtB = arrAtB + outboundLayover;
+    tripsByVehicle[vehicleA].push({
+      side: 'A', // xuất phát từ A
+      departureMin: depTime,
+      arrivalMin: arrAtB,
+      vehicleIdx: vehicleA
+    });
+    // Xe vào cuối FIFO_B sau khi nghỉ xong
+    fifoB.push({ vehicleIdx: vehicleA, readyAt: readyAtB });
+
+    // --- Chuyến từ B tại thời điểm depTime ---
+    let vehicleB;
+    const readyInB = fifoB.filter(v => v.readyAt <= depTime);
+    if (readyInB.length > 0) {
+      vehicleB = readyInB[0];
+      fifoB.splice(fifoB.indexOf(vehicleB), 1);
+      vehicleB = vehicleB.vehicleIdx;
+    } else {
+      vehicleB = newVehicle();
+    }
+    const arrAtA = depTime + inboundTravel;
+    const readyAtA = arrAtA + inboundLayover;
+    tripsByVehicle[vehicleB].push({
+      side: 'B',
+      departureMin: depTime,
+      arrivalMin: arrAtA,
+      vehicleIdx: vehicleB
+    });
+    fifoA.push({ vehicleIdx: vehicleB, readyAt: readyAtA });
+  }
+
+  return { tripsByVehicle, totalVehicles: vehicleCount, departureTimes };
+}
+
 async function getRouteDirections(client, routeCode) {
   const result = await client.query(
     `SELECT *
@@ -97,8 +176,15 @@ const planController = {
         conditions.push(`p.route_code = $${params.length}`);
       }
       if (status) {
-        params.push(status);
-        conditions.push(`p.status = $${params.length}`);
+        if (status.includes(',')) {
+          const statuses = status.split(',');
+          const placeholders = statuses.map((_, idx) => `$${params.length + idx + 1}`).join(', ');
+          params.push(...statuses);
+          conditions.push(`p.status IN (${placeholders})`);
+        } else {
+          params.push(status);
+          conditions.push(`p.status = $${params.length}`);
+        }
       }
       if (date) {
         params.push(date);
@@ -319,26 +405,23 @@ const planController = {
 
       const routeRes = await client.query('SELECT * FROM routes WHERE route_code = $1', [plan.route_code]);
       const route = routeRes.rows[0];
-      const headway_minutes = route.headway_minutes || 15;
-      const short_layover = route.short_layover_minutes || 10;
-      const long_layover = route.long_layover_minutes || 15;
-      const max_driving_minutes = route.max_driving_minutes || 240;
-      const standby_ratio = route.standby_ratio || 0.15;
-      
       const { outbound, inbound } = await getRouteDirections(client, plan.route_code);
 
       if (!outbound || !inbound) {
         await client.query('ROLLBACK');
         return error(res, 'Tuyến chưa cấu hình đủ lượt đi và lượt về', 400);
       }
+      if (Number(route.expected_trips_per_day) < 2) {
+        await client.query('ROLLBACK');
+        return error(res, 'Số lượt xuất bến dự kiến mỗi chiều phải lớn hơn hoặc bằng 2', 400);
+      }
+      if (!Number.isFinite(Number(route.headway_minutes)) || Number(route.headway_minutes) <= 0) {
+        await client.query('ROLLBACK');
+        return error(res, 'Tuyến chưa có giãn cách khai thác hợp lệ', 400);
+      }
 
-      const outbound_travel_time = Number(outbound.travel_time_minutes) || 80;
-      const inbound_travel_time = Number(inbound.travel_time_minutes) || 80;
-
-
-      const startMin = timeToMinutes(route.start_time); // e.g. 05:00
-      const endMin = timeToMinutes(route.end_time);     // e.g. 21:30
-      const inboundStartMin = route.inbound_start_time ? timeToMinutes(route.inbound_start_time) : startMin + 30;
+      const metrics = calculateSchedulingMetrics(route, outbound, inbound);
+      // FIFO tự tính số xe cần thiết — không cần validate confirmed_operating_buses
 
       await client.query(
         `DELETE FROM assignments
@@ -348,152 +431,100 @@ const planController = {
       await client.query('DELETE FROM trips WHERE plan_id = $1', [planId]);
       await client.query('DELETE FROM trip_groups WHERE plan_id = $1', [planId]);
 
-      const y = plan.operation_date.getFullYear();
-      const m = String(plan.operation_date.getMonth() + 1).padStart(2, '0');
-      const d = String(plan.operation_date.getDate()).padStart(2, '0');
-      const dateStr = `${y}-${m}-${d}`;
-      
-      const buses = [];
-      const requiredBuses = Math.ceil((outbound_travel_time + inbound_travel_time + short_layover * 2) / headway_minutes);
-      
-      for (let i = 0; i < requiredBuses; i++) {
-        let startLoc = i % 2 === 0 ? 'A' : 'B';
-        let aIndex = Math.floor(i / 2);
-        let bIndex = Math.floor((i - 1) / 2); // Wait, if i=0 -> A (0), i=1 -> B (0), i=2 -> A (1), i=3 -> B (1)
-        if(i % 2 === 1) bIndex = Math.floor(i / 2); 
-        
-        let startTime = startLoc === 'A' ? startMin + (aIndex * headway_minutes) : inboundStartMin + (bIndex * headway_minutes);
-        
-        buses.push({
-            id: i + 1,
-            startLoc: startLoc,
-            startTime: startTime
-        });
-      }
+      const dateStr = plan.operation_date.toISOString().split('T')[0];
 
-      const allDrivers = [];
-      const allGeneratedTrips = [];
+      // ─── THUẬT TOÁN FIFO XẾP LỊCH 2 CHIỀU ────────────────────────────────────
+      //
+      // Nguyên tắc:
+      //   • Mỗi headway phút BẮT BUỘC có 1 chuyến rời A và 1 chuyến rời B.
+      //   • Xe trong hàng FIFO của bến đó mà readyAt <= giờ xuất bến → chạy chuyến.
+      //   • Nếu không có xe kịp → sinh xe mới tại bến đó.
+      //   • Sau khi đến đích + hết layover → xe vào cuối FIFO của bến đích.
+      //   • Số xe mới sinh ra = số xe tối thiểu cần thiết cho ngày hôm đó.
+      //
+      const outboundTravel  = Number(outbound.travel_time_minutes);
+      const outboundLayover = Number(outbound.turnaround_time_minutes);
+      const inboundTravel   = Number(inbound.travel_time_minutes);
+      const inboundLayover  = Number(inbound.turnaround_time_minutes);
+      const { startMin, endMin, headwayMinutes } = metrics;
 
-      buses.forEach(bus => {
-          let currentLoc = bus.startLoc;
-          let currentTime = bus.startTime;
-          let drivingSinceRest = 0;
-          let shiftCount = 1;
-          
-          let currentDriver = {
-              busId: bus.id,
-              shiftName: `Ca ${shiftCount}`,
-              startLoc: currentLoc,
-              startTime: currentTime,
-              trips: []
-          };
-          
-          while (currentTime <= endMin) {
-              if (currentLoc === 'A' && currentTime > endMin - 60) {
-                  break; 
-              }
-              
-              let current_travel_time = currentLoc === 'A' ? outbound_travel_time : inbound_travel_time;
-              let arrTime = currentTime + current_travel_time;
-              let t = {
-                  direction_id: currentLoc === 'A' ? outbound.direction_id : inbound.direction_id,
-                  startLoc: currentLoc,
-                  startTime: currentTime,
-                  endLoc: currentLoc === 'A' ? 'B' : 'A',
-                  endTime: arrTime,
-                  scheduled_departure: buildTimestamp(dateStr, currentTime),
-                  scheduled_arrival: buildTimestamp(dateStr, arrTime)
-              };
-              currentDriver.trips.push(t);
-              allGeneratedTrips.push(t);
-              
-              drivingSinceRest += current_travel_time;
-              
-              let layover = short_layover;
-              if (drivingSinceRest >= max_driving_minutes) {
-                  layover = long_layover;
-                  drivingSinceRest = 0;
-              }
-              
-              currentLoc = currentLoc === 'A' ? 'B' : 'A';
-              currentTime = arrTime + layover;
-              
-              const halfTime = bus.startTime + (endMin - bus.startTime) / 2;
-              if (currentLoc === 'A' && currentTime >= halfTime && shiftCount === 1 && currentTime < endMin - 120) {
-                  currentDriver.endTime = currentDriver.trips[currentDriver.trips.length-1].endTime;
-                  allDrivers.push(currentDriver);
-                  
-                  shiftCount++;
-                  currentDriver = {
-                      busId: bus.id,
-                      shiftName: `Ca ${shiftCount}`,
-                      startLoc: currentLoc,
-                      startTime: currentTime,
-                      trips: []
-                  };
-                  drivingSinceRest = 0; 
-              }
-          }
-          
-          if (currentDriver && currentDriver.trips.length > 0) {
-              if (currentLoc === 'B') {
-                  let arrTime = currentTime + inbound_travel_time;
-                  let t = {
-                      direction_id: inbound.direction_id,
-                      startLoc: 'B',
-                      startTime: currentTime,
-                      endLoc: 'A',
-                      endTime: arrTime,
-                      scheduled_departure: buildTimestamp(dateStr, currentTime),
-                      scheduled_arrival: buildTimestamp(dateStr, arrTime)
-                  };
-                  currentDriver.trips.push(t);
-                  allGeneratedTrips.push(t);
-                  currentLoc = 'A';
-                  currentTime = arrTime + short_layover;
-              }
-              currentDriver.endTime = currentDriver.trips[currentDriver.trips.length-1].endTime;
-              allDrivers.push(currentDriver);
-          }
+      // Chạy thuật toán FIFO
+      const fifoResult = runFifoScheduling({
+        startMin, endMin, headwayMinutes,
+        outboundTravel, outboundLayover,
+        inboundTravel, inboundLayover
       });
 
-      allGeneratedTrips
-        .sort((a, b) => new Date(a.scheduled_departure) - new Date(b.scheduled_departure))
-        .forEach((trip, index) => {
-          trip.trip_order = index + 1;
-        });
+      const { tripsByVehicle, totalVehicles } = fifoResult;
 
-      for (const d of allDrivers) {
-          const groupName = `Xe ${d.busId} - ${d.shiftName}`;
-          const groupStart = buildTimestamp(dateStr, d.startTime);
-          const groupEnd = buildTimestamp(dateStr, d.endTime);
-
-          const groupRes = await client.query(
-            `INSERT INTO trip_groups (plan_id, group_name, start_time, end_time, status)
-             VALUES ($1, $2, $3, $4, 'unassigned')
-             RETURNING group_id`,
-            [planId, groupName, groupStart, groupEnd]
-          );
-          const groupId = groupRes.rows[0].group_id;
-
-          for (const trip of d.trips) {
-              await client.query(
-                `INSERT INTO trips (
-                   plan_id, direction_id, group_id, trip_order,
-                   scheduled_departure, scheduled_arrival, status
-                 ) VALUES ($1, $2, $3, $4, $5, $6, 'scheduled')`,
-                [
-                  planId, trip.direction_id, groupId, trip.trip_order,
-                  trip.scheduled_departure, trip.scheduled_arrival
-                ]
-              );
-          }
+      // Đổi tất cả trips thành đối tượng đầy đủ với direction_id và timestamp
+      const allGeneratedTrips = [];
+      for (let vIdx = 0; vIdx < totalVehicles; vIdx++) {
+        for (const t of tripsByVehicle[vIdx]) {
+          allGeneratedTrips.push({
+            direction_id:        t.side === 'A' ? outbound.direction_id : inbound.direction_id,
+            scheduled_departure: buildTimestamp(dateStr, t.departureMin),
+            scheduled_arrival:   buildTimestamp(dateStr, t.arrivalMin),
+            group_index:         vIdx
+          });
+        }
       }
 
-      const mainDrivers = allDrivers.length;
-      const standbyDrivers = Math.ceil(mainDrivers * standby_ratio);
-      const totalDailyDrivers = mainDrivers + standbyDrivers;
-      const totalWeeklyDrivers = Math.ceil((totalDailyDrivers * 7) / 6);
+      // Gán trip_order toàn cục theo giờ xuất bến
+      allGeneratedTrips
+        .sort((a, b) => new Date(a.scheduled_departure) - new Date(b.scheduled_departure))
+        .forEach((trip, index) => { trip.trip_order = index + 1; });
+
+      // ─── Tính số xe và tài xế cần thiết ───────────────────────────────────────
+      // - Số xe vận doanh tối thiểu = totalVehicles (số xe mới sinh trong FIFO)
+      // - Mỗi xe = 1 tài xế chính suốt ngày → số tài xế = totalVehicles
+      // - Thêm tài xế dự phòng (standby) = ceil(totalVehicles * standby_ratio)
+      const standbyRatio   = Number(route.standby_ratio) || 0.15;
+      const requiredDrivers        = totalVehicles;
+      const requiredStandbyDrivers = Math.ceil(totalVehicles * standbyRatio);
+      const requiredTotalDrivers   = requiredDrivers + requiredStandbyDrivers;
+      const backupBusRatio = Number(route.backup_bus_ratio) || 0.20;
+      const requiredBackupBuses    = Math.ceil(totalVehicles * backupBusRatio);
+      const requiredTotalBuses     = totalVehicles + requiredBackupBuses;
+
+      // Tạo trip_groups và ghi trips vào DB (mỗi xe = 1 group)
+      for (let vIdx = 0; vIdx < totalVehicles; vIdx++) {
+        const tripsInGroup = allGeneratedTrips
+          .filter(t => t.group_index === vIdx)
+          .sort((a, b) => new Date(a.scheduled_departure) - new Date(b.scheduled_departure));
+        if (tripsInGroup.length === 0) continue;
+
+        const groupStart = tripsInGroup[0].scheduled_departure;
+        const groupEnd = tripsInGroup.reduce((latest, trip) =>
+          new Date(trip.scheduled_arrival) > new Date(latest) ? trip.scheduled_arrival : latest
+        , tripsInGroup[0].scheduled_arrival);
+
+        // Xác định xe xuất phát từ đâu (chuyến đầu tiên)
+        const firstTrip = tripsInGroup[0];
+        const startsAtA = firstTrip.direction_id === outbound.direction_id;
+        const groupLabel = startsAtA
+          ? `Xe ${vIdx + 1} (xuất phát A)`
+          : `Xe ${vIdx + 1} (xuất phát B)`;
+
+        const groupRes = await client.query(
+          `INSERT INTO trip_groups (plan_id, group_name, start_time, end_time, status)
+           VALUES ($1, $2, $3, $4, 'unassigned')
+           RETURNING group_id`,
+          [planId, groupLabel, groupStart, groupEnd]
+        );
+        const groupId = groupRes.rows[0].group_id;
+
+        for (const trip of tripsInGroup) {
+          await client.query(
+            `INSERT INTO trips (
+               plan_id, direction_id, group_id, trip_order,
+               scheduled_departure, scheduled_arrival, status
+             ) VALUES ($1, $2, $3, $4, $5, $6, 'scheduled')`,
+            [planId, trip.direction_id, groupId, trip.trip_order,
+             trip.scheduled_departure, trip.scheduled_arrival]
+          );
+        }
+      }
 
       await client.query('COMMIT');
 
@@ -519,12 +550,21 @@ const planController = {
       } catch (e) { console.error('Notification error:', e); }
 
       return success(res, {
-        trips_generated: allGeneratedTrips.length,
-        groups_generated: requiredBuses,
-        total_shifts: mainDrivers,
-        daily_drivers_needed: totalDailyDrivers,
-        weekly_drivers_needed: totalWeeklyDrivers
-      }, 'Sinh chuyến & Phân ca nâng cao thành công');
+        trips_generated:               allGeneratedTrips.length,
+        groups_generated:              totalVehicles,
+        expected_trips_per_direction:  metrics.expectedTripsPerDirection,
+        generated_trips_per_direction: metrics.generatedTripsPerDirection,
+        calculated_headway_minutes:    Number(metrics.calculatedHeadwayMinutes.toFixed(2)),
+        headway_minutes:               Number(metrics.headwayMinutes.toFixed(2)),
+        round_trip_time_minutes:       metrics.roundTripTimeMinutes,
+        // ── Kết quả tính nhân lực / phương tiện ──
+        required_operating_buses:      totalVehicles,
+        required_backup_buses:         requiredBackupBuses,
+        required_total_buses:          requiredTotalBuses,
+        required_operating_drivers:    requiredDrivers,
+        required_standby_drivers:      requiredStandbyDrivers,
+        required_total_drivers:        requiredTotalDrivers
+      }, 'Sinh chuyến theo FIFO thành công — xem required_* để biết số xe/tài cần thiết');
     } catch (err) {
       await client.query('ROLLBACK');
       next(err);
@@ -535,49 +575,88 @@ const planController = {
 
   submitPlan: async (req, res, next) => {
     const { planId } = req.params;
+    const { target } = req.query;
     const dispatcherId = req.user.id;
+    const client = await pool.connect();
 
     try {
-      const planRes = await pool.query('SELECT * FROM operation_plans WHERE plan_id = $1', [planId]);
+      await client.query('BEGIN');
+      const planRes = await client.query('SELECT * FROM operation_plans WHERE plan_id = $1', [planId]);
       if (!planRes.rows.length) {
+        await client.query('ROLLBACK');
         return error(res, 'Không tìm thấy kế hoạch vận doanh', 404);
       }
       const plan = planRes.rows[0];
 
-      const tripsCount = await pool.query('SELECT COUNT(*) FROM trips WHERE plan_id = $1', [planId]);
-      if (Number(tripsCount.rows[0].count) === 0) {
-        return error(res, 'Kế hoạch chưa có chuyến xe nào được sinh', 400);
+      let targetPlans = [];
+      if (target === 'future') {
+        const targetPlansRes = await client.query(
+          `SELECT * FROM operation_plans 
+           WHERE route_code = $1 AND operation_date >= $2 AND status IN ('draft', 'rejected')
+           ORDER BY operation_date ASC`,
+          [plan.route_code, plan.operation_date]
+        );
+        targetPlans = targetPlansRes.rows;
+      } else {
+        targetPlans = [plan];
       }
 
-      const unassignedGroups = await pool.query(
-        "SELECT COUNT(*) FROM trip_groups WHERE plan_id = $1 AND status = 'unassigned'",
-        [planId]
-      );
-      if (Number(unassignedGroups.rows[0].count) > 0) {
-        return error(res, 'Còn nhóm chuyến chưa được phân công xe và tài xế', 400);
+      if (targetPlans.length === 0) {
+        await client.query('ROLLBACK');
+        return error(res, 'Không có kế hoạch nháp nào cần gửi duyệt', 400);
       }
 
-      const updateRes = await pool.query(
+      const formatDate = (date) => {
+        const d = new Date(date);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+      };
+
+      // Validate all target plans first
+      for (const p of targetPlans) {
+        const dateStr = formatDate(p.operation_date);
+        const tripsCount = await client.query('SELECT COUNT(*) FROM trips WHERE plan_id = $1', [p.plan_id]);
+        if (Number(tripsCount.rows[0].count) === 0) {
+          await client.query('ROLLBACK');
+          return error(res, `Kế hoạch ngày ${dateStr} chưa có chuyến xe nào được sinh`, 400);
+        }
+
+        const unassignedGroups = await client.query(
+          "SELECT COUNT(*) FROM trip_groups WHERE plan_id = $1 AND status = 'unassigned'",
+          [p.plan_id]
+        );
+        if (Number(unassignedGroups.rows[0].count) > 0) {
+          await client.query('ROLLBACK');
+          return error(res, `Kế hoạch ngày ${dateStr} còn nhóm chuyến chưa được phân công xe và tài xế`, 400);
+        }
+      }
+
+      const planIds = targetPlans.map(p => p.plan_id);
+
+      // Update all target plans status to pending_approval
+      await client.query(
         `UPDATE operation_plans
          SET status = 'pending_approval', submitted_by = $1
-         WHERE plan_id = $2
-         RETURNING *`,
-        [dispatcherId, planId]
+         WHERE plan_id = ANY($2)`,
+        [dispatcherId, planIds]
       );
 
-      const managers = await pool.query("SELECT user_id FROM users WHERE role = 'manager' AND status = 'active'");
-      const y = plan.operation_date.getFullYear();
-      const m = String(plan.operation_date.getMonth() + 1).padStart(2, '0');
-      const d = String(plan.operation_date.getDate()).padStart(2, '0');
-      const dateStr = `${y}-${m}-${d}`;
-      for (const manager of managers.rows) {
-        await pool.query(
-          `INSERT INTO notifications (user_id, title, content)
-           VALUES ($1, 'Kế hoạch chờ duyệt', $2)`,
-          [manager.user_id, `Kế hoạch vận doanh tuyến ${plan.route_code} ngày ${dateStr} đang chờ duyệt.`]
-        );
+      // Notify managers
+      const managers = await client.query("SELECT user_id FROM users WHERE role = 'manager' AND status = 'active'");
+      for (const p of targetPlans) {
+        const dateStr = formatDate(p.operation_date);
+        for (const manager of managers.rows) {
+          await client.query(
+            `INSERT INTO notifications (user_id, title, content, redirect_url)
+             VALUES ($1, 'Kế hoạch chờ duyệt', $2, '/manager/plan-approval')`,
+            [manager.user_id, `Kế hoạch vận doanh tuyến ${p.route_code} ngày ${dateStr} đang chờ duyệt.`]
+          );
+        }
       }
 
+<<<<<<< HEAD
       broadcast('NEW_NOTIFICATION', {
         title: 'Kế hoạch chờ duyệt',
         content: `Kế hoạch vận doanh tuyến ${plan.route_code} ngày ${dateStr} đang chờ duyệt.`,
@@ -585,8 +664,18 @@ const planController = {
       });
 
       return success(res, updateRes.rows[0], 'Gửi duyệt kế hoạch thành công');
+=======
+      await client.query('COMMIT');
+      
+      // Return the primary updated plan
+      const updatedPlanRes = await pool.query('SELECT * FROM operation_plans WHERE plan_id = $1', [planId]);
+      return success(res, updatedPlanRes.rows[0], 'Gửi duyệt kế hoạch thành công');
+>>>>>>> ed64ea497b8925f8778ff9f6b7f8fbdbff782002
     } catch (err) {
+      await client.query('ROLLBACK');
       next(err);
+    } finally {
+      client.release();
     }
   },
 
@@ -624,8 +713,8 @@ const planController = {
         );
 
         await pool.query(
-          `INSERT INTO notifications (user_id, title, content)
-           VALUES ($1, 'Kế hoạch được duyệt', $2)`,
+          `INSERT INTO notifications (user_id, title, content, redirect_url)
+           VALUES ($1, 'Kế hoạch được duyệt', $2, '/dispatcher/calendar')`,
           [plan.created_by, `Kế hoạch vận doanh tuyến ${plan.route_code} ngày ${dateStr} đã được duyệt.`]
         );
 
@@ -646,8 +735,8 @@ const planController = {
 
         for (const driver of assignedDrivers.rows) {
           await pool.query(
-            `INSERT INTO notifications (user_id, title, content)
-             VALUES ($1, 'Lịch chạy xe mới', $2)`,
+            `INSERT INTO notifications (user_id, title, content, redirect_url)
+             VALUES ($1, 'Lịch chạy xe mới', $2, '/driver/schedule')`,
             [driver.user_id, `Bạn có lịch phân công chuyến xe mới vào ngày ${dateStr}.`]
           );
 
@@ -673,8 +762,8 @@ const planController = {
       );
 
       await pool.query(
-        `INSERT INTO notifications (user_id, title, content)
-         VALUES ($1, 'Kế hoạch bị từ chối', $2)`,
+        `INSERT INTO notifications (user_id, title, content, redirect_url)
+         VALUES ($1, 'Kế hoạch bị từ chối', $2, '/dispatcher/calendar')`,
         [plan.created_by, `Kế hoạch vận doanh tuyến ${plan.route_code} ngày ${dateStr} bị từ chối. Lý do: ${reject_reason}`]
       );
 
@@ -727,8 +816,8 @@ const planController = {
           );
 
           await client.query(
-            `INSERT INTO notifications (user_id, title, content)
-             VALUES ($1, 'Kế hoạch được duyệt', $2)`,
+            `INSERT INTO notifications (user_id, title, content, redirect_url)
+             VALUES ($1, 'Kế hoạch được duyệt', $2, '/dispatcher/calendar')`,
             [plan.created_by, `Kế hoạch vận doanh tuyến ${plan.route_code} ngày ${dateStr} đã được duyệt.`]
           );
 
@@ -743,8 +832,8 @@ const planController = {
 
           for (const driver of assignedDrivers.rows) {
             await client.query(
-              `INSERT INTO notifications (user_id, title, content)
-               VALUES ($1, 'Lịch làm việc mới', $2)`,
+              `INSERT INTO notifications (user_id, title, content, redirect_url)
+               VALUES ($1, 'Lịch làm việc mới', $2, '/driver/schedule')`,
               [driver.user_id, `Bạn có lịch làm việc mới vào ngày ${dateStr}.`]
             );
           }
@@ -757,8 +846,8 @@ const planController = {
           );
 
           await client.query(
-            `INSERT INTO notifications (user_id, title, content)
-             VALUES ($1, 'Kế hoạch bị từ chối', $2)`,
+            `INSERT INTO notifications (user_id, title, content, redirect_url)
+             VALUES ($1, 'Kế hoạch bị từ chối', $2, '/dispatcher/calendar')`,
             [plan.created_by, `Kế hoạch vận doanh tuyến ${plan.route_code} ngày ${dateStr} bị từ chối. Lý do: ${reject_reason}`]
           );
         }
@@ -767,6 +856,59 @@ const planController = {
 
       await client.query('COMMIT');
       return success(res, { processed: successCount }, 'Phê duyệt hàng loạt thành công');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      next(err);
+    } finally {
+      client.release();
+    }
+  },
+
+  deletePlan: async (req, res, next) => {
+    const { planId } = req.params;
+    const { target } = req.query; // 'future' or default
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const planRes = await client.query('SELECT * FROM operation_plans WHERE plan_id = $1', [planId]);
+      if (!planRes.rows.length) {
+        await client.query('ROLLBACK');
+        return error(res, 'Không tìm thấy kế hoạch vận doanh', 404);
+      }
+      
+      const plan = planRes.rows[0];
+      if (plan.status === 'approved') {
+        await client.query('ROLLBACK');
+        return error(res, 'Không thể xóa kế hoạch đã phê duyệt', 400);
+      }
+
+      if (target === 'future') {
+        // Find all matching plan IDs for the same route, starting from the selected plan's date, excluding approved ones
+        const targetPlansRes = await client.query(
+          `SELECT plan_id FROM operation_plans 
+           WHERE route_code = $1 AND operation_date >= $2 AND status != 'approved'`,
+          [plan.route_code, plan.operation_date]
+        );
+        const planIds = targetPlansRes.rows.map(r => r.plan_id);
+
+        if (planIds.length > 0) {
+          await client.query(
+            `DELETE FROM assignments WHERE group_id IN (SELECT group_id FROM trip_groups WHERE plan_id = ANY($1))`,
+            [planIds]
+          );
+          await client.query(`DELETE FROM trips WHERE plan_id = ANY($1)`, [planIds]);
+          await client.query(`DELETE FROM trip_groups WHERE plan_id = ANY($1)`, [planIds]);
+          await client.query(`DELETE FROM operation_plans WHERE plan_id = ANY($1)`, [planIds]);
+        }
+      } else {
+        await client.query('DELETE FROM assignments WHERE group_id IN (SELECT group_id FROM trip_groups WHERE plan_id = $1)', [planId]);
+        await client.query('DELETE FROM trips WHERE plan_id = $1', [planId]);
+        await client.query('DELETE FROM trip_groups WHERE plan_id = $1', [planId]);
+        await client.query('DELETE FROM operation_plans WHERE plan_id = $1', [planId]);
+      }
+
+      await client.query('COMMIT');
+      return success(res, null, 'Xóa kế hoạch nháp thành công');
     } catch (err) {
       await client.query('ROLLBACK');
       next(err);

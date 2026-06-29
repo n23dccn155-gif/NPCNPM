@@ -23,7 +23,7 @@ export function PublicRoute({ children }) {
   if (user) {
     const roleRoutes = {
       manager: '/manager/routes',
-      dispatcher: '/dispatcher/schedule',
+      dispatcher: '/dispatcher/calendar',
       driver: '/driver/schedule'
     };
     return <Navigate to={roleRoutes[user.role] || '/dashboard'} replace />;

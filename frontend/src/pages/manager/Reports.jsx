@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import { PageHeader, AlertBox } from '../../components/UI';
 import { getRouteReport, getBusReport, getDriverReport } from '../../services/reportService';
@@ -49,15 +49,15 @@ export default function Reports() {
   const [error, setError] = useState('');
   const [hasLoaded, setHasLoaded] = useState(false);
 
-  const load = async () => {
+  const load = async (activeTab = tab) => {
     setLoading(true);
     setError('');
     try {
       let res;
-      if (tab === 'routes') res = await getRouteReport();
-      else if (tab === 'buses') res = await getBusReport();
+      if (activeTab === 'routes') res = await getRouteReport();
+      else if (activeTab === 'buses') res = await getBusReport();
       else res = await getDriverReport();
-      
+
       setData(res.data?.data || res.data || []);
       setHasLoaded(true);
     } catch (err) {
@@ -68,11 +68,12 @@ export default function Reports() {
     }
   };
 
+  useEffect(() => {
+    load(tab);
+  }, [tab]);
+
   const handleTabChange = (key) => {
     setTab(key);
-    setData([]);
-    setHasLoaded(false);
-    setError('');
   };
 
   const cols = COLS[tab];
@@ -96,7 +97,7 @@ export default function Reports() {
 
   const busStatusLabel = { active: 'Hoạt động', broken: 'Hỏng', inactive: 'Ngưng' };
   const busStatusBg = { active: 'bg-green-50 text-green-700', broken: 'bg-red-50 text-red-700', inactive: 'bg-slate-50 text-slate-700' };
-  
+
   const driverStatusLabel = { working: 'Đang làm', on_leave: 'Nghỉ phép', inactive: 'Ngưng' };
   const driverStatusBg = { working: 'bg-green-50 text-green-700', on_leave: 'bg-amber-50 text-amber-700', inactive: 'bg-slate-50 text-slate-700' };
 
@@ -114,11 +115,10 @@ export default function Reports() {
             <button
               key={t.key}
               onClick={() => handleTabChange(t.key)}
-              className={`px-6 py-4 text-sm font-semibold transition-all border-b-2 -mb-px ${
-                tab === t.key
+              className={`px-6 py-4 text-sm font-semibold transition-all border-b-2 -mb-px ${tab === t.key
                   ? 'border-blue-600 text-blue-600 bg-white'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+                }`}
             >
               {t.label}
             </button>
@@ -134,13 +134,13 @@ export default function Reports() {
             onClick={load}
             className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-md shadow-blue-500/10 transition flex items-center gap-2"
           >
-            📊 Xuất báo cáo
+            Xuất báo cáo
           </button>
         </div>
 
         {/* Table View */}
         {error && <div className="p-5"><AlertBox type="error" message={error} /></div>}
-        
+
         {loading ? (
           <div className="text-center py-20 text-slate-400 font-semibold animate-pulse">Đang tính toán số liệu thống kê...</div>
         ) : data.length > 0 ? (
@@ -159,7 +159,7 @@ export default function Reports() {
                     {cols.map(c => {
                       const raw = row[c.key];
                       const val = formatVal(row, c);
-                      
+
                       if (c.key === 'status') {
                         const isBus = tab === 'buses';
                         const badgeClass = isBus ? busStatusBg[raw] : driverStatusBg[raw];
@@ -172,7 +172,7 @@ export default function Reports() {
                           </td>
                         );
                       }
-                      
+
                       if (c.key === 'on_time_rate') {
                         const pct = typeof raw === 'number' ? (raw * 100).toFixed(1) : parseFloat(raw);
                         const isGood = !isNaN(pct) && pct >= 80;
@@ -184,7 +184,7 @@ export default function Reports() {
                           </td>
                         );
                       }
-                      
+
                       return (
                         <td key={c.key} className={`px-6 py-4 font-medium ${getColor(c, raw)}`}>{val}</td>
                       );

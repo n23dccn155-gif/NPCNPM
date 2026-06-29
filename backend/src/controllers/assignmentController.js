@@ -309,7 +309,7 @@ const assignmentController = {
         const groupName = groupRes.rows.length ? groupRes.rows[0].group_name : '';
 
         await client.query(
-          `INSERT INTO notifications (user_id, title, content) VALUES ($1, $2, $3)`,
+          `INSERT INTO notifications (user_id, title, content, redirect_url) VALUES ($1, $2, $3, '/driver/schedule')`,
           [newDriverUserId, 'Phân công lại ca chạy', `Bạn đã được điều phối viên chuyển từ vị trí dự bị sang chạy chính thức cho Nhóm chuyến ${groupName}. Vui lòng kiểm tra lịch trình của mình!`]
         );
       }

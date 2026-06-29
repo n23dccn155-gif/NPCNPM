@@ -88,11 +88,11 @@ export function PageHeader({ title, subtitle, action }) {
 }
 
 // Modal
-export function Modal({ isOpen, title, onClose, children }) {
+export function Modal({ isOpen, title, onClose, children, size = 'max-w-lg' }) {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div className={`bg-white rounded-2xl shadow-2xl ${size} w-full max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-6 border-b">
           <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>

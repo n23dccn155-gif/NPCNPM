@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
+import { formatDate } from '../../utils/format';
 import { PageHeader, Modal, AlertBox } from '../../components/UI';
-import { getPlans, getPlan, createPlan, generateTrips, submitPlan, reviewPlan, autoAssignPlan } from '../../services/planService';
+import { getPlans, getPlan, createPlan, generateTrips, submitPlan, reviewPlan, autoAssignPlan, deletePlan } from '../../services/planService';
 import { getRoutes } from '../../services/routeService';
 import { getAvailableResources, assignGroup, replaceDriver, replaceBus } from '../../services/assignmentService';
 import { useAuth } from '../../context/AuthContext';
@@ -15,13 +16,13 @@ export default function AutoSchedulerPage() {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [routes, setRoutes] = useState([]);
-  
+
   // Modals / Detail state
   const [selectedPlanId, setSelectedPlanId] = useState(null);
   const [planDetail, setPlanDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [highlightedDriver, setHighlightedDriver] = useState(null);
-  
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createForm, setCreateForm] = useState({ route_code: '', operation_date: new Date().toISOString().split('T')[0] });
   const [createError, setCreateError] = useState('');
@@ -42,6 +43,7 @@ export default function AutoSchedulerPage() {
 
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [deleteModal, setDeleteModal] = useState({ open: false, planId: null, dateStr: '', routeCode: '' });
 
   const loadPlans = () => {
     setLoading(true);
@@ -192,6 +194,36 @@ export default function AutoSchedulerPage() {
     }
   };
 
+  const openDeleteModal = (plan) => {
+    if (!plan) return;
+    setDeleteModal({ open: true, planId: plan.plan_id, dateStr: plan.operation_date, routeCode: plan.route_code });
+  };
+
+  const handleDeleteDraftAction = async (type) => {
+    const planIdToDelete = deleteModal.planId;
+    setDeleteModal({ open: false, planId: null, dateStr: '', routeCode: '' });
+    if (!planIdToDelete) return;
+
+    setSuccessMsg('');
+    setErrorMsg('');
+    try {
+      if (type === 'future') {
+        await deletePlan(planIdToDelete, { target: 'future' });
+        setSuccessMsg('Đã xóa cả chu kỳ kế hoạch nháp thành công.');
+      } else {
+        await deletePlan(planIdToDelete);
+        setSuccessMsg('Đã xóa bản nháp kế hoạch ngày hôm nay thành công.');
+      }
+      setTimeout(() => setSuccessMsg(''), 4000);
+      setPlanDetail(null);
+      setSelectedPlanId(null);
+      loadPlans();
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || 'Không thể xóa kế hoạch');
+      setTimeout(() => setErrorMsg(''), 4000);
+    }
+  };
+
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
     setReviewError('');
@@ -273,11 +305,10 @@ export default function AutoSchedulerPage() {
                 <div
                   key={p.plan_id}
                   onClick={() => loadPlanDetail(p.plan_id)}
-                  className={`p-4 rounded-xl border transition cursor-pointer text-left ${
-                    selectedPlanId === p.plan_id
+                  className={`p-4 rounded-xl border transition cursor-pointer text-left ${selectedPlanId === p.plan_id
                       ? 'border-blue-500 bg-blue-50/30 shadow-sm'
                       : 'border-slate-100 hover:border-slate-200'
-                  }`}
+                    }`}
                 >
                   <div className="flex justify-between items-start">
                     <span className="font-bold text-slate-900 font-mono">Tuyến {p.route_code}</span>
@@ -286,7 +317,7 @@ export default function AutoSchedulerPage() {
                     </span>
                   </div>
                   <div className="font-semibold text-gray-600 text-xs mt-1.5">
-                    Ngày chạy: {new Date(p.operation_date).toLocaleDateString('vi-VN')}
+                    Ngày chạy: {formatDate(p.operation_date)}
                   </div>
                   <div className="text-2xs text-gray-400 mt-2 flex justify-between">
                     <span>Tạo bởi: {p.creator_name}</span>
@@ -313,7 +344,7 @@ export default function AutoSchedulerPage() {
                     Chi tiết kế hoạch: Tuyến {planDetail.route_code} - {planDetail.route_name}
                   </h3>
                   <p className="text-sm font-semibold text-slate-500 mt-1">
-                    Ngày chạy: {new Date(planDetail.operation_date).toLocaleDateString('vi-VN')}
+                    Ngày chạy: {formatDate(planDetail.operation_date)}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -331,7 +362,7 @@ export default function AutoSchedulerPage() {
                     </button>
                   )}
 
-                  {isDispatcher && planDetail.status === 'draft' && (
+                  {isDispatcher && (planDetail.status === 'draft' || planDetail.status === 'rejected') && (
                     <>
                       <button
                         onClick={() => setShowGenerateModal(true)}
@@ -350,7 +381,7 @@ export default function AutoSchedulerPage() {
                     </>
                   )}
 
-                  {isDispatcher && planDetail.status === 'draft' && planDetail.groups?.length > 0 && (
+                  {isDispatcher && (planDetail.status === 'draft' || planDetail.status === 'rejected') && planDetail.groups?.length > 0 && (
                     <button
                       onClick={() => handleSubmitPlanForApproval(planDetail.plan_id)}
                       className="bg-green-600 hover:bg-green-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition shadow-md shadow-green-500/10"
@@ -358,14 +389,23 @@ export default function AutoSchedulerPage() {
                       Gửi kế hoạch phê duyệt
                     </button>
                   )}
+
+                  {isDispatcher && (planDetail.status === 'draft' || planDetail.status === 'rejected') && (
+                    <button
+                      onClick={() => openDeleteModal(planDetail)}
+                      className="bg-white hover:bg-red-50 text-red-600 border border-red-200 font-semibold text-xs px-4 py-2.5 rounded-xl transition"
+                    >
+                      Xóa bản nháp
+                    </button>
+                  )}
                 </div>
-                
+
                 {planDetail.groups && planDetail.groups.length > 0 && (
                   <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-100 flex items-center justify-between">
                     <div>
                       <h4 className="font-semibold text-blue-800">Nhu cầu Tài xế (Tính toán dựa trên số ca & dự bị)</h4>
                       <p className="text-sm text-blue-600 mt-1">
-                        Số ca (Main): <span className="font-bold">{planDetail.groups.length}</span> | 
+                        Số ca (Main): <span className="font-bold">{planDetail.groups.length}</span> |
                         Dự bị (Standby): <span className="font-bold">{planDetail.standby_drivers?.length || 0}</span>
                       </p>
                     </div>
@@ -431,8 +471,8 @@ export default function AutoSchedulerPage() {
                     {planDetail.groups?.map(g => {
                       const isUnassigned = !g.bus_id || !g.driver_id;
                       return (
-                        <div 
-                          key={g.group_id} 
+                        <div
+                          key={g.group_id}
                           className={`border border-slate-100 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 cursor-pointer transition ${highlightedDriver && g.driver_name === highlightedDriver ? 'bg-yellow-100 border-yellow-300' : 'bg-white hover:border-slate-200'}`}
                           onClick={() => {
                             if (g.driver_name) {
@@ -446,7 +486,7 @@ export default function AutoSchedulerPage() {
                               Khung chạy: {new Date(g.start_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - {new Date(g.end_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                             </div>
                           </div>
-                          
+
                           <div className="flex items-center gap-4">
                             <div className="text-xs text-right">
                               <div>
@@ -462,18 +502,17 @@ export default function AutoSchedulerPage() {
                                 </span>
                               </div>
                             </div>
-                            
+
                             {isDispatcher && (planDetail.status === 'draft' || planDetail.status === 'approved') && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   openAssignModal(g);
                                 }}
-                                className={`text-2xs font-bold px-3 py-1.5 rounded-lg transition border ${
-                                  isUnassigned 
-                                    ? 'bg-blue-600 hover:bg-blue-700 text-white border-transparent' 
+                                className={`text-2xs font-bold px-3 py-1.5 rounded-lg transition border ${isUnassigned
+                                    ? 'bg-blue-600 hover:bg-blue-700 text-white border-transparent'
                                     : 'bg-white hover:bg-slate-50 text-slate-600 border-slate-200'
-                                }`}
+                                  }`}
                               >
                                 {isUnassigned ? 'Phân công' : 'Thay đổi'}
                               </button>
@@ -496,8 +535,8 @@ export default function AutoSchedulerPage() {
                     {planDetail.trips?.map(t => {
                       const group = planDetail.groups?.find(g => g.group_id === t.group_id);
                       return (
-                        <div 
-                          key={t.trip_id} 
+                        <div
+                          key={t.trip_id}
                           className={`px-4 py-3 flex justify-between items-center text-xs hover:bg-slate-50 transition cursor-pointer ${highlightedDriver && group?.driver_name === highlightedDriver ? 'bg-yellow-100' : ''}`}
                           onClick={() => {
                             if (group?.driver_name) {
@@ -536,7 +575,7 @@ export default function AutoSchedulerPage() {
       <Modal isOpen={showCreateModal} title="Tạo kế hoạch vận doanh mới" onClose={() => setShowCreateModal(false)}>
         <form onSubmit={handleCreatePlan} className="space-y-4">
           {createError && <AlertBox type="error" message={createError} />}
-          
+
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wider">Tuyến xe buýt *</label>
             <select
@@ -651,7 +690,7 @@ export default function AutoSchedulerPage() {
       <Modal isOpen={showReviewModal} title="Phê duyệt kế hoạch vận doanh" onClose={() => setShowReviewModal(false)}>
         <form onSubmit={handleReviewSubmit} className="space-y-4">
           {reviewError && <AlertBox type="error" message={reviewError} />}
-          
+
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wider">Quyết định phê duyệt *</label>
             <div className="flex gap-4">
@@ -704,11 +743,10 @@ export default function AutoSchedulerPage() {
             </button>
             <button
               type="submit"
-              className={`px-5 py-2.5 text-white rounded-xl text-sm font-semibold shadow-md transition ${
-                reviewDecision === 'approve' 
-                  ? 'bg-green-600 hover:bg-green-700 shadow-green-500/10' 
+              className={`px-5 py-2.5 text-white rounded-xl text-sm font-semibold shadow-md transition ${reviewDecision === 'approve'
+                  ? 'bg-green-600 hover:bg-green-700 shadow-green-500/10'
                   : 'bg-red-600 hover:bg-red-700 shadow-red-500/10'
-              }`}
+                }`}
             >
               Xác nhận quyết định
             </button>
@@ -723,6 +761,42 @@ export default function AutoSchedulerPage() {
           isReGenerate={planDetail?.groups?.length > 0}
         />
       )}
+
+      {/* Delete Draft Plan Modal */}
+      <Modal 
+        isOpen={deleteModal.open} 
+        title="Xóa kế hoạch nháp" 
+        onClose={() => setDeleteModal({ open: false, planId: null, dateStr: '', routeCode: '' })}
+      >
+        <div className="space-y-4">
+          <p className="text-gray-600 text-sm leading-relaxed">
+            Bạn muốn thực hiện thao tác xóa nào cho tuyến <strong>{deleteModal.routeCode}</strong> bắt đầu từ ngày <strong>{deleteModal.dateStr ? formatDate(deleteModal.dateStr) : ''}</strong>?
+          </p>
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-xl p-3 leading-relaxed">
+            ⚠️ Lưu ý: Thao tác xóa kế hoạch nháp sẽ đồng thời xóa toàn bộ thông tin phân công xe, ca chạy và các chuyến xe liên quan.
+          </div>
+          <div className="flex flex-col gap-3 pt-2">
+            <button
+              onClick={() => handleDeleteDraftAction('single')}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-xl text-sm transition"
+            >
+              Chỉ xóa ngày hiện tại ({deleteModal.dateStr ? formatDate(deleteModal.dateStr) : ''})
+            </button>
+            <button
+              onClick={() => handleDeleteDraftAction('future')}
+              className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2.5 px-4 rounded-xl text-sm transition"
+            >
+              Xóa cả chu kỳ (Từ ngày {deleteModal.dateStr ? formatDate(deleteModal.dateStr) : ''} trở đi)
+            </button>
+            <button
+              onClick={() => setDeleteModal({ open: false, planId: null, dateStr: '', routeCode: '' })}
+              className="w-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 font-semibold py-2.5 px-4 rounded-xl text-sm transition"
+            >
+              Hủy bỏ
+            </button>
+          </div>
+        </div>
+      </Modal>
 
     </Layout>
   );

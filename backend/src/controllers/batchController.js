@@ -9,6 +9,16 @@ function addDays(dateStr, days) {
   return d.toISOString().split('T')[0];
 }
 
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
 const batchController = {
   generateSchedule: async (req, res, next) => {
     // This could take a while, we might not want to do it all inside a single HTTP request transaction
@@ -64,8 +74,8 @@ const batchController = {
         [routeCode, startDate, endDate]
       );
       if (overlapRes.rows.length > 0) {
-        const overlapDate = new Date(overlapRes.rows[0].operation_date).toLocaleDateString('vi-VN');
-        return error(res, `Đã có lịch tồn tại trong khoảng thời gian từ ${new Date(startDate).toLocaleDateString('vi-VN')} đến ${new Date(endDate).toLocaleDateString('vi-VN')} (ngày trùng: ${overlapDate}). Không thể ghi đè.`, 400);
+        const overlapDate = formatDate(overlapRes.rows[0].operation_date);
+        return error(res, `Đã có lịch tồn tại trong khoảng thời gian từ ${formatDate(startDate)} đến ${formatDate(endDate)} (ngày trùng: ${overlapDate}). Không thể ghi đè.`, 400);
       }
 
       // Import the internal functions from planController and assignmentController
@@ -127,8 +137,8 @@ const batchController = {
             assignmentCtrl.autoAssignPlan(mockReq, mockRes, reject);
           });
 
-          // 4. Mark plan as pending_approval
-          await pool.query('UPDATE operation_plans SET status = $1 WHERE plan_id = $2', ['pending_approval', planId]);
+          // 4. Keep plan as draft (allow dispatcher to preview)
+          await pool.query('UPDATE operation_plans SET status = $1 WHERE plan_id = $2', ['draft', planId]);
           
           successCount++;
         } catch (e) {

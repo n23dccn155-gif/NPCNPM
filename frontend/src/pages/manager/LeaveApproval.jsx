@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
+import { formatDate } from '../../utils/format';
 import { PageHeader, AlertBox } from '../../components/UI';
 import { getAllLeaves, reviewLeave, getAffectedGroups } from '../../services/leaveService';
 
@@ -96,7 +97,7 @@ export default function LeaveApproval() {
                       <td className="px-6 py-4 font-mono font-semibold text-slate-500">#LR-{l.leave_id}</td>
                       <td className="px-6 py-4 text-gray-900 font-bold">{l.driver_name}</td>
                       <td className="px-6 py-4 text-gray-700 font-semibold">
-                        {new Date(l.leave_date).toLocaleDateString('vi-VN')}
+                        {formatDate(l.leave_date)}
                       </td>
                       <td className="px-6 py-4 text-gray-600 max-w-xs truncate">{l.reason || '—'}</td>
                       <td className="px-6 py-4">
@@ -164,7 +165,7 @@ export default function LeaveApproval() {
             <p className="text-gray-600 text-sm mb-6 leading-relaxed">
               Bạn có chắc chắn muốn <strong>{confirm.action === 'approved' ? 'phê duyệt' : 'từ chối'}</strong> yêu cầu nghỉ phép của tài xế <strong>{confirm.driverName}</strong>?
               {confirm.action === 'approved' && (
-                <span className="block mt-2 text-amber-600 font-semibold">⚠️ Các nhóm chuyến phân công cho tài xế này trong ngày đó sẽ bị trống tài xế và cần điều phối viên phân công lại.</span>
+                <span className="block mt-2 text-amber-600 font-semibold">Các nhóm chuyến phân công cho tài xế này trong ngày đó sẽ bị trống tài xế và cần điều phối viên phân công lại.</span>
               )}
             </p>
             <div className="flex gap-3 justify-end">

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
+import { formatDate } from '../../utils/format';
 import { PageHeader, AlertBox, ConfirmDialog } from '../../components/UI';
 import { getMyTrips, startTrip, finishTrip } from '../../services/tripService';
 import { useAuth } from '../../context/AuthContext';
@@ -157,7 +158,7 @@ export default function MyAssignmentsPage() {
           </div>
         ) : trips.length === 0 ? (
           <div className="text-center py-20 text-slate-400 font-medium">
-            📭 Bạn không có ca chạy nào được phân công trong ngày {new Date(filterDate).toLocaleDateString('vi-VN')}.
+            📭 Bạn không có ca chạy nào được phân công trong ngày {formatDate(filterDate)}.
           </div>
         ) : (
           <div className="space-y-6">

@@ -64,8 +64,8 @@ const leaveRequestController = {
       
       for (let mgr of managers.rows) {
         await pool.query(
-          `INSERT INTO notifications (user_id, title, content) 
-           VALUES ($1, 'Yêu cầu nghỉ phép mới', $2)`,
+          `INSERT INTO notifications (user_id, title, content, redirect_url) 
+           VALUES ($1, 'Yêu cầu nghỉ phép mới', $2, '/manager/leave-requests')`,
           [mgr.user_id, `Tài xế ${driverName} xin nghỉ phép ngày ${leave_date}.`]
         );
       }
@@ -135,8 +135,8 @@ const leaveRequestController = {
 
       // Gửi thông báo cho tài xế gửi đơn
       await client.query(
-        `INSERT INTO notifications (user_id, title, content) 
-         VALUES ($1, 'Kết quả xin nghỉ phép', $2)`,
+        `INSERT INTO notifications (user_id, title, content, redirect_url) 
+         VALUES ($1, 'Kết quả xin nghỉ phép', $2, '/driver/leave')`,
         [driverUser.user_id, `Đơn xin nghỉ phép ngày ${leave.leave_date.toISOString().split('T')[0]} của bạn đã được ${status === 'approved' ? 'chấp nhận' : 'từ chối'}.`]
       );
       emitToUser(driverUser.user_id, 'NEW_NOTIFICATION', { title: 'Kết quả xin nghỉ phép', content: `Đơn xin nghỉ phép ngày ${leave.leave_date.toISOString().split('T')[0]} của bạn đã được ${status === 'approved' ? 'chấp nhận' : 'từ chối'}.` });
@@ -155,8 +155,8 @@ const leaveRequestController = {
         // Gửi thông báo cảnh báo cho Dispatcher (XL13)
         for (let assign of affectedAssignments.rows) {
           await client.query(
-            `INSERT INTO notifications (user_id, title, content) 
-             VALUES ($1, 'Cảnh báo phân công', $2)`,
+            `INSERT INTO notifications (user_id, title, content, redirect_url) 
+             VALUES ($1, 'Cảnh báo phân công', $2, '/dispatcher/calendar')`,
             [assign.dispatcher_id, `Tài xế ${driverUser.full_name} xin nghỉ phép đột xuất đã được duyệt. Vui lòng thay thế tài xế cho nhóm chuyến ${assign.group_name} (Tuyến ${assign.route_code}) ngày ${leave.leave_date.toISOString().split('T')[0]}.`]
           );
         }

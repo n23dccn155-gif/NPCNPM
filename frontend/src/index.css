@@ -8,3 +8,8 @@ body {
   box-sizing: border-box;
   background-color: #f3f4f6; /* Gray 100 */
 }
+
+/* Ẩn con mắt mặc định của Microsoft Edge */
+input::-ms-reveal {
+  display: none;
+}

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import { PageHeader, StatusBadge, ConfirmDialog, Modal, AlertBox } from '../../components/UI';
-import { getRoutes, createRoute, updateRoute, updateRouteStatus, deleteRoute } from '../../services/routeService';
+import { getRoutes, getRoute, createRoute, updateRoute, updateRouteStatus, deleteRoute } from '../../services/routeService';
 
 const emptyForm = {
   route_code: '',
@@ -45,6 +45,49 @@ const calculateHeadway = (start, end, expectedTrips) => {
   return (endMin - startMin) / (trips - 1);
 };
 
+// Mô phỏng FIFO — khớp 100% với thuật toán backend
+const runFifoScheduling = ({ startMin, endMin, headwayMinutes, outboundTravel, outboundLayover, inboundTravel, inboundLayover }) => {
+  if (!startMin || !endMin || !headwayMinutes || headwayMinutes <= 0) return { totalVehicles: 0 };
+  if (endMin <= startMin) return { totalVehicles: 0 };
+
+  const departureTimes = [];
+  for (let t = startMin; t <= endMin; t += headwayMinutes) {
+    departureTimes.push(Math.round(t * 100) / 100);
+  }
+
+  const fifoA = [];
+  const fifoB = [];
+  let vehicleCount = 0;
+
+  for (const depTime of departureTimes) {
+    // Chuyến từ A
+    const readyInA = fifoA.filter(v => v.readyAt <= depTime);
+    let vehicleA;
+    if (readyInA.length > 0) {
+      vehicleA = readyInA[0];
+      fifoA.splice(fifoA.indexOf(vehicleA), 1);
+    } else {
+      vehicleA = { vehicleIdx: vehicleCount++ };
+    }
+    const arrAtB = depTime + outboundTravel;
+    fifoB.push({ vehicleIdx: vehicleA.vehicleIdx, readyAt: arrAtB + outboundLayover });
+
+    // Chuyến từ B
+    const readyInB = fifoB.filter(v => v.readyAt <= depTime);
+    let vehicleB;
+    if (readyInB.length > 0) {
+      vehicleB = readyInB[0];
+      fifoB.splice(fifoB.indexOf(vehicleB), 1);
+    } else {
+      vehicleB = { vehicleIdx: vehicleCount++ };
+    }
+    const arrAtA = depTime + inboundTravel;
+    fifoA.push({ vehicleIdx: vehicleB.vehicleIdx, readyAt: arrAtA + inboundLayover });
+  }
+
+  return { totalVehicles: vehicleCount };
+};
+
 const formatMinutes = (value) => {
   const number = Number(value);
   return Number.isFinite(number) ? `${Number(number.toFixed(2))} phút` : 'Chưa đủ dữ liệu';
@@ -62,6 +105,9 @@ export default function RouteList() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
 
+  const [outboundMiddleStops, setOutboundMiddleStops] = useState([]);
+  const [inboundMiddleStops, setInboundMiddleStops] = useState([]);
+
   const load = async () => {
     try {
       const res = await getRoutes();
@@ -78,11 +124,13 @@ export default function RouteList() {
   const openAdd = () => {
     setEditing(null);
     setForm(emptyForm);
+    setOutboundMiddleStops([]);
+    setInboundMiddleStops([]);
     setFormError('');
     setShowModal(true);
   };
 
-  const openEdit = (r) => {
+  const openEdit = async (r) => {
     console.log('Editing route object:', r);
     setEditing(r);
     setForm({
@@ -111,7 +159,36 @@ export default function RouteList() {
       min_rest_time_minutes: r.min_rest_time_minutes ?? 60,
     });
     setFormError('');
+    setOutboundMiddleStops([]);
+    setInboundMiddleStops([]);
     setShowModal(true);
+
+    try {
+      const res = await getRoute(r.route_code);
+      const fullRoute = res.data?.data || res.data || {};
+      const outboundDir = fullRoute.directions?.find(d => d.direction_type === 'outbound');
+      const inboundDir = fullRoute.directions?.find(d => d.direction_type === 'inbound');
+
+      const outboundStops = outboundDir?.stops || [];
+      const inboundStops = inboundDir?.stops || [];
+
+      const outboundMax = outboundStops.length > 0 ? Math.max(...outboundStops.map(s => s.stop_order)) : 0;
+      const outboundMiddles = outboundStops
+        .filter(s => s.stop_order > 1 && s.stop_order < outboundMax)
+        .sort((a, b) => a.stop_order - b.stop_order)
+        .map(s => ({ id: s.stop_id, stop_name: s.stop_name, minute_from_start: s.minute_from_start }));
+
+      const inboundMax = inboundStops.length > 0 ? Math.max(...inboundStops.map(s => s.stop_order)) : 0;
+      const inboundMiddles = inboundStops
+        .filter(s => s.stop_order > 1 && s.stop_order < inboundMax)
+        .sort((a, b) => a.stop_order - b.stop_order)
+        .map(s => ({ id: s.stop_id, stop_name: s.stop_name, minute_from_start: s.minute_from_start }));
+
+      setOutboundMiddleStops(outboundMiddles);
+      setInboundMiddleStops(inboundMiddles);
+    } catch (err) {
+      console.error('Lỗi khi tải chi tiết điểm dừng:', err);
+    }
   };
 
   const buildPayload = () => {
@@ -120,6 +197,34 @@ export default function RouteList() {
     const baseBuses = (hWay > 0 && rtt > 0) ? Math.ceil(rtt / hWay) : 0;
     const recoveryBuses = Math.ceil(baseBuses * (Number(form.standby_ratio) || 0));
     const autoConfirmedBuses = baseBuses + recoveryBuses;
+
+    const outbound_stops = [
+      { stop_order: 1, stop_name: (form.outbound_start_point || '').trim(), minute_from_start: 0 },
+      ...outboundMiddleStops.map((s, idx) => ({
+        stop_order: idx + 2,
+        stop_name: (s.stop_name || '').trim(),
+        minute_from_start: Number(s.minute_from_start)
+      })),
+      {
+        stop_order: outboundMiddleStops.length + 2,
+        stop_name: (form.outbound_end_point || '').trim(),
+        minute_from_start: Number(form.outbound_travel_time_minutes)
+      }
+    ];
+
+    const inbound_stops = [
+      { stop_order: 1, stop_name: (form.inbound_start_point || '').trim(), minute_from_start: 0 },
+      ...inboundMiddleStops.map((s, idx) => ({
+        stop_order: idx + 2,
+        stop_name: (s.stop_name || '').trim(),
+        minute_from_start: Number(s.minute_from_start)
+      })),
+      {
+        stop_order: inboundMiddleStops.length + 2,
+        stop_name: (form.inbound_end_point || '').trim(),
+        minute_from_start: Number(form.inbound_travel_time_minutes)
+      }
+    ];
 
     return {
       route_name: form.route_name.trim(),
@@ -135,7 +240,9 @@ export default function RouteList() {
       inbound_end_point: form.inbound_end_point.trim(),
       inbound_distance: form.inbound_distance ? Number(form.inbound_distance) : null,
       outbound_travel_time_minutes: Number(form.outbound_travel_time_minutes),
-      inbound_travel_time_minutes: Number(form.inbound_travel_time_minutes)
+      inbound_travel_time_minutes: Number(form.inbound_travel_time_minutes),
+      outbound_stops,
+      inbound_stops
     };
   };
 
@@ -190,20 +297,37 @@ export default function RouteList() {
     const matchStatus = !filterStatus || r.status === filterStatus;
     return matchSearch && matchStatus;
   });
-  const rtt = Number(form.outbound_travel_time_minutes) + Number(form.inbound_travel_time_minutes) + Number(form.short_layover_minutes) * 2;
-  const hWay = Number(form.headway_minutes);
-  const minRest = Number(form.min_rest_time_minutes) || 0;
-  
-  const editingBaseBuses = (hWay > 0 && rtt > 0) ? Math.ceil(rtt / hWay) : 0;
-  const editingRecoveryBuses = (hWay > 0) ? Math.ceil(minRest / hWay) : 0;
-  const editingSuggestedBuses = editingBaseBuses + editingRecoveryBuses;
-  const editingBackupBuses = Math.ceil(editingSuggestedBuses * (Number(form.backup_bus_ratio) || 0));
-  const editingTotalBuses = editingSuggestedBuses + editingBackupBuses;
+  // ── Tính FIFO trực tiếp từ tham số form (khớp với backend) ──
+  const fifoStartMin  = timeToMinutes(form.start_time);
+  const fifoEndMin    = timeToMinutes(form.end_time);
+  const fifoHeadway   = Number(form.headway_minutes);
+  const fifoOutTravel = Number(form.outbound_travel_time_minutes);
+  const fifoInTravel  = Number(form.inbound_travel_time_minutes);
+  const fifoLayover   = Number(form.short_layover_minutes); // layover cùng giá trị 2 đầu
 
-  const mainShifts = editingBaseBuses * 2;
-  const standbyCount = Math.ceil(mainShifts * (Number(form.standby_ratio) || 0));
-  const dailyDrivers = mainShifts + standbyCount;
-  const weeklyDrivers = Math.ceil(dailyDrivers * 7 / 6);
+  const fifoResult = runFifoScheduling({
+    startMin: fifoStartMin,
+    endMin:   fifoEndMin,
+    headwayMinutes:  fifoHeadway,
+    outboundTravel:  fifoOutTravel,
+    outboundLayover: fifoLayover,
+    inboundTravel:   fifoInTravel,
+    inboundLayover:  fifoLayover,
+  });
+
+  const fifoTotalVehicles = fifoResult.totalVehicles || 0;
+  const standbyRatio      = Number(form.standby_ratio) || 0.15;
+  const backupBusRatio    = Number(form.backup_bus_ratio) || 0.20;
+
+  // Tài xế
+  const requiredDrivers        = fifoTotalVehicles;
+  const requiredStandbyDrivers = Math.ceil(fifoTotalVehicles * standbyRatio);
+  const requiredTotalDrivers   = requiredDrivers + requiredStandbyDrivers;
+  const weeklyDrivers          = Math.ceil(requiredTotalDrivers * 7 / 6);
+
+  // Xe buýt
+  const requiredBackupBuses = Math.ceil(fifoTotalVehicles * backupBusRatio);
+  const requiredTotalBuses  = fifoTotalVehicles + requiredBackupBuses;
 
   return (
     <Layout>
@@ -298,7 +422,7 @@ export default function RouteList() {
         {filtered.length === 0 && <div className="text-center py-12 text-gray-400">Không tìm thấy tuyến xe nào</div>}
       </div>
 
-      <Modal isOpen={showModal} title={editing ? 'Sửa tuyến xe' : 'Thêm tuyến xe'} onClose={() => setShowModal(false)}>
+      <Modal isOpen={showModal} size="max-w-4xl" title={editing ? 'Sửa tuyến xe' : 'Thêm tuyến xe'} onClose={() => setShowModal(false)}>
         <form onSubmit={handleSave} className="space-y-4">
           {formError && <AlertBox type="error" message={formError} />}
           {!editing && (
@@ -326,9 +450,9 @@ export default function RouteList() {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="border border-gray-100 p-3 rounded-xl bg-gray-50">
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">Lượt đi (Outbound)</h4>
+            <div className="border border-gray-100 p-3 rounded-xl bg-gray-50 flex flex-col justify-between">
               <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Lượt đi (Outbound)</h4>
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">Điểm đầu - cuối *</label>
                   <div className="flex gap-2">
@@ -347,10 +471,101 @@ export default function RouteList() {
                   </div>
                 </div>
               </div>
+
+              <div className="mt-4 pt-3 border-t border-gray-200">
+                <div className="flex justify-between items-center mb-2">
+                  <h5 className="text-xs font-bold text-gray-700">Điểm dừng Lượt đi</h5>
+                  <button
+                    type="button"
+                    onClick={() => setOutboundMiddleStops([...outboundMiddleStops, { id: Date.now() + Math.random(), stop_name: '', minute_from_start: '' }])}
+                    className="text-2xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded"
+                  >
+                    + Thêm điểm trung gian
+                  </button>
+                </div>
+                
+                <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+                  {/* First stop - locked */}
+                  <div className="flex items-center gap-1.5 bg-white p-1.5 rounded border border-gray-100 text-xs">
+                    <span className="w-4 h-4 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center font-mono font-bold text-3xs">1</span>
+                    <input
+                      value={form.outbound_start_point || ''}
+                      disabled
+                      placeholder="Bến đầu"
+                      className="flex-1 bg-gray-50 border rounded px-1.5 py-0.5 text-2xs text-gray-500 outline-none"
+                    />
+                    <input
+                      value="0"
+                      disabled
+                      className="w-10 bg-gray-50 border rounded px-1.5 py-0.5 text-2xs text-gray-500 text-center outline-none"
+                    />
+                    <span className="text-3xs text-gray-400">phút</span>
+                    <div className="w-5"></div>
+                  </div>
+
+                  {/* Middle stops */}
+                  {outboundMiddleStops.map((stop, index) => (
+                    <div key={stop.id} className="flex items-center gap-1.5 bg-white p-1.5 rounded border border-gray-200 text-xs">
+                      <span className="w-4 h-4 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-mono font-bold text-3xs">{index + 2}</span>
+                      <input
+                        value={stop.stop_name}
+                        onChange={e => {
+                          const list = [...outboundMiddleStops];
+                          list[index].stop_name = e.target.value;
+                          setOutboundMiddleStops(list);
+                        }}
+                        placeholder="Tên điểm dừng"
+                        required
+                        className="flex-1 border rounded px-1.5 py-0.5 text-2xs focus:ring-1 focus:ring-blue-500 outline-none"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        value={stop.minute_from_start}
+                        onChange={e => {
+                          const list = [...outboundMiddleStops];
+                          list[index].minute_from_start = e.target.value;
+                          setOutboundMiddleStops(list);
+                        }}
+                        placeholder="Phút"
+                        required
+                        className="w-12 border rounded px-1 py-0.5 text-2xs focus:ring-1 focus:ring-blue-500 text-center outline-none"
+                      />
+                      <span className="text-3xs text-gray-400">phút</span>
+                      <button
+                        type="button"
+                        onClick={() => setOutboundMiddleStops(outboundMiddleStops.filter(s => s.id !== stop.id))}
+                        className="text-red-500 hover:text-red-700 w-5 flex justify-center text-xs"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Last stop - locked */}
+                  <div className="flex items-center gap-1.5 bg-white p-1.5 rounded border border-gray-100 text-xs">
+                    <span className="w-4 h-4 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center font-mono font-bold text-3xs">{outboundMiddleStops.length + 2}</span>
+                    <input
+                      value={form.outbound_end_point || ''}
+                      disabled
+                      placeholder="Bến cuối"
+                      className="flex-1 bg-gray-50 border rounded px-1.5 py-0.5 text-2xs text-gray-500 outline-none"
+                    />
+                    <input
+                      value={form.outbound_travel_time_minutes || ''}
+                      disabled
+                      className="w-10 bg-gray-50 border rounded px-1.5 py-0.5 text-2xs text-gray-500 text-center outline-none"
+                    />
+                    <span className="text-3xs text-gray-400">phút</span>
+                    <div className="w-5"></div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="border border-gray-100 p-3 rounded-xl bg-gray-50">
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">Lượt về (Inbound)</h4>
+
+            <div className="border border-gray-100 p-3 rounded-xl bg-gray-50 flex flex-col justify-between">
               <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Lượt về (Inbound)</h4>
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">Điểm đầu - cuối *</label>
                   <div className="flex gap-2">
@@ -366,6 +581,96 @@ export default function RouteList() {
                   <div className="flex items-center justify-between gap-4">
                     <label className="text-xs font-medium text-gray-700 w-1/3">TG chạy (phút) *</label>
                     <input type="number" value={form.inbound_travel_time_minutes} onChange={e => setForm({ ...form, inbound_travel_time_minutes: e.target.value })} required className="w-2/3 border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-gray-200">
+                <div className="flex justify-between items-center mb-2">
+                  <h5 className="text-xs font-bold text-gray-700">Điểm dừng Lượt về</h5>
+                  <button
+                    type="button"
+                    onClick={() => setInboundMiddleStops([...inboundMiddleStops, { id: Date.now() + Math.random(), stop_name: '', minute_from_start: '' }])}
+                    className="text-2xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded"
+                  >
+                    + Thêm điểm trung gian
+                  </button>
+                </div>
+                
+                <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+                  {/* First stop - locked */}
+                  <div className="flex items-center gap-1.5 bg-white p-1.5 rounded border border-gray-100 text-xs">
+                    <span className="w-4 h-4 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center font-mono font-bold text-3xs">1</span>
+                    <input
+                      value={form.inbound_start_point || ''}
+                      disabled
+                      placeholder="Bến đầu"
+                      className="flex-1 bg-gray-50 border rounded px-1.5 py-0.5 text-2xs text-gray-500 outline-none"
+                    />
+                    <input
+                      value="0"
+                      disabled
+                      className="w-10 bg-gray-50 border rounded px-1.5 py-0.5 text-2xs text-gray-500 text-center outline-none"
+                    />
+                    <span className="text-3xs text-gray-400">phút</span>
+                    <div className="w-5"></div>
+                  </div>
+
+                  {/* Middle stops */}
+                  {inboundMiddleStops.map((stop, index) => (
+                    <div key={stop.id} className="flex items-center gap-1.5 bg-white p-1.5 rounded border border-gray-200 text-xs">
+                      <span className="w-4 h-4 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-mono font-bold text-3xs">{index + 2}</span>
+                      <input
+                        value={stop.stop_name}
+                        onChange={e => {
+                          const list = [...inboundMiddleStops];
+                          list[index].stop_name = e.target.value;
+                          setInboundMiddleStops(list);
+                        }}
+                        placeholder="Tên điểm dừng"
+                        required
+                        className="flex-1 border rounded px-1.5 py-0.5 text-2xs focus:ring-1 focus:ring-blue-500 outline-none"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        value={stop.minute_from_start}
+                        onChange={e => {
+                          const list = [...inboundMiddleStops];
+                          list[index].minute_from_start = e.target.value;
+                          setInboundMiddleStops(list);
+                        }}
+                        placeholder="Phút"
+                        required
+                        className="w-12 border rounded px-1 py-0.5 text-2xs focus:ring-1 focus:ring-blue-500 text-center outline-none"
+                      />
+                      <span className="text-3xs text-gray-400">phút</span>
+                      <button
+                        type="button"
+                        onClick={() => setInboundMiddleStops(inboundMiddleStops.filter(s => s.id !== stop.id))}
+                        className="text-red-500 hover:text-red-700 w-5 flex justify-center text-xs"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Last stop - locked */}
+                  <div className="flex items-center gap-1.5 bg-white p-1.5 rounded border border-gray-100 text-xs">
+                    <span className="w-4 h-4 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center font-mono font-bold text-3xs">{inboundMiddleStops.length + 2}</span>
+                    <input
+                      value={form.inbound_end_point || ''}
+                      disabled
+                      placeholder="Bến cuối"
+                      className="flex-1 bg-gray-50 border rounded px-1.5 py-0.5 text-2xs text-gray-500 outline-none"
+                    />
+                    <input
+                      value={form.inbound_travel_time_minutes || ''}
+                      disabled
+                      className="w-10 bg-gray-50 border rounded px-1.5 py-0.5 text-2xs text-gray-500 text-center outline-none"
+                    />
+                    <span className="text-3xs text-gray-400">phút</span>
+                    <div className="w-5"></div>
                   </div>
                 </div>
               </div>
@@ -431,15 +736,15 @@ export default function RouteList() {
           </div>
           <div>
             <div className="flex items-center justify-between gap-4">
-              <label className="text-sm font-medium text-gray-700 w-1/3">Tổng xe dự kiến huy động</label>
-              <div className="w-2/3 flex items-center justify-between border border-gray-100 bg-gray-50 rounded-xl px-3 py-2 text-sm text-gray-700 font-medium">
-                <span>{editingSuggestedBuses} xe</span>
-                <span className="text-xs text-amber-600 font-normal">({editingBaseBuses} xe nền + {editingRecoveryBuses} xe trám)</span>
+              <label className="text-sm font-medium text-gray-700 w-1/3">Tổng xe vận doanh (FIFO)</label>
+              <div className="w-2/3 flex items-center justify-between border border-blue-200 bg-blue-50 rounded-xl px-3 py-2 text-sm text-blue-800 font-medium">
+                <span>{fifoTotalVehicles} xe vận doanh</span>
+                <span className="text-xs text-amber-600 font-normal">+ {requiredBackupBuses} xe dự phòng = {requiredTotalBuses} xe</span>
               </div>
             </div>
             <div className="flex justify-end mt-1">
-              <div className="w-2/3 text-xs text-gray-500 italic">
-                Hệ thống tự động tính toán số xe cần thiết dựa trên thời gian vòng xe và giãn cách chuyến.
+              <div className="w-2/3 text-xs text-blue-600 italic">
+                Mô phỏng FIFO: số xe tối thiểu thực sự cần để đảm bảo đủ chuyến mỗi {fifoHeadway > 0 ? fifoHeadway : '?'} phút suốt ngày.
               </div>
             </div>
           </div>
@@ -490,16 +795,19 @@ export default function RouteList() {
 
           <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-100 flex items-center justify-between">
             <div>
-              <h4 className="font-semibold text-blue-800">Nhu cầu Tài xế (Tính tự động)</h4>
+              <h4 className="font-semibold text-blue-800">Nhu cầu Tài xế (Tính theo FIFO)</h4>
               <p className="text-sm text-blue-600 mt-1">
-                Số ca (Main): <span className="font-bold">{mainShifts}</span> | 
-                Dự bị (Standby): <span className="font-bold">{standbyCount}</span>
+                Tài xế chính (Main): <span className="font-bold">{requiredDrivers}</span> | 
+                Dự bị (Standby): <span className="font-bold">{requiredStandbyDrivers}</span>
+              </p>
+              <p className="text-xs text-blue-400 mt-0.5 italic">
+                Mỗi xe vận doanh cần 1 tài xế chính. Tỉ lệ dự bị: {Math.round(standbyRatio * 100)}%
               </p>
             </div>
             <div className="flex gap-4 text-center">
               <div className="bg-white px-4 py-2 rounded shadow-sm border border-blue-200">
                 <div className="text-xs text-gray-500">Cần cho 1 Ngày</div>
-                <div className="text-xl font-bold text-blue-700">{dailyDrivers}</div>
+                <div className="text-xl font-bold text-blue-700">{requiredTotalDrivers}</div>
               </div>
               <div className="bg-white px-4 py-2 rounded shadow-sm border border-blue-200">
                 <div className="text-xs text-gray-500">Cần cho 1 Tuần</div>
@@ -510,16 +818,19 @@ export default function RouteList() {
 
           <div className="mt-2 p-4 bg-emerald-50 rounded-lg border border-emerald-100 flex items-center justify-between">
             <div>
-              <h4 className="font-semibold text-emerald-800">Nhu cầu Xe Buýt (Tính tự động)</h4>
+              <h4 className="font-semibold text-emerald-800">Nhu cầu Xe Buýt (Tính theo FIFO)</h4>
               <p className="text-sm text-emerald-600 mt-1">
-                Xe ca chạy: <span className="font-bold">{editingSuggestedBuses}</span> | 
-                Xe dự phòng: <span className="font-bold">{editingBackupBuses}</span>
+                Xe vận doanh: <span className="font-bold">{fifoTotalVehicles}</span> | 
+                Xe dự phòng ({Math.round(backupBusRatio * 100)}%): <span className="font-bold">{requiredBackupBuses}</span>
+              </p>
+              <p className="text-xs text-emerald-400 mt-0.5 italic">
+                FIFO mô phỏng {fifoHeadway > 0 ? Math.floor((fifoEndMin - fifoStartMin) / fifoHeadway) + 1 : '?'} lượt/chiều với headway {fifoHeadway} phút
               </p>
             </div>
             <div className="flex gap-4 text-center">
               <div className="bg-white px-4 py-2 rounded shadow-sm border border-emerald-200">
                 <div className="text-xs text-gray-500">Tổng Xe Cần Phân Bổ</div>
-                <div className="text-xl font-bold text-emerald-700">{editingTotalBuses}</div>
+                <div className="text-xl font-bold text-emerald-700">{requiredTotalBuses}</div>
               </div>
             </div>
           </div>

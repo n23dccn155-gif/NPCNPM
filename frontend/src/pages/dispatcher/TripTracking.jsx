@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
+import { formatDate } from '../../utils/format';
 import { PageHeader, AlertBox } from '../../components/UI';
 import { getTrips } from '../../services/tripService';
 
@@ -81,7 +82,7 @@ export default function TripTracking() {
                 {trips.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="px-6 py-10 text-center text-gray-400">
-                      Không có chuyến xe nào vận hành trong ngày {new Date(filterDate).toLocaleDateString('vi-VN')}
+                      Không có chuyến xe nào vận hành trong ngày {formatDate(filterDate)}
                     </td>
                   </tr>
                 ) : (

@@ -51,12 +51,16 @@ const authController = {
         });
       }
 
-      // Nếu là driver, lấy thêm driver_id
+      // Nếu là driver, lấy thêm driver_id, phone, license_class
       let driver_id = null;
+      let phone = null;
+      let license_class = null;
       if (user.role === 'driver') {
-        const driverQuery = await pool.query('SELECT driver_id FROM drivers WHERE user_id = $1', [user.user_id]);
+        const driverQuery = await pool.query('SELECT driver_id, phone, license_class FROM drivers WHERE user_id = $1', [user.user_id]);
         if (driverQuery.rows.length > 0) {
           driver_id = driverQuery.rows[0].driver_id;
+          phone = driverQuery.rows[0].phone;
+          license_class = driverQuery.rows[0].license_class;
         }
       }
 
@@ -81,7 +85,9 @@ const authController = {
           username: user.username,
           full_name: user.full_name,
           role: user.role,
-          driver_id: driver_id
+          driver_id: driver_id,
+          phone: phone,
+          license_class: license_class
         },
       });
     } catch (error) {
@@ -110,12 +116,16 @@ const authController = {
 
       const user = result.rows[0];
 
-      // Nếu là driver, lấy thêm driver_id
+      // Nếu là driver, lấy thêm driver_id, phone, license_class
       let driver_id = null;
+      let phone = null;
+      let license_class = null;
       if (user.role === 'driver') {
-        const driverQuery = await pool.query('SELECT driver_id FROM drivers WHERE user_id = $1', [user.user_id]);
+        const driverQuery = await pool.query('SELECT driver_id, phone, license_class FROM drivers WHERE user_id = $1', [user.user_id]);
         if (driverQuery.rows.length > 0) {
           driver_id = driverQuery.rows[0].driver_id;
+          phone = driverQuery.rows[0].phone;
+          license_class = driverQuery.rows[0].license_class;
         }
       }
 
@@ -126,7 +136,9 @@ const authController = {
           username: user.username,
           full_name: user.full_name,
           role: user.role,
-          driver_id: driver_id
+          driver_id: driver_id,
+          phone: phone,
+          license_class: license_class
         },
       });
     } catch (error) {

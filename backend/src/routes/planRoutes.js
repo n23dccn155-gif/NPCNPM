@@ -15,5 +15,6 @@ router.post('/:planId/generate-trips', auth, role(['dispatcher']), planControlle
 router.post('/:planId/auto-assign', auth, role(['dispatcher']), assignmentController.autoAssignPlan);
 router.post('/:planId/submit', auth, role(['dispatcher']), planController.submitPlan);
 router.post('/:planId/review', auth, role(['manager']), planController.reviewPlan);
+router.delete('/:planId', auth, role(['dispatcher', 'manager']), planController.deletePlan);
 
 module.exports = router;

@@ -1,21 +1,35 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import Layout from '../../components/Layout';
-import { PageHeader, AlertBox } from '../../components/UI';
+import { formatDate } from '../../utils/format';
+import { PageHeader, AlertBox, Modal } from '../../components/UI';
 import { getRoutes } from '../../services/routeService';
-import { getPlans, getPlan } from '../../services/planService';
+import { getPlans, getPlan, submitPlan, deletePlan } from '../../services/planService';
 import { clearDriver, replaceDriver } from '../../services/assignmentService';
 import { getBuses, updateBusStatus } from '../../services/busService';
+import { cancelTrip } from '../../services/tripService';
 
 export default function ScheduleCalendar() {
+  const location = useLocation();
+  const initialRoute = location.state?.routeCode || null;
+  const initialDate = location.state?.date || new Date().toISOString().split('T')[0];
+  const initialViewMode = location.state?.viewMode || 'approved';
+
   const [routes, setRoutes] = useState([]);
-  const [selectedRoute, setSelectedRoute] = useState(null);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  
+  const [selectedRoute, setSelectedRoute] = useState(initialRoute);
+  const [selectedDate, setSelectedDate] = useState(initialDate);
+  const [viewMode, setViewMode] = useState(initialViewMode); // 'approved' | 'draft'
+
   const [loading, setLoading] = useState(true);
   const [planDetail, setPlanDetail] = useState(null);
   const [busPool, setBusPool] = useState([]);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [highlightedDriver, setHighlightedDriver] = useState(null);
+  const [cancelModal, setCancelModal] = useState({ open: false, trip: null, reason: '' });
+  const [cancelError, setCancelError] = useState('');
+  const [deleteModal, setDeleteModal] = useState({ open: false, planId: null, dateStr: '' });
+  const [submitModal, setSubmitModal] = useState({ open: false, planId: null, dateStr: '' });
 
   // Fetch active routes
   useEffect(() => {
@@ -23,7 +37,7 @@ export default function ScheduleCalendar() {
       .then((res) => {
         const data = res.data?.data || res.data || [];
         setRoutes(data);
-        if (data.length > 0) setSelectedRoute(data[0].route_code);
+        if (data.length > 0 && !selectedRoute) setSelectedRoute(data[0].route_code);
       })
       .catch(() => setError('Lỗi khi tải danh sách tuyến'))
       .finally(() => setLoading(false));
@@ -32,7 +46,7 @@ export default function ScheduleCalendar() {
   // Fetch plan for selected route and date
   useEffect(() => {
     if (!selectedRoute || !selectedDate) return;
-    
+
     setPlanDetail(null);
     setBusPool([]);
     setError('');
@@ -42,7 +56,9 @@ export default function ScheduleCalendar() {
       .then(res => setBusPool(res.data?.data || res.data || []))
       .catch(console.error);
 
-    getPlans({ route_code: selectedRoute, date: selectedDate, status: 'approved' })
+    const statusFilter = viewMode === 'approved' ? 'approved' : 'draft,pending_approval,rejected';
+
+    getPlans({ route_code: selectedRoute, date: selectedDate, status: statusFilter })
       .then((res) => {
         const plans = res.data?.data || res.data || [];
         if (plans.length > 0) {
@@ -59,9 +75,63 @@ export default function ScheduleCalendar() {
       .catch(() => {
         // If it fails, maybe there's no plan or network error. Just ignore for now.
       });
-  }, [selectedRoute, selectedDate]);
+  }, [selectedRoute, selectedDate, viewMode]);
 
-  
+
+  const openSubmitModal = () => {
+    if (!planDetail) return;
+    setSubmitModal({ open: true, planId: planDetail.plan_id, dateStr: planDetail.operation_date });
+  };
+
+  const handleSubmitPlanAction = async (type) => {
+    const planIdToSubmit = submitModal.planId;
+    setSubmitModal({ open: false, planId: null, dateStr: '' });
+    if (!planIdToSubmit) return;
+
+    setError('');
+    setSuccess('');
+    try {
+      if (type === 'future') {
+        await submitPlan(planIdToSubmit, { target: 'future' });
+        setSuccess('Đã gửi duyệt cả chu kỳ kế hoạch nháp thành công.');
+      } else {
+        await submitPlan(planIdToSubmit);
+        setSuccess('Gửi duyệt kế hoạch thành công.');
+      }
+      // Refresh plan details
+      const res = await getPlan(planIdToSubmit);
+      setPlanDetail(res.data?.data || res.data);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Không thể gửi duyệt');
+    }
+  };
+
+  const openDeleteModal = () => {
+    if (!planDetail) return;
+    setDeleteModal({ open: true, planId: planDetail.plan_id, dateStr: planDetail.operation_date });
+  };
+
+  const handleDeleteDraftAction = async (type) => {
+    const planIdToDelete = deleteModal.planId;
+    setDeleteModal({ open: false, planId: null, dateStr: '' });
+    if (!planIdToDelete) return;
+
+    setError('');
+    setSuccess('');
+    try {
+      if (type === 'future') {
+        await deletePlan(planIdToDelete, { target: 'future' });
+        setSuccess('Đã xóa cả chu kỳ kế hoạch nháp thành công.');
+      } else {
+        await deletePlan(planIdToDelete);
+        setSuccess('Đã xóa bản nháp kế hoạch ngày hôm nay thành công.');
+      }
+      setPlanDetail(null);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Không thể xóa kế hoạch');
+    }
+  };
+
   const handleClearDriver = async (e, groupId) => {
     e.stopPropagation();
     if (!window.confirm('Bạn có chắc chắn muốn gỡ tài xế này khỏi nhóm chuyến?')) return;
@@ -87,7 +157,7 @@ export default function ScheduleCalendar() {
     e.preventDefault();
     const newDriverId = e.dataTransfer.getData('text/plain');
     if (!newDriverId || !groupId) return;
-    
+
     try {
       await replaceDriver({ group_id: groupId, new_driver_id: newDriverId });
       // Reload plan
@@ -112,20 +182,108 @@ export default function ScheduleCalendar() {
     }
   };
 
+  const handleCancelClick = (e, trip) => {
+    e.stopPropagation();
+    setCancelModal({ open: true, trip, reason: '' });
+    setCancelError('');
+  };
+
+  const handleCancelSubmit = async (e) => {
+    e.preventDefault();
+    setCancelError('');
+    if (!cancelModal.reason.trim()) {
+      setCancelError('Vui lòng nhập lý do hủy chuyến');
+      return;
+    }
+    try {
+      await cancelTrip(cancelModal.trip.trip_id, cancelModal.reason);
+      setCancelModal({ open: false, trip: null, reason: '' });
+      setSuccess('Đã hủy chuyến xe thành công.');
+      setTimeout(() => setSuccess(''), 4000);
+      // Reload plan
+      if (planDetail?.plan_id) {
+        const res = await getPlan(planDetail.plan_id);
+        setPlanDetail(res.data?.data || res.data);
+      }
+    } catch (err) {
+      setCancelError(err.response?.data?.message || 'Lỗi khi hủy chuyến xe');
+    }
+  };
+
   // Render Daily Timeline
   const renderTimeline = () => {
     if (!planDetail || !planDetail.trips || planDetail.trips.length === 0) {
       return (
         <div className="text-center p-12 bg-white rounded-lg border shadow-sm text-gray-500">
-          Không có kế hoạch vận doanh (hoặc kế hoạch chưa được duyệt) cho tuyến và ngày này.
+          {viewMode === 'approved'
+            ? 'Không có kế hoạch vận doanh chính thức (đã phê duyệt) cho tuyến và ngày này.'
+            : 'Chưa có bản nháp kế hoạch nào được tạo cho tuyến và ngày này.'}
         </div>
       );
     }
 
-    
+    const getStatusText = (status) => {
+      switch (status) {
+        case 'draft': return 'Bản nháp';
+        case 'pending_approval': return 'Chờ phê duyệt';
+        case 'approved': return 'Đã phê duyệt';
+        case 'rejected': return 'Bị từ chối';
+        default: return status;
+      }
+    };
+
+    const getStatusBadge = (status) => {
+      switch (status) {
+        case 'draft': return 'bg-gray-100 text-gray-700 border border-gray-200';
+        case 'pending_approval': return 'bg-amber-100 text-amber-700 border border-amber-200';
+        case 'approved': return 'bg-green-100 text-green-700 border border-green-200';
+        case 'rejected': return 'bg-red-100 text-red-700 border border-red-200';
+        default: return 'bg-gray-100 text-gray-700 border border-gray-200';
+      }
+    };
+
+    const planHeader = (
+      <div className="bg-white p-4 rounded-lg border shadow-sm flex flex-wrap justify-between items-center gap-4">
+        <div className="flex items-center gap-3">
+          <span className="font-bold text-gray-700 text-sm">Trạng thái kế hoạch ngày:</span>
+          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase ${getStatusBadge(planDetail.status)}`}>
+            {getStatusText(planDetail.status)}
+          </span>
+        </div>
+        {viewMode === 'draft' && (
+          <div className="flex gap-3">
+            {(planDetail.status === 'draft' || planDetail.status === 'rejected') && (
+              <button
+                onClick={openSubmitModal}
+                className="bg-green-600 hover:bg-green-700 text-white font-semibold text-xs px-4 py-2 rounded-lg transition shadow-md shadow-green-500/10"
+              >
+                Gửi Quản lý duyệt
+              </button>
+            )}
+            {planDetail.status !== 'approved' && (
+              <button
+                onClick={openDeleteModal}
+                className="bg-white hover:bg-red-50 text-red-600 border border-red-200 font-semibold text-xs px-4 py-2 rounded-lg transition"
+              >
+                Xóa bản nháp
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+
+    const rejectReasonBanner = planDetail.status === 'rejected' && planDetail.reject_reason ? (
+      <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 text-xs font-semibold flex items-center gap-2">
+        <span>Lý do bị từ chối:</span>
+        <span className="font-bold">"{planDetail.reject_reason}"</span>
+      </div>
+    ) : null;
+
+
     const leaves = planDetail.approved_leaves || [];
     const isLeaveDriver = (name) => leaves.some(l => l.driver_name === name);
-    
+
     const leaveAlert = leaves.length > 0 ? (
       <div className="mb-4 bg-orange-50 border-l-4 border-orange-500 p-4 rounded-r-lg">
         <h3 className="font-bold text-orange-800">Thông tin Nghỉ phép</h3>
@@ -141,7 +299,7 @@ export default function ScheduleCalendar() {
             } else if (l.replaced_by) {
               return (
                 <li key={l.leave_id} className="text-green-700">
-                  <span className="font-bold line-through text-gray-500 mr-2">{l.driver_name}</span> 
+                  <span className="font-bold line-through text-gray-500 mr-2">{l.driver_name}</span>
                   đã được thay thế bởi <span className="font-bold">{l.replaced_by}</span>
                 </li>
               );
@@ -170,7 +328,7 @@ export default function ScheduleCalendar() {
         <ul className="list-disc list-inside text-sm mt-2 space-y-1">
           {incidents.map(i => (
             <li key={i.incident_id} className="text-red-700">
-              <span className="font-bold">Xe {i.license_plate || i.bus_id}</span> ({i.incident_type === 'bus_broken' ? 'Hỏng xe' : i.incident_type}) 
+              <span className="font-bold">Xe {i.license_plate || i.bus_id}</span> ({i.incident_type === 'bus_broken' ? 'Hỏng xe' : i.incident_type})
               do tài xế <span className="font-semibold">{i.reported_by_name}</span> báo cáo lúc {
                 (() => {
                   const d = new Date(i.created_at);
@@ -202,14 +360,16 @@ export default function ScheduleCalendar() {
                 <th className="p-3">Biển số</th>
                 <th className="p-3">Tài xế</th>
                 <th className="p-3 text-center">Trạng thái</th>
+                <th className="p-3 text-center">Trễ</th>
+                <th className="p-3 text-center">Hủy</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {trips.map(t => {
                 const group = planDetail.groups?.find(g => g.group_id === t.group_id);
                 return (
-                  <tr 
-                    key={t.trip_id} 
+                  <tr
+                    key={t.trip_id}
                     className={`hover:bg-gray-50 cursor-pointer transition ${highlightedDriver && group?.driver_name === highlightedDriver ? 'bg-yellow-100' : ''}`}
                     onClick={() => {
                       if (group?.driver_name) {
@@ -227,17 +387,17 @@ export default function ScheduleCalendar() {
                       </span>
                     </td>
                     <td className="p-3">{group?.license_plate || <span className="text-red-400">Chưa xếp</span>}</td>
-                    <td 
+                    <td
                       className={`p-3 ${!group?.driver_name ? 'bg-red-50 outline-dashed outline-1 outline-red-300' : ''}`}
                       onDragOver={handleDragOver}
                       onDrop={(e) => handleDrop(e, group?.group_id)}
                     >
                       <div className="flex items-center gap-2">
                         <span className={group?.driver_name && isLeaveDriver(group.driver_name) ? 'text-red-600 font-bold' : ''}>
-                          {group?.driver_name || <span className="text-red-400">Kéo thả tài xế dự bị vào đây...</span>}
+                          {group?.driver_name || <span className="text-red-400">Kéo thả tài xế dự bị...</span>}
                         </span>
                         {group?.driver_name && (
-                          <button 
+                          <button
                             onClick={(e) => handleClearDriver(e, group.group_id)}
                             className="text-gray-400 hover:text-red-600 hover:bg-red-100 rounded-full w-5 h-5 flex items-center justify-center text-xs ml-auto transition"
                             title="Gỡ tài xế"
@@ -258,6 +418,25 @@ export default function ScheduleCalendar() {
                         <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-md border border-amber-200">Chưa chạy</span>
                       )}
                     </td>
+                    <td className="p-3 text-center">
+                      {t.delay_minutes > 0 ? (
+                        <span className="px-2 py-1 rounded-md bg-red-50 text-red-700 border border-red-200 font-bold text-xs">
+                          {t.delay_minutes} phút
+                        </span>
+                      ) : (
+                        <span className="text-gray-500 font-medium">0</span>
+                      )}
+                    </td>
+                    <td className="p-3 text-center">
+                      {t.status !== 'completed' && t.status !== 'cancelled' ? (
+                        <button
+                          onClick={(e) => handleCancelClick(e, t)}
+                          className="text-red-600 hover:text-red-800 font-bold hover:bg-red-50 px-2 py-1 rounded text-xs transition"
+                        >
+                          Hủy
+                        </button>
+                      ) : '—'}
+                    </td>
                   </tr>
                 );
               })}
@@ -269,6 +448,8 @@ export default function ScheduleCalendar() {
 
     return (
       <div className="space-y-6">
+        {planHeader}
+        {rejectReasonBanner}
         {leaveAlert}
         {incidentAlert}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -287,15 +468,14 @@ export default function ScheduleCalendar() {
             </div>
             <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
               {planDetail.standby_drivers.map(sd => (
-                <div 
-                  key={sd.assignment_id} 
+                <div
+                  key={sd.assignment_id}
                   draggable={true}
                   onDragStart={(e) => handleDragStart(e, sd.driver_id)}
-                  className={`border rounded p-3 flex flex-col gap-1 cursor-grab active:cursor-grabbing transition ${
-                    highlightedDriver === sd.driver_name 
-                      ? 'bg-yellow-100 border-yellow-300 shadow-sm' 
+                  className={`border rounded p-3 flex flex-col gap-1 cursor-grab active:cursor-grabbing transition ${highlightedDriver === sd.driver_name
+                      ? 'bg-yellow-100 border-yellow-300 shadow-sm'
                       : 'border-orange-100 bg-orange-50/50 hover:bg-orange-100'
-                  }`}
+                    }`}
                   onClick={() => setHighlightedDriver(sd.driver_name === highlightedDriver ? null : sd.driver_name)}
                 >
                   <div className="font-medium text-gray-900">{sd.driver_name}</div>
@@ -317,32 +497,30 @@ export default function ScheduleCalendar() {
             </div>
             <div className="p-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {busPool.map(bus => (
-                <div 
-                  key={bus.bus_id} 
-                  className={`border rounded p-3 flex flex-col gap-1 transition ${
-                    bus.status === 'active' ? 'border-green-200 bg-green-50' :
-                    bus.status === 'maintenance' ? 'border-red-200 bg-red-50' :
-                    bus.status === 'inactive' ? 'border-gray-200 bg-gray-50' :
-                    'border-yellow-200 bg-yellow-50'
-                  }`}
+                <div
+                  key={bus.bus_id}
+                  className={`border rounded p-3 flex flex-col gap-1 transition ${bus.status === 'active' ? 'border-green-200 bg-green-50' :
+                      bus.status === 'maintenance' ? 'border-red-200 bg-red-50' :
+                        bus.status === 'inactive' ? 'border-gray-200 bg-gray-50' :
+                          'border-yellow-200 bg-yellow-50'
+                    }`}
                 >
                   <div className="font-bold text-gray-900">{bus.license_plate}</div>
-                  <div className={`text-xs font-semibold uppercase ${
-                    bus.status === 'active' ? 'text-green-600' :
-                    bus.status === 'maintenance' ? 'text-red-600' :
-                    bus.status === 'inactive' ? 'text-gray-500' :
-                    'text-yellow-600'
-                  }`}>
+                  <div className={`text-xs font-semibold uppercase ${bus.status === 'active' ? 'text-green-600' :
+                      bus.status === 'maintenance' ? 'text-red-600' :
+                        bus.status === 'inactive' ? 'text-gray-500' :
+                          'text-yellow-600'
+                    }`}>
                     {bus.status === 'active' ? 'Hoạt động' :
-                     bus.status === 'maintenance' ? 'Bảo trì / Hỏng' :
-                     bus.status === 'inactive' ? 'Ngưng' : bus.status}
+                      bus.status === 'maintenance' ? 'Bảo trì / Hỏng' :
+                        bus.status === 'inactive' ? 'Ngưng' : bus.status}
                   </div>
                   {bus.status === 'maintenance' && (
                     <button
                       onClick={() => handleRestoreBus(bus.bus_id)}
                       className="mt-1 bg-white text-xs font-semibold text-blue-600 border border-blue-200 rounded px-2 py-1 hover:bg-blue-50 transition"
                     >
-                      🔧 Phục hồi xe
+                      Phục hồi xe
                     </button>
                   )}
                 </div>
@@ -361,6 +539,7 @@ export default function ScheduleCalendar() {
       <div className="p-6 max-w-[1400px] mx-auto space-y-6">
         <PageHeader title="Lịch biểu Phân công" />
         {error && <AlertBox type="error" message={error} />}
+        {success && <div className="mb-4"><AlertBox type="success" message={success} /></div>}
 
         {/* Controls */}
         <div className="bg-white p-4 rounded-lg shadow-sm border flex flex-wrap gap-6 items-end">
@@ -387,11 +566,135 @@ export default function ScheduleCalendar() {
               className="border rounded-lg px-4 py-2 bg-gray-50 w-48"
             />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Trạng thái kế hoạch</label>
+            <select
+              value={viewMode}
+              onChange={(e) => setViewMode(e.target.value)}
+              className="border rounded-lg px-4 py-2 w-64 bg-gray-50 font-medium"
+            >
+              <option value="approved">Đã phê duyệt (Vận hành)</option>
+              <option value="draft">Bản nháp / Chưa duyệt</option>
+            </select>
+          </div>
         </div>
 
         {/* Timeline */}
         {renderTimeline()}
       </div>
+
+      {/* Cancel Trip Modal */}
+      <Modal isOpen={cancelModal.open} title="Hủy chuyến xe khẩn cấp" onClose={() => setCancelModal({ open: false, trip: null, reason: '' })}>
+        {cancelModal.trip && (
+          <form onSubmit={handleCancelSubmit} className="space-y-4">
+            {cancelError && <AlertBox type="error" message={cancelError} />}
+
+            <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-semibold rounded-xl p-3.5 leading-relaxed">
+              ⚠️ CẢNH BÁO: Thao tác này sẽ hủy bỏ chuyến xe thứ #{cancelModal.trip.trip_order} thuộc ca chạy "{cancelModal.trip.group_name || 'N/A'}". Một thông báo khẩn sẽ được gửi đến tài xế được phân công chạy chuyến này.
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wider">Lý do hủy chuyến *</label>
+              <textarea
+                value={cancelModal.reason}
+                onChange={e => setCancelModal({ ...cancelModal, reason: e.target.value })}
+                required
+                rows={3}
+                placeholder="Nhập lý do chi tiết hủy chuyến (VD: Xe hỏng đột xuất, tắc đường nghiêm trọng...)"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+              />
+            </div>
+
+            <div className="flex gap-3 justify-end pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setCancelModal({ open: false, trip: null, reason: '' })}
+                className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-slate-50 transition"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold shadow-md shadow-red-500/10 transition"
+              >
+                Xác nhận hủy chuyến
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* Delete Draft Plan Modal */}
+      <Modal 
+        isOpen={deleteModal.open} 
+        title="Xóa kế hoạch nháp" 
+        onClose={() => setDeleteModal({ open: false, planId: null, dateStr: '' })}
+      >
+        <div className="space-y-4">
+          <p className="text-gray-600 text-sm leading-relaxed">
+            Bạn muốn thực hiện thao tác xóa nào cho tuyến <strong>{selectedRoute}</strong> bắt đầu từ ngày <strong>{deleteModal.dateStr ? formatDate(deleteModal.dateStr) : ''}</strong>?
+          </p>
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-xl p-3 leading-relaxed">
+            ⚠️ Lưu ý: Thao tác xóa kế hoạch nháp sẽ đồng thời xóa toàn bộ thông tin phân công xe, ca chạy và các chuyến xe liên quan.
+          </div>
+          <div className="flex flex-col gap-3 pt-2">
+            <button
+              onClick={() => handleDeleteDraftAction('single')}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-xl text-sm transition"
+            >
+              Chỉ xóa ngày hiện tại ({deleteModal.dateStr ? formatDate(deleteModal.dateStr) : ''})
+            </button>
+            <button
+              onClick={() => handleDeleteDraftAction('future')}
+              className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2.5 px-4 rounded-xl text-sm transition"
+            >
+              Xóa cả chu kỳ (Từ ngày {deleteModal.dateStr ? formatDate(deleteModal.dateStr) : ''} trở đi)
+            </button>
+            <button
+              onClick={() => setDeleteModal({ open: false, planId: null, dateStr: '' })}
+              className="w-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 font-semibold py-2.5 px-4 rounded-xl text-sm transition"
+            >
+              Hủy bỏ
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Submit Draft Plan Modal */}
+      <Modal 
+        isOpen={submitModal.open} 
+        title="Gửi duyệt kế hoạch" 
+        onClose={() => setSubmitModal({ open: false, planId: null, dateStr: '' })}
+      >
+        <div className="space-y-4">
+          <p className="text-gray-600 text-sm leading-relaxed">
+            Bạn muốn thực hiện thao tác gửi duyệt nào cho tuyến <strong>{selectedRoute}</strong> bắt đầu từ ngày <strong>{submitModal.dateStr ? formatDate(submitModal.dateStr) : ''}</strong>?
+          </p>
+          <div className="bg-blue-50 border border-blue-200 text-blue-800 text-xs rounded-xl p-3 leading-relaxed">
+            ℹ️ Lưu ý: Khi gửi duyệt, tất cả các nhóm chuyến của kế hoạch phải được phân công xe và tài xế đầy đủ.
+          </div>
+          <div className="flex flex-col gap-3 pt-2">
+            <button
+              onClick={() => handleSubmitPlanAction('single')}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-xl text-sm transition"
+            >
+              Chỉ gửi duyệt ngày hiện tại ({submitModal.dateStr ? formatDate(submitModal.dateStr) : ''})
+            </button>
+            <button
+              onClick={() => handleSubmitPlanAction('future')}
+              className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 px-4 rounded-xl text-sm transition"
+            >
+              Gửi duyệt cả chu kỳ (Từ ngày {submitModal.dateStr ? formatDate(submitModal.dateStr) : ''} trở đi)
+            </button>
+            <button
+              onClick={() => setSubmitModal({ open: false, planId: null, dateStr: '' })}
+              className="w-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 font-semibold py-2.5 px-4 rounded-xl text-sm transition"
+            >
+              Hủy bỏ
+            </button>
+          </div>
+        </div>
+      </Modal>
     </Layout>
   );
 }

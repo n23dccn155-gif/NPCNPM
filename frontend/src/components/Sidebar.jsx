@@ -69,17 +69,6 @@ const menuByRole = {
     },
 
     {
-      label: 'Hành trình & Điểm dừng',
-      path: '/manager/direction-stops',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <circle cx="12" cy="5" r="3" />
-          <circle cx="12" cy="19" r="3" />
-        </svg>
-      ),
-    },
-    {
       label: 'Duyệt kế hoạch vận doanh',
       path: '/manager/plan-approval',
       icon: (
@@ -129,6 +118,7 @@ const menuByRole = {
   ],
   dispatcher: [
     {
+<<<<<<< HEAD
       label: 'Tổng quan',
       path: '/dashboard',
       icon: (
@@ -160,6 +150,9 @@ const menuByRole = {
     },
     {
       label: 'Nguồn lực Tài xế',
+=======
+      label: 'Nguồn lực Xe & Tài xế',
+>>>>>>> ed64ea497b8925f8778ff9f6b7f8fbdbff782002
       path: '/dispatcher/route-drivers',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -169,7 +162,7 @@ const menuByRole = {
       ),
     },
     {
-      label: 'Xem lịch biểu',
+      label: 'Lịch biểu & Giám sát',
       path: '/dispatcher/calendar',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -180,6 +173,7 @@ const menuByRole = {
       ),
     },
     {
+<<<<<<< HEAD
       label: 'Lập kế hoạch & Chuyến',
     },
     {
@@ -205,6 +199,8 @@ const menuByRole = {
       ),
     },
     {
+=======
+>>>>>>> ed64ea497b8925f8778ff9f6b7f8fbdbff782002
       label: 'Sự cố khẩn cấp',
       path: '/dispatcher/incidents',
       icon: (

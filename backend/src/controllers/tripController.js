@@ -166,6 +166,7 @@ const tripController = {
            WHERE tg.group_id = $1`,
           [trip.group_id]
         );
+<<<<<<< HEAD
         const groupName = groupInfo.rows[0]?.group_name || 'không xác định';
         const routeCode = groupInfo.rows[0]?.route_code || 'không xác định';
         const dispatcherId = groupInfo.rows[0]?.dispatcher_id;
@@ -226,6 +227,16 @@ const tripController = {
             );
           }
           broadcast('NEW_NOTIFICATION', { title: 'Chuyến đã xuất bến', content });
+=======
+        if (planRes.rows.length) {
+          const dispatcherId = planRes.rows[0].created_by;
+          const routeCode = planRes.rows[0].route_code;
+          await pool.query(
+            `INSERT INTO notifications (user_id, title, content, redirect_url) 
+             VALUES ($1, 'Cảnh báo trễ chuyến', $2, '/dispatcher/calendar')`,
+            [dispatcherId, `Chuyến thứ ${trip.trip_order} (Tuyến ${routeCode}) xuất bến trễ ${delayMinutes} phút.`]
+          );
+>>>>>>> ed64ea497b8925f8778ff9f6b7f8fbdbff782002
         }
       } catch (e) { console.error('Notification error:', e); }
 
@@ -344,6 +355,7 @@ const tripController = {
         [tripId]
       );
 
+<<<<<<< HEAD
       // --- Thông báo hủy chuyến ---
       try {
         // Lấy thông tin chi tiết
@@ -353,6 +365,22 @@ const tripController = {
            JOIN operation_plans p ON tg.plan_id = p.plan_id
            WHERE tg.group_id = $1`,
           [trip.group_id]
+=======
+      // Tạo thông báo cho tài xế được phân công (nếu có)
+      const assignmentRes = await pool.query(
+        `SELECT d.user_id 
+         FROM assignments a
+         JOIN drivers d ON a.driver_id = d.driver_id
+         WHERE a.group_id = $1 AND a.status = 'active'`,
+        [trip.group_id]
+      );
+
+      if (assignmentRes.rows.length) {
+        await pool.query(
+          `INSERT INTO notifications (user_id, title, content, redirect_url) 
+           VALUES ($1, 'Hủy chuyến xe', $2, '/driver/schedule')`,
+          [assignmentRes.rows[0].user_id, `Chuyến thứ ${trip.trip_order} trong ca chạy của bạn đã bị hủy. Lý do: ${reason}`]
+>>>>>>> ed64ea497b8925f8778ff9f6b7f8fbdbff782002
         );
         const groupName = groupInfo.rows[0]?.group_name || 'không xác định';
         const routeCode = groupInfo.rows[0]?.route_code || 'không xác định';

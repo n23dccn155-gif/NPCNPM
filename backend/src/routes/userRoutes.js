@@ -10,6 +10,7 @@ router.get('/', auth, role(['manager']), userController.getAll);
 router.post('/', auth, role(['manager']), userController.create);
 router.put('/:userId', auth, role(['manager']), userController.update);
 router.patch('/:userId/status', auth, role(['manager']), userController.updateStatus);
+router.get('/check-username/:username', auth, role(['manager']), userController.checkUsername);
 
 // Hồ sơ cá nhân người dùng hiện tại
 router.put('/profile/password', auth, userController.changePassword);

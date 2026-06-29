@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Layout from '../../components/Layout';
+import { formatDate } from '../../utils/format';
 import { PageHeader, Modal, AlertBox } from '../../components/UI';
 import { getPlans, getPlan, reviewPlan, reviewBatchPlans } from '../../services/planService';
 import { getRoutes } from '../../services/routeService';
@@ -24,6 +25,71 @@ export default function PlanApproval() {
   const [errorMsg, setErrorMsg] = useState('');
 
   const [filterStatus, setFilterStatus] = useState('');
+
+  const leaves = useMemo(() => planDetail?.approved_leaves || [], [planDetail]);
+  const isLeaveDriver = (name) => leaves.some(l => l.driver_name === name);
+
+  const outboundTrips = useMemo(() => {
+    return planDetail?.trips?.filter(t => t.direction_type === 'outbound') || [];
+  }, [planDetail]);
+
+  const inboundTrips = useMemo(() => {
+    return planDetail?.trips?.filter(t => t.direction_type === 'inbound') || [];
+  }, [planDetail]);
+
+  const renderTripTable = (trips, title) => (
+    <div className="flex-1 bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+      <div className="bg-slate-50 border-b border-slate-100 p-3 font-bold text-slate-700 text-center text-xs">
+        {title} ({trips.length} chuyến)
+      </div>
+      <div className="max-h-[500px] overflow-y-auto">
+        <table className="w-full text-xs text-left">
+          <thead className="bg-slate-100 sticky top-0 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
+            <tr>
+              <th className="p-3">Giờ xuất bến</th>
+              <th className="p-3">Mã nhóm</th>
+              <th className="p-3">Biển số</th>
+              <th className="p-3">Tài xế</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {trips.map(t => {
+              const group = planDetail.groups?.find(g => g.group_id === t.group_id);
+              return (
+                <tr
+                  key={t.trip_id}
+                  className={`hover:bg-slate-50 cursor-pointer transition ${highlightedDriver && group?.driver_name === highlightedDriver ? 'bg-yellow-50' : ''}`}
+                  onClick={() => {
+                    if (group?.driver_name) {
+                      setHighlightedDriver(group.driver_name === highlightedDriver ? null : group.driver_name);
+                    }
+                  }}
+                >
+                  <td className="p-3 font-semibold text-blue-600">
+                    {t.status === 'cancelled' && <span className="text-red-500 font-bold mr-1">[HỦY]</span>}
+                    {t.scheduled_departure ? new Date(t.scheduled_departure).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                  </td>
+                  <td className="p-3">
+                    <span className={t.status === 'cancelled' ? 'line-through text-slate-400' : ''}>
+                      {t.group_name || '-'}
+                    </span>
+                  </td>
+                  <td className="p-3 font-semibold text-slate-700">
+                    {group?.license_plate || <span className="text-slate-400 font-normal italic">Chưa xếp</span>}
+                  </td>
+                  <td className="p-3">
+                    <span className={group?.driver_name && isLeaveDriver(group.driver_name) ? 'text-red-600 font-bold' : 'text-slate-700 font-medium'}>
+                      {group?.driver_name || <span className="text-slate-400 font-normal italic">Chưa xếp</span>}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 
   const loadPlans = () => {
     setLoading(true);
@@ -130,7 +196,7 @@ export default function PlanApproval() {
         groups.push(currentGroup);
       } else {
         const diffDays = Math.round((planDate - currentGroup.endDate) / (1000 * 60 * 60 * 24));
-        
+
         if (
           plan.route_code === currentGroup.route_code &&
           plan.status === currentGroup.status &&
@@ -198,20 +264,19 @@ export default function PlanApproval() {
                   <button
                     key={`${g.id}-${idx}`}
                     onClick={() => handleGroupClick(g)}
-                    className={`w-full text-left px-5 py-3.5 transition-all ${
-                      selectedGroup?.id === g.id
+                    className={`w-full text-left px-5 py-3.5 transition-all ${selectedGroup?.id === g.id
                         ? 'bg-blue-50 border-l-4 border-blue-600'
                         : 'hover:bg-slate-50 border-l-4 border-transparent'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="font-bold text-sm text-slate-800">{getRouteName(g.route_code)}</div>
                         <div className="text-xs text-slate-500 mt-0.5 font-mono">
                           {g.count > 1 ? (
-                            `Từ ${g.startDate.toLocaleDateString('vi-VN')} đến ${g.endDate.toLocaleDateString('vi-VN')} (${g.count} ngày)`
+                            `Từ ${formatDate(g.startDate)} đến ${formatDate(g.endDate)} (${g.count} ngày)`
                           ) : (
-                            `Ngày: ${g.startDate.toLocaleDateString('vi-VN')}`
+                            `Ngày: ${formatDate(g.startDate)}`
                           )}
                         </div>
                       </div>
@@ -241,9 +306,9 @@ export default function PlanApproval() {
                     <h3 className="font-bold text-lg text-slate-800">{getRouteName(planDetail.route_code)}</h3>
                     <p className="text-xs text-slate-500 mt-1 font-mono">
                       {selectedGroup?.count > 1 ? (
-                        `Ngày vận hành: Từ ${selectedGroup.startDate.toLocaleDateString('vi-VN')} đến ${selectedGroup.endDate.toLocaleDateString('vi-VN')} (${selectedGroup.count} ngày)`
+                        `Ngày vận hành: Từ ${formatDate(selectedGroup.startDate)} đến ${formatDate(selectedGroup.endDate)} (${selectedGroup.count} ngày)`
                       ) : (
-                        `Ngày vận hành: ${new Date(planDetail.operation_date).toLocaleDateString('vi-VN')}`
+                        `Ngày vận hành: ${formatDate(planDetail.operation_date)}`
                       )}
                       {planDetail.submitted_by_name && ` • Gửi bởi: ${planDetail.submitted_by_name}`}
                     </p>
@@ -283,13 +348,12 @@ export default function PlanApproval() {
                       <button
                         key={p.id}
                         onClick={() => loadPlanDetail(p.id)}
-                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition ${
-                          selectedPlanId === p.id 
-                            ? 'bg-blue-600 border-blue-600 text-white' 
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition ${selectedPlanId === p.id
+                            ? 'bg-blue-600 border-blue-600 text-white'
                             : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                        }`}
+                          }`}
                       >
-                        {p.date.toLocaleDateString('vi-VN')}
+                        {formatDate(p.date)}
                       </button>
                     ))}
                   </div>
@@ -320,86 +384,96 @@ export default function PlanApproval() {
                 </div>
               )}
 
-              {/* Groups */}
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                <h4 className="font-bold text-sm text-slate-800 mb-3">Nhóm chuyến & Phân công ({planDetail.groups?.length || 0} nhóm)</h4>
-                {!planDetail.groups?.length ? (
-                  <div className="text-center py-10 bg-slate-50 rounded-xl text-slate-400 text-xs">Chưa có nhóm chuyến nào</div>
-                ) : (
-                  <div className="space-y-3">
-                    {planDetail.groups.map(g => (
-                      <div 
-                        key={g.group_id} 
-                        className={`border border-slate-100 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 cursor-pointer transition ${highlightedDriver && g.driver_name === highlightedDriver ? 'bg-yellow-100 border-yellow-300' : 'bg-white'}`}
-                        onClick={() => {
-                          if (g.driver_name) {
-                            setHighlightedDriver(g.driver_name === highlightedDriver ? null : g.driver_name);
-                          }
-                        }}
+              {/* Leaves & Incidents Alerts */}
+              {leaves.length > 0 && (
+                <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-xl">
+                  <h4 className="font-bold text-amber-800 text-xs uppercase tracking-wider mb-1.5">Thông tin nghỉ phép</h4>
+                  <p className="text-xs text-amber-700 font-medium">Danh sách tài xế xin nghỉ trong ngày:</p>
+                  <ul className="list-disc list-inside text-xs mt-2 space-y-1 text-slate-700">
+                    {leaves.map(l => {
+                      if (l.not_scheduled) {
+                        return (
+                          <li key={l.leave_id} className="text-slate-500 italic">
+                            {l.driver_name} <span className="text-2xs">(Có lịch nghỉ nhưng hôm nay không được phân công tuyến này)</span>
+                          </li>
+                        );
+                      } else if (l.replaced_by) {
+                        return (
+                          <li key={l.leave_id} className="text-green-700 font-medium">
+                            <span className="font-bold line-through text-slate-400 mr-2">{l.driver_name}</span>
+                            đã được thay thế bởi <span className="font-bold">{l.replaced_by}</span>
+                          </li>
+                        );
+                      } else if (l.cleared) {
+                        return (
+                          <li key={l.leave_id} className="text-amber-600 font-bold">
+                            {l.driver_name} <span className="font-normal">(Đã gỡ phân công, đang chờ thay thế tài xế dự bị)</span>
+                          </li>
+                        );
+                      } else {
+                        return (
+                          <li key={l.leave_id} className="text-red-600 font-bold">
+                            {l.driver_name} <span className="font-normal text-red-500">(Đang được phân công chạy. Cần Điều phối viên thay thế!)</span>
+                          </li>
+                        );
+                      }
+                    })}
+                  </ul>
+                </div>
+              )}
+
+              {planDetail.incidents && planDetail.incidents.length > 0 && (
+                <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl">
+                  <h4 className="font-bold text-red-800 text-xs uppercase tracking-wider mb-1.5">Sự cố trong ngày</h4>
+                  <ul className="list-disc list-inside text-xs space-y-1 text-slate-700">
+                    {planDetail.incidents.map(i => (
+                      <li key={i.incident_id} className="text-red-700 font-medium">
+                        <span className="font-bold">Xe {i.license_plate || i.bus_id}</span> ({i.incident_type === 'bus_broken' ? 'Hỏng xe' : i.incident_type}) 
+                        do tài xế <span className="font-semibold">{i.reported_by_name}</span> báo cáo lúc {
+                          (() => {
+                            const d = new Date(i.created_at);
+                            d.setHours(d.getHours() + 7);
+                            return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                          })()
+                        }.
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Outbound & Inbound Tables Side-by-Side */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {renderTripTable(outboundTrips, `Chiều Đi (Từ ${outboundTrips[0]?.start_point || 'A'})`)}
+                {renderTripTable(inboundTrips, `Chiều Về (Từ ${inboundTrips[0]?.start_point || 'B'})`)}
+              </div>
+
+              {/* Standby Drivers */}
+              {planDetail.standby_drivers && planDetail.standby_drivers.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                  <div className="bg-amber-50 border-b border-amber-100 p-4 font-bold text-slate-800 flex items-center gap-2 text-sm">
+                    <span>Tài xế Dự bị (Hôm nay)</span>
+                    <span className="bg-amber-200 text-amber-800 text-xs px-2 py-0.5 rounded-full">
+                      {planDetail.standby_drivers.length}
+                    </span>
+                  </div>
+                  <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {planDetail.standby_drivers.map(sd => (
+                      <div
+                        key={sd.assignment_id}
+                        className={`border rounded-xl p-3 flex flex-col gap-1 transition cursor-pointer ${highlightedDriver === sd.driver_name
+                            ? 'bg-yellow-100 border-yellow-300 shadow-sm'
+                            : 'border-amber-100 bg-amber-50/50 hover:bg-amber-100'
+                          }`}
+                        onClick={() => setHighlightedDriver(sd.driver_name === highlightedDriver ? null : sd.driver_name)}
                       >
-                        <div>
-                          <div className="font-bold text-slate-800 text-sm">{g.group_name}</div>
-                          <div className="text-2xs font-semibold text-gray-500 mt-1 font-mono">
-                            {new Date(g.start_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} – {new Date(g.end_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                          </div>
-                        </div>
-                        <div className="text-xs text-right">
-                          <div>
-                            <span className="text-slate-400 font-medium">Xe: </span>
-                            <span className={g.license_plate ? 'font-bold text-slate-900' : 'text-red-500 font-bold'}>
-                              {g.license_plate || 'Chưa phân công'}
-                            </span>
-                          </div>
-                          <div className="mt-0.5">
-                            <span className="text-slate-400 font-medium">Tài xế: </span>
-                            <span className={g.driver_name ? 'font-bold text-slate-900' : 'text-red-500 font-bold'}>
-                              {g.driver_name || 'Chưa phân công'}
-                            </span>
-                          </div>
-                        </div>
+                        <div className="font-bold text-slate-800 text-xs">{sd.driver_name}</div>
+                        <div className="text-[10px] text-slate-500">Ca: {sd.assignment_type === 'standby_morning' ? 'Sáng (đến 13h)' : 'Chiều (từ 13h)'}</div>
                       </div>
                     ))}
                   </div>
-                )}
-              </div>
-
-              {/* Trips */}
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                <h4 className="font-bold text-sm text-slate-800 mb-3">Lịch trình chi tiết ({planDetail.trips?.length || 0} chuyến)</h4>
-                {!planDetail.trips?.length ? (
-                  <div className="text-center py-6 bg-slate-50 rounded-xl text-slate-400 text-xs">Không có lịch chuyến</div>
-                ) : (
-                  <div className="max-h-60 overflow-y-auto border border-slate-100 rounded-xl divide-y">
-                    {planDetail.trips.map(t => {
-                      const group = planDetail.groups?.find(g => g.group_id === t.group_id);
-                      return (
-                        <div 
-                          key={t.trip_id} 
-                          className={`px-4 py-3 flex justify-between items-center text-xs hover:bg-slate-50 transition cursor-pointer ${highlightedDriver && group?.driver_name === highlightedDriver ? 'bg-yellow-100' : ''}`}
-                          onClick={() => {
-                            if (group?.driver_name) {
-                              setHighlightedDriver(group.driver_name === highlightedDriver ? null : group.driver_name);
-                            }
-                          }}
-                        >
-                          <div>
-                            <span className="font-bold font-mono text-slate-700">Chuyến #{t.trip_order}</span>
-                            <span className="text-slate-400 ml-2">({t.direction_type === 'outbound' ? 'Chiều đi' : 'Chiều về'})</span>
-                            {t.group_name && (
-                              <span className="ml-3 px-2 py-0.5 rounded-lg text-3xs font-semibold bg-blue-50 text-blue-600 border border-blue-100">
-                                {t.group_name}
-                              </span>
-                            )}
-                          </div>
-                          <div className="font-semibold text-slate-800">
-                            {new Date(t.scheduled_departure).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} – {new Date(t.scheduled_arrival).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-16 text-center text-slate-400 font-semibold">
@@ -419,11 +493,11 @@ export default function PlanApproval() {
             <div className="flex gap-4">
               <label className="flex items-center gap-2 font-semibold text-sm text-slate-700 cursor-pointer">
                 <input type="radio" name="decision" value="approve" checked={reviewDecision === 'approve'} onChange={() => setReviewDecision('approve')} className="w-4 h-4 text-blue-600" />
-                ✅ Duyệt kế hoạch
+                Duyệt kế hoạch
               </label>
               <label className="flex items-center gap-2 font-semibold text-sm text-slate-700 cursor-pointer">
                 <input type="radio" name="decision" value="reject" checked={reviewDecision === 'reject'} onChange={() => setReviewDecision('reject')} className="w-4 h-4 text-red-600" />
-                ❌ Từ chối
+                Từ chối
               </label>
             </div>
           </div>
@@ -448,9 +522,8 @@ export default function PlanApproval() {
             </button>
             <button
               type="submit"
-              className={`px-5 py-2.5 text-white rounded-xl text-sm font-semibold shadow-md transition ${
-                reviewDecision === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
-              }`}
+              className={`px-5 py-2.5 text-white rounded-xl text-sm font-semibold shadow-md transition ${reviewDecision === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
+                }`}
             >
               {reviewDecision === 'approve' ? 'Xác nhận duyệt' : 'Xác nhận từ chối'}
             </button>

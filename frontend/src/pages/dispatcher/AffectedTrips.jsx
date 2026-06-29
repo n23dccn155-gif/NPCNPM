@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
+import { formatDate } from '../../utils/format';
 import { PageHeader, AlertBox, Modal } from '../../components/UI';
 import { getAllIncidents, updateIncidentStatus, getAffectedGroups as getIncidentAffected } from '../../services/incidentService';
 import { getAllLeaves, getAffectedGroups as getLeaveAffected } from '../../services/leaveService';
@@ -249,7 +250,7 @@ export default function AffectedTrips() {
                     >
                       <div className="font-bold text-slate-800 text-xs">{l.driver_name}</div>
                       <div className="text-2xs font-semibold text-slate-500 mt-1">
-                        Ngày xin nghỉ: {new Date(l.leave_date).toLocaleDateString('vi-VN')}
+                        Ngày xin nghỉ: {formatDate(l.leave_date)}
                       </div>
                       <p className="text-xs text-slate-600 mt-1 line-clamp-1">Lý do: {l.reason || '—'}</p>
                     </div>
@@ -301,7 +302,7 @@ export default function AffectedTrips() {
 
                 {selectedLeave && (
                   <div className="bg-slate-50 rounded-xl p-4 text-xs font-semibold text-slate-700">
-                    Nghỉ phép tài xế: <span className="font-bold">{selectedLeave.driver_name}</span> ngày {new Date(selectedLeave.leave_date).toLocaleDateString('vi-VN')}
+                    Nghỉ phép tài xế: <span className="font-bold">{selectedLeave.driver_name}</span> ngày {formatDate(selectedLeave.leave_date)}
                   </div>
                 )}
 
