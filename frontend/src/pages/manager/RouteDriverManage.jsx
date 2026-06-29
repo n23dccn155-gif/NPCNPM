@@ -228,8 +228,23 @@ export default function RouteDriverManage() {
               const shortLayover = Number(selectedRoute.short_layover_minutes || 0);
               const headway = Number(selectedRoute.headway_minutes || 1);
               const minRestTime = Number(selectedRoute.min_rest_time_minutes || 60);
-              const rtt = outboundTravel + inboundTravel + (shortLayover * 2);
-              const baseBuses = (headway > 0 && rtt > 0) ? Math.ceil(rtt / headway) : 0;
+
+              const timeToMinutes = (timeStr) => {
+                if (!timeStr) return 0;
+                const [h, m] = String(timeStr).split(':').map(Number);
+                return h * 60 + m;
+              };
+
+              const startMin = timeToMinutes(selectedRoute.start_time);
+              const inboundStartMin = timeToMinutes(selectedRoute.inbound_start_time || selectedRoute.start_time);
+
+              const firstArrivalAtB = startMin + outboundTravel + shortLayover;
+              const requiredBusesB = Math.max(0, Math.ceil((firstArrivalAtB - inboundStartMin) / headway));
+
+              const firstArrivalAtA = inboundStartMin + inboundTravel + shortLayover;
+              const requiredBusesA = Math.max(0, Math.ceil((firstArrivalAtA - startMin) / headway));
+
+              const baseBuses = (headway > 0) ? (requiredBusesA + requiredBusesB) : 0;
               
               const requiredRecoveryBuses = headway > 0 ? Math.ceil(minRestTime / headway) : 0;
               const suggestedOperatingBuses = baseBuses + requiredRecoveryBuses;
