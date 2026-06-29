@@ -16,7 +16,6 @@ import DriverList from './pages/manager/DriverList';
 import LeaveApproval from './pages/manager/LeaveApproval';
 import Reports from './pages/manager/Reports';
 import UserList from './pages/manager/UserList';
-import RouteBusManage from './pages/manager/RouteBusManage';
 import RouteDriverManage from './pages/manager/RouteDriverManage';
 import DirectionStopManage from './pages/manager/DirectionStopManage';
 import PlanApproval from './pages/manager/PlanApproval';
@@ -24,10 +23,8 @@ import PlanApproval from './pages/manager/PlanApproval';
 // Dispatcher
 import AutoSchedulerPage from './pages/dispatcher/AutoSchedulerPage';
 import ScheduleCalendar from './pages/dispatcher/ScheduleCalendar';
-import TripManage from './pages/dispatcher/TripManage';
 import AffectedTrips from './pages/dispatcher/AffectedTrips';
 import IncidentManage from './pages/dispatcher/IncidentManage';
-import AssignmentList from './pages/dispatcher/AssignmentList';
 
 // Driver
 import MyAssignmentsPage from './pages/driver/MyAssignmentsPage';
@@ -73,12 +70,9 @@ function App() {
           {/* Dispatcher Routes */}
           <Route path="/dispatcher" element={<Navigate to="/dispatcher/calendar" replace />} />
           <Route path="/dispatcher/calendar" element={<PrivateRoute allowedRoles={['dispatcher', 'manager']}><ScheduleCalendar /></PrivateRoute>} />
-          <Route path="/dispatcher/route-buses" element={<PrivateRoute allowedRoles={['dispatcher', 'manager']}><RouteBusManage /></PrivateRoute>} />
           <Route path="/dispatcher/route-drivers" element={<PrivateRoute allowedRoles={['dispatcher', 'manager']}><RouteDriverManage /></PrivateRoute>} />
-          <Route path="/dispatcher/trips" element={<PrivateRoute allowedRoles={['dispatcher']}><TripManage /></PrivateRoute>} />
           <Route path="/dispatcher/affected-trips" element={<PrivateRoute allowedRoles={['dispatcher']}><AffectedTrips /></PrivateRoute>} />
           <Route path="/dispatcher/incidents" element={<PrivateRoute allowedRoles={['dispatcher']}><IncidentManage /></PrivateRoute>} />
-          <Route path="/dispatcher/assignments" element={<PrivateRoute allowedRoles={['dispatcher']}><AssignmentList /></PrivateRoute>} />
 
           {/* Driver Routes */}
           <Route path="/driver" element={<Navigate to="/driver/schedule" replace />} />

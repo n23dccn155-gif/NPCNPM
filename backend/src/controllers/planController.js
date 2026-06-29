@@ -452,7 +452,7 @@ const planController = {
         });
 
       for (const d of allDrivers) {
-          const groupName = `Xe ${d.busId} - ${d.shiftName}`;
+          const groupName = `Nhóm ${d.busId} - ${d.shiftName}`;
           const groupStart = buildTimestamp(dateStr, d.startTime);
           const groupEnd = buildTimestamp(dateStr, d.endTime);
 

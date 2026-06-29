@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
-import { PageHeader, AlertBox } from '../../components/UI';
+import { PageHeader, AlertBox, Modal } from '../../components/UI';
 import { getRoutes } from '../../services/routeService';
 import { getPlans, getPlan } from '../../services/planService';
 import { clearDriver, replaceDriver } from '../../services/assignmentService';
 import { getBuses, updateBusStatus } from '../../services/busService';
+import { cancelTrip } from '../../services/tripService';
 
 export default function ScheduleCalendar() {
   const [routes, setRoutes] = useState([]);
@@ -15,7 +16,10 @@ export default function ScheduleCalendar() {
   const [planDetail, setPlanDetail] = useState(null);
   const [busPool, setBusPool] = useState([]);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [highlightedDriver, setHighlightedDriver] = useState(null);
+  const [cancelModal, setCancelModal] = useState({ open: false, trip: null, reason: '' });
+  const [cancelError, setCancelError] = useState('');
 
   // Fetch active routes
   useEffect(() => {
@@ -112,6 +116,34 @@ export default function ScheduleCalendar() {
     }
   };
 
+  const handleCancelClick = (e, trip) => {
+    e.stopPropagation();
+    setCancelModal({ open: true, trip, reason: '' });
+    setCancelError('');
+  };
+
+  const handleCancelSubmit = async (e) => {
+    e.preventDefault();
+    setCancelError('');
+    if (!cancelModal.reason.trim()) {
+      setCancelError('Vui lòng nhập lý do hủy chuyến');
+      return;
+    }
+    try {
+      await cancelTrip(cancelModal.trip.trip_id, cancelModal.reason);
+      setCancelModal({ open: false, trip: null, reason: '' });
+      setSuccess('Đã hủy chuyến xe thành công.');
+      setTimeout(() => setSuccess(''), 4000);
+      // Reload plan
+      if (planDetail?.plan_id) {
+        const res = await getPlan(planDetail.plan_id);
+        setPlanDetail(res.data?.data || res.data);
+      }
+    } catch (err) {
+      setCancelError(err.response?.data?.message || 'Lỗi khi hủy chuyến xe');
+    }
+  };
+
   // Render Daily Timeline
   const renderTimeline = () => {
     if (!planDetail || !planDetail.trips || planDetail.trips.length === 0) {
@@ -202,6 +234,8 @@ export default function ScheduleCalendar() {
                 <th className="p-3">Biển số</th>
                 <th className="p-3">Tài xế</th>
                 <th className="p-3 text-center">Trạng thái</th>
+                <th className="p-3 text-center">Trễ</th>
+                <th className="p-3 text-center">Hủy</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -234,7 +268,7 @@ export default function ScheduleCalendar() {
                     >
                       <div className="flex items-center gap-2">
                         <span className={group?.driver_name && isLeaveDriver(group.driver_name) ? 'text-red-600 font-bold' : ''}>
-                          {group?.driver_name || <span className="text-red-400">Kéo thả tài xế dự bị vào đây...</span>}
+                          {group?.driver_name || <span className="text-red-400">Kéo thả tài xế dự bị...</span>}
                         </span>
                         {group?.driver_name && (
                           <button 
@@ -257,6 +291,25 @@ export default function ScheduleCalendar() {
                       ) : (
                         <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-md border border-amber-200">Chưa chạy</span>
                       )}
+                    </td>
+                    <td className="p-3 text-center">
+                      {t.delay_minutes > 0 ? (
+                        <span className="px-2 py-1 rounded-md bg-red-50 text-red-700 border border-red-200 font-bold text-xs">
+                          {t.delay_minutes} phút
+                        </span>
+                      ) : (
+                        <span className="text-gray-500 font-medium">0</span>
+                      )}
+                    </td>
+                    <td className="p-3 text-center">
+                      {t.status !== 'completed' && t.status !== 'cancelled' ? (
+                        <button
+                          onClick={(e) => handleCancelClick(e, t)}
+                          className="text-red-600 hover:text-red-800 font-bold hover:bg-red-50 px-2 py-1 rounded text-xs transition"
+                        >
+                          Hủy
+                        </button>
+                      ) : '—'}
                     </td>
                   </tr>
                 );
@@ -361,6 +414,7 @@ export default function ScheduleCalendar() {
       <div className="p-6 max-w-[1400px] mx-auto space-y-6">
         <PageHeader title="Lịch biểu Phân công" />
         {error && <AlertBox type="error" message={error} />}
+        {success && <div className="mb-4"><AlertBox type="success" message={success} /></div>}
 
         {/* Controls */}
         <div className="bg-white p-4 rounded-lg shadow-sm border flex flex-wrap gap-6 items-end">
@@ -392,6 +446,47 @@ export default function ScheduleCalendar() {
         {/* Timeline */}
         {renderTimeline()}
       </div>
+
+      {/* Cancel Trip Modal */}
+      <Modal isOpen={cancelModal.open} title="Hủy chuyến xe khẩn cấp" onClose={() => setCancelModal({ open: false, trip: null, reason: '' })}>
+        {cancelModal.trip && (
+          <form onSubmit={handleCancelSubmit} className="space-y-4">
+            {cancelError && <AlertBox type="error" message={cancelError} />}
+            
+            <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-semibold rounded-xl p-3.5 leading-relaxed">
+              ⚠️ CẢNH BÁO: Thao tác này sẽ hủy bỏ chuyến xe thứ #{cancelModal.trip.trip_order} thuộc ca chạy "{cancelModal.trip.group_name || 'N/A'}". Một thông báo khẩn sẽ được gửi đến tài xế được phân công chạy chuyến này.
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wider">Lý do hủy chuyến *</label>
+              <textarea
+                value={cancelModal.reason}
+                onChange={e => setCancelModal({ ...cancelModal, reason: e.target.value })}
+                required
+                rows={3}
+                placeholder="Nhập lý do chi tiết hủy chuyến (VD: Xe hỏng đột xuất, tắc đường nghiêm trọng...)"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+              />
+            </div>
+
+            <div className="flex gap-3 justify-end pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setCancelModal({ open: false, trip: null, reason: '' })}
+                className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-slate-50 transition"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold shadow-md shadow-red-500/10 transition"
+              >
+                Xác nhận hủy chuyến
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
     </Layout>
   );
 }

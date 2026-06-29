@@ -8,41 +8,35 @@ INSERT INTO users (username, password_hash, full_name, role, status) VALUES
 ('dispatcher1', '$2b$10$rV/jSfQXxZnVSK9dcYg4T.p4JOq0OnNxmypDw.VlkXYlYv/NVE.Ry', 'Lê Văn Hùng',    'dispatcher', 'active')
 ON CONFLICT (username) DO NOTHING;
 
--- 3. Xe buýt (buses)
-INSERT INTO buses (license_plate, seat_count, status) VALUES 
-('51B-100.01', 45, 'active'),
-('51B-100.02', 45, 'active'),
-('51B-100.03', 45, 'active'),
-('51B-100.04', 45, 'active'),
-('51B-100.05', 45, 'active'),
-('51B-100.06', 40, 'active'),
-('51B-100.07', 40, 'active'),
-('51B-100.08', 40, 'active'),
-('51B-100.09', 40, 'active'),
-('51B-100.10', 40, 'active'),
-('51B-100.11', 45, 'active'), -- standby
-('51B-100.12', 45, 'active'), -- standby
-('51B-100.13', 40, 'active'), -- standby
-('51B-100.14', 40, 'broken'), -- hỏng
-('51B-100.15', 40, 'inactive') -- ngưng hoạt động
-ON CONFLICT (license_plate) DO NOTHING;
+-- 2. Xe buýt (buses) - 50 chiếc
+DO $$
+DECLARE
+    i INTEGER;
+    plate_val VARCHAR(20);
+BEGIN
+    FOR i IN 1..50 LOOP
+        plate_val := '51B-' || LPAD(i::text, 3, '0') || '.' || LPAD((i * 2)::text, 2, '0');
+        INSERT INTO buses (license_plate, seat_count, status)
+        VALUES (plate_val, 45, 'active')
+        ON CONFLICT (license_plate) DO NOTHING;
+    END LOOP;
+END $$;
 
--- 4. Tạo tài khoản cho tài xế trong users và drivers
--- Thêm 10 tài xế
+-- 3. Tạo tài khoản cho tài xế trong users và drivers - 50 tài xế
 DO $$
 DECLARE
     i INTEGER;
     u_id INTEGER;
     username_val VARCHAR(50);
 BEGIN
-    FOR i IN 1..10 LOOP
+    FOR i IN 1..50 LOOP
         username_val := 'driver' || i;
         -- Thêm user
         INSERT INTO users (username, password_hash, full_name, role, status)
         VALUES (
             username_val,
             '$2b$10$rV/jSfQXxZnVSK9dcYg4T.p4JOq0OnNxmypDw.VlkXYlYv/NVE.Ry',
-            'Tài xế Nguyễn Văn ' || CHR(64 + i),
+            'Tài xế Nguyễn Văn ' || i,
             'driver',
             'active'
         )
@@ -53,7 +47,7 @@ BEGIN
         INSERT INTO drivers (user_id, full_name, phone, license_class, status)
         VALUES (
             u_id,
-            'Tài xế Nguyễn Văn ' || CHR(64 + i),
+            'Tài xế Nguyễn Văn ' || i,
             '09081230' || LPAD(i::text, 2, '0'),
             'E',
             'working'
@@ -62,14 +56,17 @@ BEGIN
     END LOOP;
 END $$;
 
--- 5. Tuyến xe (routes)
-INSERT INTO routes (route_code, route_name, status, start_time, end_time, expected_trips_per_day, headway_minutes, confirmed_operating_buses) VALUES 
-('01', 'Bến Thành - Chợ Lớn', 'active', '05:00:00', '21:00:00', 33, 30.00, 8),
-('08', 'Bến xe Quận 8 - Đại học Quốc gia TP.HCM', 'active', '05:00:00', '20:00:00', 25, 37.50, 6),
-('99', 'Tuyến phụ ngưng hoạt động', 'inactive', '06:00:00', '18:00:00', 10, 80.00, 2)
+-- 4. Tuyến xe (routes) - 2 tuyến mẫu hoạt động
+INSERT INTO routes (
+    route_code, route_name, status, start_time, end_time, expected_trips_per_day, 
+    headway_minutes, confirmed_operating_buses, travel_time_minutes, short_layover_minutes, 
+    long_layover_minutes, max_driving_minutes, standby_ratio, backup_bus_ratio, min_rest_time_minutes
+) VALUES 
+('01', 'Bến Thành - Chợ Lớn', 'active', '05:00:00', '21:00:00', 32, 30.00, 10, 45, 15, 30, 240, 0.1, 0.20, 60),
+('08', 'Bến xe Quận 8 - Đại học Quốc gia TP.HCM', 'active', '05:00:00', '20:00:00', 24, 37.50, 8, 90, 20, 40, 240, 0.1, 0.20, 60)
 ON CONFLICT (route_code) DO NOTHING;
 
--- 6. Hướng tuyến (route_directions)
+-- 5. Hướng tuyến (route_directions)
 INSERT INTO route_directions (route_code, direction_type, start_point, end_point, distance_km, travel_time_minutes, turnaround_time_minutes) VALUES 
 ('01', 'outbound', 'Bến Thành', 'Chợ Lớn', 8.5, 45, 15),
 ('01', 'inbound',  'Chợ Lớn', 'Bến Thành', 8.5, 45, 15),
@@ -77,8 +74,7 @@ INSERT INTO route_directions (route_code, direction_type, start_point, end_point
 ('08', 'inbound',  'Đại học Quốc gia', 'Bến xe Quận 8', 25.2, 90, 20)
 ON CONFLICT (route_code, direction_type) DO NOTHING;
 
--- 7. Điểm dừng (bus_stops)
--- Lấy direction_id cho tuyến 01 outbound
+-- 6. Điểm dừng (bus_stops)
 DO $$
 DECLARE
     dir_01_out INT;
@@ -130,29 +126,72 @@ BEGIN
     END IF;
 END $$;
 
--- 8. Bố trí xe cho tuyến (route_buses)
--- Tuyến 01: Xe operating (buses 1..5), standby (bus 11)
--- Tuyến 08: Xe operating (buses 6..10), standby (bus 12)
+-- 7. Bố trí xe cho tuyến (route_buses)
+-- Tuyến 01: 25 xe (20 operating: buses 1..20, 5 standby: buses 21..25)
+-- Tuyến 08: 25 xe (20 operating: buses 26..45, 5 standby: buses 46..50)
 DO $$
 DECLARE
     b_id INT;
 BEGIN
     -- Tuyến 01 Operating
-    FOR b_id IN 1..8 LOOP
+    FOR b_id IN 1..20 LOOP
         INSERT INTO route_buses (route_code, bus_id, bus_role) 
         VALUES ('01', b_id, 'operating')
         ON CONFLICT (route_code, bus_id) DO NOTHING;
     END LOOP;
     -- Tuyến 01 Standby
-    INSERT INTO route_buses (route_code, bus_id, bus_role) VALUES ('01', 11, 'standby') ON CONFLICT (route_code, bus_id) DO NOTHING;
+    FOR b_id IN 21..25 LOOP
+        INSERT INTO route_buses (route_code, bus_id, bus_role) 
+        VALUES ('01', b_id, 'standby')
+        ON CONFLICT (route_code, bus_id) DO NOTHING;
+    END LOOP;
 
     -- Tuyến 08 Operating
-    FOR b_id IN 6..10 LOOP
+    FOR b_id IN 26..45 LOOP
         INSERT INTO route_buses (route_code, bus_id, bus_role) 
         VALUES ('08', b_id, 'operating')
         ON CONFLICT (route_code, bus_id) DO NOTHING;
     END LOOP;
-    INSERT INTO route_buses (route_code, bus_id, bus_role) VALUES ('08', 13, 'operating') ON CONFLICT (route_code, bus_id) DO NOTHING;
     -- Tuyến 08 Standby
-    INSERT INTO route_buses (route_code, bus_id, bus_role) VALUES ('08', 12, 'standby') ON CONFLICT (route_code, bus_id) DO NOTHING;
+    FOR b_id IN 46..50 LOOP
+        INSERT INTO route_buses (route_code, bus_id, bus_role) 
+        VALUES ('08', b_id, 'standby')
+        ON CONFLICT (route_code, bus_id) DO NOTHING;
+    END LOOP;
+END $$;
+
+-- 8. Phân công tài xế vào tuyến (route_drivers)
+-- Tuyến 01: 25 tài xế (drivers 1..25)
+-- Tuyến 08: 25 tài xế (drivers 26..50)
+DO $$
+DECLARE
+    d_id INT;
+    dr_id INT;
+BEGIN
+    -- Tuyến 01 Drivers
+    FOR d_id IN 1..25 LOOP
+        -- Tìm driver_id tương ứng với username driver[d_id]
+        SELECT driver_id INTO dr_id 
+        FROM drivers d
+        JOIN users u ON d.user_id = u.user_id
+        WHERE u.username = 'driver' || d_id;
+
+        IF dr_id IS NOT NULL THEN
+            INSERT INTO route_drivers (route_code, driver_id, status)
+            VALUES ('01', dr_id, 'active');
+        END IF;
+    END LOOP;
+
+    -- Tuyến 08 Drivers
+    FOR d_id IN 26..50 LOOP
+        SELECT driver_id INTO dr_id 
+        FROM drivers d
+        JOIN users u ON d.user_id = u.user_id
+        WHERE u.username = 'driver' || d_id;
+
+        IF dr_id IS NOT NULL THEN
+            INSERT INTO route_drivers (route_code, driver_id, status)
+            VALUES ('08', dr_id, 'active');
+        END IF;
+    END LOOP;
 END $$;

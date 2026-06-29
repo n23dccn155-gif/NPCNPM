@@ -169,6 +169,8 @@ const userController = {
           'UPDATE drivers SET full_name = $1, phone = $2, license_class = $3 WHERE user_id = $4',
           [full_name, phone || null, license_class || 'E', userId]
         );
+        user.phone = phone || null;
+        user.license_class = license_class || 'E';
       }
 
       await client.query('COMMIT');
@@ -179,6 +181,15 @@ const userController = {
     } finally {
       client.release();
     }
+  },
+
+  // Kiểm tra trùng username
+  checkUsername: async (req, res, next) => {
+    try {
+      const { username } = req.params;
+      const result = await pool.query('SELECT 1 FROM users WHERE LOWER(username) = $1', [username.toLowerCase().trim()]);
+      return success(res, { exists: result.rows.length > 0 });
+    } catch (err) { next(err); }
   },
 };
 

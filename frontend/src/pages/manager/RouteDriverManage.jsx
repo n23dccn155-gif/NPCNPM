@@ -215,17 +215,32 @@ export default function RouteDriverManage() {
               const unassignedDrivers = drivers.filter(d => d.status === 'working' && !routeDrivers.some(rd => rd.driver_id === d.driver_id));
               const unassignedBuses = buses.filter(b => b.status === 'active' && !routeBuses.some(rb => rb.bus_id === b.bus_id));
 
+              const selectedNewDrivers = addDriverIds.map(id => drivers.find(d => d.driver_id === id)).filter(Boolean);
+              const combinedDrivers = [
+                ...selectedNewDrivers.map(nd => ({ ...nd, isSaved: false, route_driver_id: `new-${nd.driver_id}` })),
+                ...routeDrivers.map(rd => ({ ...rd, isSaved: true }))
+              ];
+
+              const selectedNewBuses = addBusIds.map(id => buses.find(b => b.bus_id === id)).filter(Boolean);
+              const combinedBuses = [
+                ...selectedNewBuses.map(nb => ({ ...nb, isSaved: false, route_bus_id: `new-${nb.bus_id}` })),
+                ...routeBuses.map(rb => ({ ...rb, isSaved: true }))
+              ];
+
+              const isDriverLimitReached = routeDrivers.length + addDriverIds.length >= minWeeklyDrivers;
+              const isBusLimitReached = routeBuses.length + addBusIds.length >= requiredTotalBuses;
+
               const isReady = routeDrivers.length >= minWeeklyDrivers && routeBuses.length >= requiredTotalBuses;
 
               return (
               <>
                 <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
-                  <div className="border-b px-6 py-4 flex justify-between items-center bg-gray-50">
-                     <div className="flex gap-4">
-                        <button onClick={() => setActiveTab('drivers')} className={`font-semibold pb-1 border-b-2 ${activeTab === 'drivers' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>Tài xế ({routeDrivers.length}/{minWeeklyDrivers})</button>
-                        <button onClick={() => setActiveTab('buses')} className={`font-semibold pb-1 border-b-2 ${activeTab === 'buses' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>Xe Buýt ({routeBuses.length}/{requiredTotalBuses})</button>
-                     </div>
-                     <button
+                   <div className="border-b px-6 py-4 flex justify-between items-center bg-gray-50">
+                      <div className="flex gap-4">
+                         <button onClick={() => setActiveTab('drivers')} className={`font-semibold pb-1 border-b-2 ${activeTab === 'drivers' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>Tài xế ({routeDrivers.length}{addDriverIds.length > 0 ? ` + ${addDriverIds.length}` : ''}/{minWeeklyDrivers})</button>
+                         <button onClick={() => setActiveTab('buses')} className={`font-semibold pb-1 border-b-2 ${activeTab === 'buses' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>Xe Buýt ({routeBuses.length}{addBusIds.length > 0 ? ` + ${addBusIds.length}` : ''}/{requiredTotalBuses})</button>
+                      </div>
+                      <button
                         onClick={openScheduleModal}
                         disabled={generating || !isReady}
                         className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 ${isReady && !generating ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
@@ -242,7 +257,7 @@ export default function RouteDriverManage() {
                             <div className="font-semibold text-blue-800">Tiêu chuẩn Tài xế</div>
                             <div className="text-sm text-blue-600">Tuyển tối thiểu để xoay vòng nghỉ 1 ngày/tuần</div>
                           </div>
-                          <div className="text-2xl font-bold text-blue-700">{routeDrivers.length} / {minWeeklyDrivers}</div>
+                          <div className="text-2xl font-bold text-blue-700">{routeDrivers.length + addDriverIds.length} / {minWeeklyDrivers}</div>
                         </div>
 
                         <form onSubmit={handleAddDriver} className="flex gap-4 items-start">
@@ -252,18 +267,28 @@ export default function RouteDriverManage() {
                                 <div className="text-sm text-gray-500 text-center py-2">Hết tài xế rảnh</div>
                               ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                  {unassignedDrivers.map(d => (
-                                    <label key={d.driver_id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1.5 rounded">
-                                      <input type="checkbox" checked={addDriverIds.includes(d.driver_id)} onChange={(e) => setAddDriverIds(e.target.checked ? [...addDriverIds, d.driver_id] : addDriverIds.filter(id => id !== d.driver_id))} className="rounded text-blue-600 w-4 h-4"/>
-                                      <span className="text-sm text-gray-700">{d.full_name} <span className="text-gray-400">({d.phone})</span></span>
-                                    </label>
-                                  ))}
+                                  {unassignedDrivers.map(d => {
+                                    const isChecked = addDriverIds.includes(d.driver_id);
+                                    const isDisabled = isDriverLimitReached && !isChecked;
+                                    return (
+                                      <label key={d.driver_id} className={`flex items-center gap-2 p-1.5 rounded ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-gray-100'}`}>
+                                        <input 
+                                          type="checkbox" 
+                                          checked={isChecked} 
+                                          disabled={isDisabled}
+                                          onChange={(e) => setAddDriverIds(e.target.checked ? [...addDriverIds, d.driver_id] : addDriverIds.filter(id => id !== d.driver_id))} 
+                                          className="rounded text-blue-600 w-4 h-4 disabled:opacity-50"
+                                        />
+                                        <span className="text-sm text-gray-700">{d.full_name} <span className="text-gray-400">({d.phone})</span></span>
+                                      </label>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>
                             {addError && activeTab === 'drivers' && <p className="text-red-500 text-sm">{addError}</p>}
                           </div>
-                          <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Thêm</button>
+                          <button type="submit" disabled={addDriverIds.length === 0} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed">Lưu</button>
                         </form>
 
                         {dataLoading ? <div className="text-center text-gray-500 py-4">Đang tải...</div> : (
@@ -276,12 +301,23 @@ export default function RouteDriverManage() {
                               </tr>
                             </thead>
                             <tbody className="divide-y">
-                              {routeDrivers.map(rd => (
-                                <tr key={rd.route_driver_id} className="hover:bg-gray-50">
-                                  <td className="px-4 py-3 font-medium text-gray-900">{rd.full_name}</td>
+                              {combinedDrivers.map(rd => (
+                                <tr key={rd.route_driver_id} className={`hover:bg-gray-50 ${!rd.isSaved ? 'bg-blue-50/40' : ''}`}>
+                                  <td className="px-4 py-3 font-medium text-gray-900">
+                                    <div className="flex items-center gap-2">
+                                      {rd.full_name}
+                                      {!rd.isSaved && (
+                                        <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-100 text-blue-800 uppercase tracking-wide">Mới (Chưa lưu)</span>
+                                      )}
+                                    </div>
+                                  </td>
                                   <td className="px-4 py-3">{rd.phone}</td>
                                   <td className="px-4 py-3 text-right">
-                                    <button onClick={() => setConfirm({ open: true, type: 'driver', item: rd })} className="text-red-600 hover:bg-red-50 px-2 py-1 rounded text-xs font-medium">Gỡ</button>
+                                    {rd.isSaved ? (
+                                      <button onClick={() => setConfirm({ open: true, type: 'driver', item: rd })} className="text-red-600 hover:bg-red-50 px-2 py-1 rounded text-xs font-medium">Gỡ</button>
+                                    ) : (
+                                      <button onClick={() => setAddDriverIds(addDriverIds.filter(id => id !== rd.driver_id))} className="text-red-600 hover:bg-red-50 px-2 py-1 rounded text-xs font-medium">Bỏ chọn</button>
+                                    )}
                                   </td>
                                 </tr>
                               ))}
@@ -298,7 +334,7 @@ export default function RouteDriverManage() {
                             <div className="font-semibold text-emerald-800">Tiêu chuẩn Xe Buýt</div>
                             <div className="text-sm text-emerald-600">Tổng xe cần thiết (bao gồm vận doanh và dự phòng)</div>
                           </div>
-                          <div className="text-2xl font-bold text-emerald-700">{routeBuses.length} / {requiredTotalBuses}</div>
+                          <div className="text-2xl font-bold text-emerald-700">{routeBuses.length + addBusIds.length} / {requiredTotalBuses}</div>
                         </div>
 
                         <form onSubmit={handleAddBus} className="flex gap-4 items-start">
@@ -308,18 +344,28 @@ export default function RouteDriverManage() {
                                 <div className="text-sm text-gray-500 text-center py-2">Hết xe buýt rảnh</div>
                               ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                  {unassignedBuses.map(b => (
-                                    <label key={b.bus_id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1.5 rounded">
-                                      <input type="checkbox" checked={addBusIds.includes(b.bus_id)} onChange={(e) => setAddBusIds(e.target.checked ? [...addBusIds, b.bus_id] : addBusIds.filter(id => id !== b.bus_id))} className="rounded text-emerald-600 w-4 h-4"/>
-                                      <span className="text-sm text-gray-700">{b.license_plate} <span className="text-gray-400">({b.seat_count} chỗ)</span></span>
-                                    </label>
-                                  ))}
+                                  {unassignedBuses.map(b => {
+                                    const isChecked = addBusIds.includes(b.bus_id);
+                                    const isDisabled = isBusLimitReached && !isChecked;
+                                    return (
+                                      <label key={b.bus_id} className={`flex items-center gap-2 p-1.5 rounded ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-gray-100'}`}>
+                                        <input 
+                                          type="checkbox" 
+                                          checked={isChecked} 
+                                          disabled={isDisabled}
+                                          onChange={(e) => setAddBusIds(e.target.checked ? [...addBusIds, b.bus_id] : addBusIds.filter(id => id !== b.bus_id))} 
+                                          className="rounded text-emerald-600 w-4 h-4 disabled:opacity-50"
+                                        />
+                                        <span className="text-sm text-gray-700">{b.license_plate} <span className="text-gray-400">({b.seat_count} chỗ)</span></span>
+                                      </label>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>
                             {addError && activeTab === 'buses' && <p className="text-red-500 text-sm">{addError}</p>}
                           </div>
-                          <button type="submit" className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">Thêm</button>
+                          <button type="submit" disabled={addBusIds.length === 0} className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed">Lưu</button>
                         </form>
 
                         {dataLoading ? <div className="text-center text-gray-500 py-4">Đang tải...</div> : (
@@ -332,12 +378,23 @@ export default function RouteDriverManage() {
                               </tr>
                             </thead>
                             <tbody className="divide-y">
-                              {routeBuses.map(rb => (
-                                <tr key={rb.route_bus_id} className="hover:bg-gray-50">
-                                  <td className="px-4 py-3 font-medium text-gray-900">{rb.license_plate}</td>
+                              {combinedBuses.map(rb => (
+                                <tr key={rb.route_bus_id} className={`hover:bg-gray-50 ${!rb.isSaved ? 'bg-emerald-50/40' : ''}`}>
+                                  <td className="px-4 py-3 font-medium text-gray-900">
+                                    <div className="flex items-center gap-2">
+                                      {rb.license_plate}
+                                      {!rb.isSaved && (
+                                        <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-100 text-emerald-800 uppercase tracking-wide">Mới (Chưa lưu)</span>
+                                      )}
+                                    </div>
+                                  </td>
                                   <td className="px-4 py-3">{rb.seat_count} chỗ</td>
                                   <td className="px-4 py-3 text-right">
-                                    <button onClick={() => setConfirm({ open: true, type: 'bus', item: rb })} className="text-red-600 hover:bg-red-50 px-2 py-1 rounded text-xs font-medium">Gỡ</button>
+                                    {rb.isSaved ? (
+                                      <button onClick={() => setConfirm({ open: true, type: 'bus', item: rb })} className="text-red-600 hover:bg-red-50 px-2 py-1 rounded text-xs font-medium">Gỡ</button>
+                                    ) : (
+                                      <button onClick={() => setAddBusIds(addBusIds.filter(id => id !== rb.bus_id))} className="text-red-600 hover:bg-red-50 px-2 py-1 rounded text-xs font-medium">Bỏ chọn</button>
+                                    )}
                                   </td>
                                 </tr>
                               ))}
