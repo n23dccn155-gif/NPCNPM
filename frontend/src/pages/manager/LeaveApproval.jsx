@@ -3,6 +3,8 @@ import Layout from '../../components/Layout';
 import { formatDate } from '../../utils/format';
 import { PageHeader, AlertBox } from '../../components/UI';
 import { getAllLeaves, reviewLeave, getAffectedGroups } from '../../services/leaveService';
+import { SocketContext } from '../../context/SocketContext';
+import { useContext } from 'react';
 
 export default function LeaveApproval() {
   const [leaves, setLeaves] = useState([]);
@@ -12,6 +14,7 @@ export default function LeaveApproval() {
   const [affected, setAffected] = useState({ open: false, groups: [], requestId: null });
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+  const { socket } = useContext(SocketContext);
 
   const load = () => {
     const params = filter ? { status: filter } : {};
@@ -22,6 +25,19 @@ export default function LeaveApproval() {
   };
 
   useEffect(() => { setLoading(true); load(); }, [filter]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const handleNotif = (data) => {
+      if (data?.title === 'Yêu cầu nghỉ phép mới') {
+        load();
+      }
+    };
+    socket.on('NEW_NOTIFICATION', handleNotif);
+    return () => {
+      socket.off('NEW_NOTIFICATION', handleNotif);
+    };
+  }, [socket, filter]); // filter included so load() uses the latest filter
 
   const handleReview = async () => {
     try {

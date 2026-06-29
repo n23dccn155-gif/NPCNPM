@@ -28,11 +28,9 @@ import AutoSchedulerPage from './pages/dispatcher/AutoSchedulerPage';
 import ScheduleCalendar from './pages/dispatcher/ScheduleCalendar';
 import AffectedTrips from './pages/dispatcher/AffectedTrips';
 import IncidentManage from './pages/dispatcher/IncidentManage';
-<<<<<<< HEAD
 import AssignmentList from './pages/dispatcher/AssignmentList';
 import GpsTracking from './pages/dispatcher/GpsTracking';
-=======
->>>>>>> ed64ea497b8925f8778ff9f6b7f8fbdbff782002
+import TripTracking from './pages/dispatcher/TripTracking';
 
 // Driver
 import MyAssignmentsPage from './pages/driver/MyAssignmentsPage';
@@ -80,14 +78,14 @@ function App() {
           {/* Dispatcher Routes */}
           <Route path="/dispatcher" element={<Navigate to="/dispatcher/calendar" replace />} />
           <Route path="/dispatcher/calendar" element={<PrivateRoute allowedRoles={['dispatcher', 'manager']}><ScheduleCalendar /></PrivateRoute>} />
+          <Route path="/dispatcher/auto-scheduler" element={<PrivateRoute allowedRoles={['dispatcher', 'manager']}><AutoSchedulerPage /></PrivateRoute>} />
+          <Route path="/dispatcher/route-buses" element={<PrivateRoute allowedRoles={['dispatcher', 'manager']}><RouteDriverManage /></PrivateRoute>} />
           <Route path="/dispatcher/route-drivers" element={<PrivateRoute allowedRoles={['dispatcher', 'manager']}><RouteDriverManage /></PrivateRoute>} />
+          <Route path="/dispatcher/trips" element={<PrivateRoute allowedRoles={['dispatcher', 'manager']}><TripTracking /></PrivateRoute>} />
           <Route path="/dispatcher/affected-trips" element={<PrivateRoute allowedRoles={['dispatcher']}><AffectedTrips /></PrivateRoute>} />
           <Route path="/dispatcher/incidents" element={<PrivateRoute allowedRoles={['dispatcher']}><IncidentManage /></PrivateRoute>} />
-<<<<<<< HEAD
           <Route path="/dispatcher/assignments" element={<PrivateRoute allowedRoles={['dispatcher']}><AssignmentList /></PrivateRoute>} />
           <Route path="/dispatcher/gps" element={<PrivateRoute allowedRoles={['dispatcher', 'manager']}><GpsTracking /></PrivateRoute>} />
-=======
->>>>>>> ed64ea497b8925f8778ff9f6b7f8fbdbff782002
 
           {/* Driver Routes */}
           <Route path="/driver" element={<Navigate to="/driver/schedule" replace />} />

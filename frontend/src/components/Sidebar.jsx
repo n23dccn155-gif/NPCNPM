@@ -118,7 +118,6 @@ const menuByRole = {
   ],
   dispatcher: [
     {
-<<<<<<< HEAD
       label: 'Tổng quan',
       path: '/dashboard',
       icon: (
@@ -150,9 +149,6 @@ const menuByRole = {
     },
     {
       label: 'Nguồn lực Tài xế',
-=======
-      label: 'Nguồn lực Xe & Tài xế',
->>>>>>> ed64ea497b8925f8778ff9f6b7f8fbdbff782002
       path: '/dispatcher/route-drivers',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -173,8 +169,15 @@ const menuByRole = {
       ),
     },
     {
-<<<<<<< HEAD
       label: 'Lập kế hoạch & Chuyến',
+      path: '/dispatcher/auto-scheduler',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
+          <line x1="8" y1="2" x2="8" y2="18" />
+          <line x1="16" y1="6" x2="16" y2="22" />
+        </svg>
+      ),
     },
     {
       label: 'Tra cứu phân công',
@@ -199,8 +202,6 @@ const menuByRole = {
       ),
     },
     {
-=======
->>>>>>> ed64ea497b8925f8778ff9f6b7f8fbdbff782002
       label: 'Sự cố khẩn cấp',
       path: '/dispatcher/incidents',
       icon: (

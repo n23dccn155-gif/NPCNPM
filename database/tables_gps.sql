@@ -10,7 +10,7 @@
 -- Xem thêm: docs/GPS_TRACKING.md
 
 -- ============== Bảng 1: GPS_DEVICES ==============
-CREATE TABLE gps_devices (
+CREATE TABLE IF NOT EXISTS gps_devices (
     device_id SERIAL PRIMARY KEY,
     bus_id INT NOT NULL,
     device_code VARCHAR(50) UNIQUE NOT NULL,    -- mã thiết bị do nhà sản xuất cấp
@@ -25,7 +25,7 @@ CREATE TABLE gps_devices (
 );
 
 -- ============== Bảng 2: GPS_LOCATIONS ==============
-CREATE TABLE gps_locations (
+CREATE TABLE IF NOT EXISTS gps_locations (
     location_id BIGSERIAL PRIMARY KEY,
     device_id INT NOT NULL,
     bus_id INT NOT NULL,
@@ -53,7 +53,7 @@ ON gps_devices (bus_id)
 WHERE status = 'active';
 
 -- ============== Bảng 3: ROUTE_POLYLINES ==============
-CREATE TABLE route_polylines (
+CREATE TABLE IF NOT EXISTS route_polylines (
     polyline_id SERIAL PRIMARY KEY,
     route_code VARCHAR(20) NOT NULL,
     direction_type VARCHAR(20) NOT NULL,        -- outbound, inbound
@@ -70,7 +70,7 @@ CREATE TABLE route_polylines (
 CREATE INDEX IF NOT EXISTS idx_polylines_route_dir ON route_polylines (route_code, direction_type);
 
 -- ============== Bảng 4: GPS_ALERTS ==============
-CREATE TABLE gps_alerts (
+CREATE TABLE IF NOT EXISTS gps_alerts (
     alert_id BIGSERIAL PRIMARY KEY,
     bus_id INT NOT NULL,
     location_id BIGINT,                         -- tham chiếu vị trí gây cảnh báo
@@ -95,7 +95,7 @@ CREATE INDEX IF NOT EXISTS idx_alerts_bus_type ON gps_alerts (bus_id, alert_type
 
 -- ============== Bảng 5: ALERT_RULES ==============
 -- Cấu hình rule cho mỗi loại alert (có thể bật/tắt và chỉnh ngưỡng)
-CREATE TABLE alert_rules (
+CREATE TABLE IF NOT EXISTS alert_rules (
     rule_id SERIAL PRIMARY KEY,
     alert_type VARCHAR(30) UNIQUE NOT NULL,
     is_enabled BOOLEAN NOT NULL DEFAULT TRUE,

@@ -530,6 +530,7 @@ const planController = {
 
       // --- Gửi thông báo sau khi sinh chuyến thành công ---
       try {
+        const confirmedOperatingBuses = totalVehicles;
         const content = `Kế hoạch tuyến ${plan.route_code} ngày ${dateStr} đã sinh ${allGeneratedTrips.length} chuyến và ${confirmedOperatingBuses} nhóm xoay vòng.`;
         // Gửi cho dispatcher (người tạo kế hoạch)
         await pool.query(
@@ -656,21 +657,16 @@ const planController = {
         }
       }
 
-<<<<<<< HEAD
+await client.query('COMMIT');
+
       broadcast('NEW_NOTIFICATION', {
         title: 'Kế hoạch chờ duyệt',
         content: `Kế hoạch vận doanh tuyến ${plan.route_code} ngày ${dateStr} đang chờ duyệt.`,
         plan_id: planId
       });
 
-      return success(res, updateRes.rows[0], 'Gửi duyệt kế hoạch thành công');
-=======
-      await client.query('COMMIT');
-      
-      // Return the primary updated plan
       const updatedPlanRes = await pool.query('SELECT * FROM operation_plans WHERE plan_id = $1', [planId]);
       return success(res, updatedPlanRes.rows[0], 'Gửi duyệt kế hoạch thành công');
->>>>>>> ed64ea497b8925f8778ff9f6b7f8fbdbff782002
     } catch (err) {
       await client.query('ROLLBACK');
       next(err);

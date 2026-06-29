@@ -190,15 +190,9 @@ const incidentController = {
       if (reporterId) {
         const content = `Báo cáo sự cố của bạn đã được chuyển sang trạng thái: ${status}.`;
         await pool.query(
-<<<<<<< HEAD
-          `INSERT INTO notifications (user_id, title, content) 
-           VALUES ($1, 'Cập nhật xử lý sự cố', $2)`,
-          [reporterId, content]
-=======
-          `INSERT INTO notifications (user_id, title, content, redirect_url) 
+          `INSERT INTO notifications (user_id, title, content, redirect_url)
            VALUES ($1, 'Cập nhật xử lý sự cố', $2, '/driver/incidents')`,
           [reporterId, `Báo cáo sự cố của bạn đã được chuyển sang trạng thái: ${status}.`]
->>>>>>> ed64ea497b8925f8778ff9f6b7f8fbdbff782002
         );
         const { emitToUser } = require('../sockets/socketManager');
         emitToUser(reporterId, 'NEW_NOTIFICATION', { title: 'Cập nhật xử lý sự cố', content });

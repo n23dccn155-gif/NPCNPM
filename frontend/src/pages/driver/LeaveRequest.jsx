@@ -3,6 +3,8 @@ import Layout from '../../components/Layout';
 import { formatDate } from '../../utils/format';
 import { PageHeader, AlertBox, Modal } from '../../components/UI';
 import { getMyLeaves, createLeave } from '../../services/leaveService';
+import { SocketContext } from '../../context/SocketContext';
+import { useContext } from 'react';
 
 export default function LeaveRequest() {
   const [leaves, setLeaves] = useState([]);
@@ -12,6 +14,7 @@ export default function LeaveRequest() {
   const [formError, setFormError] = useState('');
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
+  const { socket } = useContext(SocketContext);
 
   const loadLeaves = () => {
     setLoading(true);
@@ -22,6 +25,19 @@ export default function LeaveRequest() {
   };
 
   useEffect(() => { loadLeaves(); }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    const handleNotif = (data) => {
+      if (data?.title === 'Kết quả xin nghỉ phép') {
+        loadLeaves();
+      }
+    };
+    socket.on('NEW_NOTIFICATION', handleNotif);
+    return () => {
+      socket.off('NEW_NOTIFICATION', handleNotif);
+    };
+  }, [socket]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
