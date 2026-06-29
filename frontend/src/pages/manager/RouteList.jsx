@@ -45,6 +45,49 @@ const calculateHeadway = (start, end, expectedTrips) => {
   return (endMin - startMin) / (trips - 1);
 };
 
+// Mô phỏng FIFO — khớp 100% với thuật toán backend
+const runFifoScheduling = ({ startMin, endMin, headwayMinutes, outboundTravel, outboundLayover, inboundTravel, inboundLayover }) => {
+  if (!startMin || !endMin || !headwayMinutes || headwayMinutes <= 0) return { totalVehicles: 0 };
+  if (endMin <= startMin) return { totalVehicles: 0 };
+
+  const departureTimes = [];
+  for (let t = startMin; t <= endMin; t += headwayMinutes) {
+    departureTimes.push(Math.round(t * 100) / 100);
+  }
+
+  const fifoA = [];
+  const fifoB = [];
+  let vehicleCount = 0;
+
+  for (const depTime of departureTimes) {
+    // Chuyến từ A
+    const readyInA = fifoA.filter(v => v.readyAt <= depTime);
+    let vehicleA;
+    if (readyInA.length > 0) {
+      vehicleA = readyInA[0];
+      fifoA.splice(fifoA.indexOf(vehicleA), 1);
+    } else {
+      vehicleA = { vehicleIdx: vehicleCount++ };
+    }
+    const arrAtB = depTime + outboundTravel;
+    fifoB.push({ vehicleIdx: vehicleA.vehicleIdx, readyAt: arrAtB + outboundLayover });
+
+    // Chuyến từ B
+    const readyInB = fifoB.filter(v => v.readyAt <= depTime);
+    let vehicleB;
+    if (readyInB.length > 0) {
+      vehicleB = readyInB[0];
+      fifoB.splice(fifoB.indexOf(vehicleB), 1);
+    } else {
+      vehicleB = { vehicleIdx: vehicleCount++ };
+    }
+    const arrAtA = depTime + inboundTravel;
+    fifoA.push({ vehicleIdx: vehicleB.vehicleIdx, readyAt: arrAtA + inboundLayover });
+  }
+
+  return { totalVehicles: vehicleCount };
+};
+
 const formatMinutes = (value) => {
   const number = Number(value);
   return Number.isFinite(number) ? `${Number(number.toFixed(2))} phút` : 'Chưa đủ dữ liệu';
@@ -254,20 +297,37 @@ export default function RouteList() {
     const matchStatus = !filterStatus || r.status === filterStatus;
     return matchSearch && matchStatus;
   });
-  const rtt = Number(form.outbound_travel_time_minutes) + Number(form.inbound_travel_time_minutes) + Number(form.short_layover_minutes) * 2;
-  const hWay = Number(form.headway_minutes);
-  const minRest = Number(form.min_rest_time_minutes) || 0;
-  
-  const editingBaseBuses = (hWay > 0 && rtt > 0) ? Math.ceil(rtt / hWay) : 0;
-  const editingRecoveryBuses = (hWay > 0) ? Math.ceil(minRest / hWay) : 0;
-  const editingSuggestedBuses = editingBaseBuses + editingRecoveryBuses;
-  const editingBackupBuses = Math.ceil(editingSuggestedBuses * (Number(form.backup_bus_ratio) || 0));
-  const editingTotalBuses = editingSuggestedBuses + editingBackupBuses;
+  // ── Tính FIFO trực tiếp từ tham số form (khớp với backend) ──
+  const fifoStartMin  = timeToMinutes(form.start_time);
+  const fifoEndMin    = timeToMinutes(form.end_time);
+  const fifoHeadway   = Number(form.headway_minutes);
+  const fifoOutTravel = Number(form.outbound_travel_time_minutes);
+  const fifoInTravel  = Number(form.inbound_travel_time_minutes);
+  const fifoLayover   = Number(form.short_layover_minutes); // layover cùng giá trị 2 đầu
 
-  const mainShifts = editingBaseBuses * 2;
-  const standbyCount = Math.ceil(mainShifts * (Number(form.standby_ratio) || 0));
-  const dailyDrivers = mainShifts + standbyCount;
-  const weeklyDrivers = Math.ceil(dailyDrivers * 7 / 6);
+  const fifoResult = runFifoScheduling({
+    startMin: fifoStartMin,
+    endMin:   fifoEndMin,
+    headwayMinutes:  fifoHeadway,
+    outboundTravel:  fifoOutTravel,
+    outboundLayover: fifoLayover,
+    inboundTravel:   fifoInTravel,
+    inboundLayover:  fifoLayover,
+  });
+
+  const fifoTotalVehicles = fifoResult.totalVehicles || 0;
+  const standbyRatio      = Number(form.standby_ratio) || 0.15;
+  const backupBusRatio    = Number(form.backup_bus_ratio) || 0.20;
+
+  // Tài xế
+  const requiredDrivers        = fifoTotalVehicles;
+  const requiredStandbyDrivers = Math.ceil(fifoTotalVehicles * standbyRatio);
+  const requiredTotalDrivers   = requiredDrivers + requiredStandbyDrivers;
+  const weeklyDrivers          = Math.ceil(requiredTotalDrivers * 7 / 6);
+
+  // Xe buýt
+  const requiredBackupBuses = Math.ceil(fifoTotalVehicles * backupBusRatio);
+  const requiredTotalBuses  = fifoTotalVehicles + requiredBackupBuses;
 
   return (
     <Layout>
@@ -676,15 +736,15 @@ export default function RouteList() {
           </div>
           <div>
             <div className="flex items-center justify-between gap-4">
-              <label className="text-sm font-medium text-gray-700 w-1/3">Tổng xe dự kiến huy động</label>
-              <div className="w-2/3 flex items-center justify-between border border-gray-100 bg-gray-50 rounded-xl px-3 py-2 text-sm text-gray-700 font-medium">
-                <span>{editingSuggestedBuses} xe</span>
-                <span className="text-xs text-amber-600 font-normal">({editingBaseBuses} xe nền + {editingRecoveryBuses} xe trám)</span>
+              <label className="text-sm font-medium text-gray-700 w-1/3">Tổng xe vận doanh (FIFO)</label>
+              <div className="w-2/3 flex items-center justify-between border border-blue-200 bg-blue-50 rounded-xl px-3 py-2 text-sm text-blue-800 font-medium">
+                <span>{fifoTotalVehicles} xe vận doanh</span>
+                <span className="text-xs text-amber-600 font-normal">+ {requiredBackupBuses} xe dự phòng = {requiredTotalBuses} xe</span>
               </div>
             </div>
             <div className="flex justify-end mt-1">
-              <div className="w-2/3 text-xs text-gray-500 italic">
-                Hệ thống tự động tính toán số xe cần thiết dựa trên thời gian vòng xe và giãn cách chuyến.
+              <div className="w-2/3 text-xs text-blue-600 italic">
+                Mô phỏng FIFO: số xe tối thiểu thực sự cần để đảm bảo đủ chuyến mỗi {fifoHeadway > 0 ? fifoHeadway : '?'} phút suốt ngày.
               </div>
             </div>
           </div>
@@ -735,16 +795,19 @@ export default function RouteList() {
 
           <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-100 flex items-center justify-between">
             <div>
-              <h4 className="font-semibold text-blue-800">Nhu cầu Tài xế (Tính tự động)</h4>
+              <h4 className="font-semibold text-blue-800">Nhu cầu Tài xế (Tính theo FIFO)</h4>
               <p className="text-sm text-blue-600 mt-1">
-                Số ca (Main): <span className="font-bold">{mainShifts}</span> | 
-                Dự bị (Standby): <span className="font-bold">{standbyCount}</span>
+                Tài xế chính (Main): <span className="font-bold">{requiredDrivers}</span> | 
+                Dự bị (Standby): <span className="font-bold">{requiredStandbyDrivers}</span>
+              </p>
+              <p className="text-xs text-blue-400 mt-0.5 italic">
+                Mỗi xe vận doanh cần 1 tài xế chính. Tỉ lệ dự bị: {Math.round(standbyRatio * 100)}%
               </p>
             </div>
             <div className="flex gap-4 text-center">
               <div className="bg-white px-4 py-2 rounded shadow-sm border border-blue-200">
                 <div className="text-xs text-gray-500">Cần cho 1 Ngày</div>
-                <div className="text-xl font-bold text-blue-700">{dailyDrivers}</div>
+                <div className="text-xl font-bold text-blue-700">{requiredTotalDrivers}</div>
               </div>
               <div className="bg-white px-4 py-2 rounded shadow-sm border border-blue-200">
                 <div className="text-xs text-gray-500">Cần cho 1 Tuần</div>
@@ -755,16 +818,19 @@ export default function RouteList() {
 
           <div className="mt-2 p-4 bg-emerald-50 rounded-lg border border-emerald-100 flex items-center justify-between">
             <div>
-              <h4 className="font-semibold text-emerald-800">Nhu cầu Xe Buýt (Tính tự động)</h4>
+              <h4 className="font-semibold text-emerald-800">Nhu cầu Xe Buýt (Tính theo FIFO)</h4>
               <p className="text-sm text-emerald-600 mt-1">
-                Xe ca chạy: <span className="font-bold">{editingSuggestedBuses}</span> | 
-                Xe dự phòng: <span className="font-bold">{editingBackupBuses}</span>
+                Xe vận doanh: <span className="font-bold">{fifoTotalVehicles}</span> | 
+                Xe dự phòng ({Math.round(backupBusRatio * 100)}%): <span className="font-bold">{requiredBackupBuses}</span>
+              </p>
+              <p className="text-xs text-emerald-400 mt-0.5 italic">
+                FIFO mô phỏng {fifoHeadway > 0 ? Math.floor((fifoEndMin - fifoStartMin) / fifoHeadway) + 1 : '?'} lượt/chiều với headway {fifoHeadway} phút
               </p>
             </div>
             <div className="flex gap-4 text-center">
               <div className="bg-white px-4 py-2 rounded shadow-sm border border-emerald-200">
                 <div className="text-xs text-gray-500">Tổng Xe Cần Phân Bổ</div>
-                <div className="text-xl font-bold text-emerald-700">{editingTotalBuses}</div>
+                <div className="text-xl font-bold text-emerald-700">{requiredTotalBuses}</div>
               </div>
             </div>
           </div>

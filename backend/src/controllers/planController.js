@@ -48,6 +48,85 @@ function calculateSchedulingMetrics(route, outbound, inbound) {
   };
 }
 
+// ─── THUẬT TOÁN FIFO XẾP LỊCH ──────────────────────────────────────────────
+//
+// Mỗi headway phút BẮT BUỘC có 1 chuyến từ A và 1 chuyến từ B.
+// Xe nào đứng đầu FIFO của bến đó mà readyAt <= giờ xuất bến → chạy chuyến đó.
+// Nếu FIFO rỗng hoặc xe chưa kịp về → sinh xe mới tại bến.
+// Sau khi đến đích + hết layover → vào cuối FIFO của bến đích.
+// Kết quả: tripsByVehicle[vehicleIdx] = [...trips], tổng số xe dùng = số xe mới sinh.
+//
+function runFifoScheduling({ startMin, endMin, headwayMinutes, outboundTravel, outboundLayover, inboundTravel, inboundLayover }) {
+  // Danh sách giờ xuất bến bắt buộc từ đầu ngày đến cuối ngày
+  const departureTimes = [];
+  for (let t = startMin; t <= endMin; t += headwayMinutes) {
+    departureTimes.push(Math.round(t * 100) / 100);
+  }
+
+  // FIFO_A: hàng chờ xe ở bến A, FIFO_B: hàng chờ xe ở bến B
+  // Mỗi phần tử: { vehicleIdx, readyAt }
+  const fifoA = [];
+  const fifoB = [];
+
+  let vehicleCount = 0;
+  // tripsByVehicle[vehicleIdx] = array of trip objects
+  const tripsByVehicle = [];
+
+  function newVehicle() {
+    const idx = vehicleCount++;
+    tripsByVehicle.push([]);
+    return idx;
+  }
+
+  for (const depTime of departureTimes) {
+    // --- Chuyến từ A tại thời điểm depTime ---
+    let vehicleA;
+    // Lấy xe sớm nhất trong FIFO_A mà readyAt <= depTime
+    const readyInA = fifoA.filter(v => v.readyAt <= depTime);
+    if (readyInA.length > 0) {
+      // Lấy xe vào FIFO sớm nhất (đầu hàng)
+      vehicleA = readyInA[0];
+      fifoA.splice(fifoA.indexOf(vehicleA), 1);
+      vehicleA = vehicleA.vehicleIdx;
+    } else {
+      // Không có xe kịp → sinh xe mới tại A
+      vehicleA = newVehicle();
+    }
+    const arrAtB = depTime + outboundTravel;
+    const readyAtB = arrAtB + outboundLayover;
+    tripsByVehicle[vehicleA].push({
+      side: 'A', // xuất phát từ A
+      departureMin: depTime,
+      arrivalMin: arrAtB,
+      vehicleIdx: vehicleA
+    });
+    // Xe vào cuối FIFO_B sau khi nghỉ xong
+    fifoB.push({ vehicleIdx: vehicleA, readyAt: readyAtB });
+
+    // --- Chuyến từ B tại thời điểm depTime ---
+    let vehicleB;
+    const readyInB = fifoB.filter(v => v.readyAt <= depTime);
+    if (readyInB.length > 0) {
+      vehicleB = readyInB[0];
+      fifoB.splice(fifoB.indexOf(vehicleB), 1);
+      vehicleB = vehicleB.vehicleIdx;
+    } else {
+      vehicleB = newVehicle();
+    }
+    const arrAtA = depTime + inboundTravel;
+    const readyAtA = arrAtA + inboundLayover;
+    tripsByVehicle[vehicleB].push({
+      side: 'B',
+      departureMin: depTime,
+      arrivalMin: arrAtA,
+      vehicleIdx: vehicleB
+    });
+    fifoA.push({ vehicleIdx: vehicleB, readyAt: readyAtA });
+  }
+
+  return { tripsByVehicle, totalVehicles: vehicleCount, departureTimes };
+}
+
 async function getRouteDirections(client, routeCode) {
   const result = await client.query(
     `SELECT *
@@ -330,16 +409,7 @@ const planController = {
       }
 
       const metrics = calculateSchedulingMetrics(route, outbound, inbound);
-      const confirmedOperatingBuses = Number(route.confirmed_operating_buses);
-
-      if (!Number.isInteger(confirmedOperatingBuses) || confirmedOperatingBuses < 1) {
-        await client.query('ROLLBACK');
-        return error(res, 'Số xe vận doanh xác nhận phải lớn hơn hoặc bằng 1', 400);
-      }
-      if (confirmedOperatingBuses > metrics.generatedTripsPerDirection) {
-        await client.query('ROLLBACK');
-        return error(res, 'Số xe vận doanh xác nhận không được lớn hơn số cặp lượt xuất bến trong ngày', 400);
-      }
+      // FIFO tự tính số xe cần thiết — không cần validate confirmed_operating_buses
 
       await client.query(
         `DELETE FROM assignments
@@ -350,60 +420,85 @@ const planController = {
       await client.query('DELETE FROM trip_groups WHERE plan_id = $1', [planId]);
 
       const dateStr = plan.operation_date.toISOString().split('T')[0];
-      const tripsByGroup = Array.from({ length: confirmedOperatingBuses }, () => []);
+
+      // ─── THUẬT TOÁN FIFO XẾP LỊCH 2 CHIỀU ────────────────────────────────────
+      //
+      // Nguyên tắc:
+      //   • Mỗi headway phút BẮT BUỘC có 1 chuyến rời A và 1 chuyến rời B.
+      //   • Xe trong hàng FIFO của bến đó mà readyAt <= giờ xuất bến → chạy chuyến.
+      //   • Nếu không có xe kịp → sinh xe mới tại bến đó.
+      //   • Sau khi đến đích + hết layover → xe vào cuối FIFO của bến đích.
+      //   • Số xe mới sinh ra = số xe tối thiểu cần thiết cho ngày hôm đó.
+      //
+      const outboundTravel  = Number(outbound.travel_time_minutes);
+      const outboundLayover = Number(outbound.turnaround_time_minutes);
+      const inboundTravel   = Number(inbound.travel_time_minutes);
+      const inboundLayover  = Number(inbound.turnaround_time_minutes);
+      const { startMin, endMin, headwayMinutes } = metrics;
+
+      // Chạy thuật toán FIFO
+      const fifoResult = runFifoScheduling({
+        startMin, endMin, headwayMinutes,
+        outboundTravel, outboundLayover,
+        inboundTravel, inboundLayover
+      });
+
+      const { tripsByVehicle, totalVehicles } = fifoResult;
+
+      // Đổi tất cả trips thành đối tượng đầy đủ với direction_id và timestamp
       const allGeneratedTrips = [];
-
-      // Sinh chuyến theo headway_minutes đều nhau: mỗi chuyến cách nhau đúng headway_minutes
-      for (let i = 0; i < metrics.generatedTripsPerDirection; i++) {
-        const outboundDepartureMinute = Math.round(metrics.startMin + metrics.headwayMinutes * i);
-        const outboundArrivalMinute = outboundDepartureMinute + Number(outbound.travel_time_minutes);
-        const inboundDepartureMinute = outboundArrivalMinute + Number(outbound.turnaround_time_minutes);
-        const inboundArrivalMinute = inboundDepartureMinute + Number(inbound.travel_time_minutes);
-        const groupIndex = i % confirmedOperatingBuses;
-
-        const outboundTrip = {
-          direction_id: outbound.direction_id,
-          pair_index: i + 1,
-          group_index: groupIndex,
-          scheduled_departure: buildTimestamp(dateStr, outboundDepartureMinute),
-          scheduled_arrival: buildTimestamp(dateStr, outboundArrivalMinute)
-        };
-        const inboundTrip = {
-          direction_id: inbound.direction_id,
-          pair_index: i + 1,
-          group_index: groupIndex,
-          scheduled_departure: buildTimestamp(dateStr, inboundDepartureMinute),
-          scheduled_arrival: buildTimestamp(dateStr, inboundArrivalMinute)
-        };
-
-        allGeneratedTrips.push(outboundTrip, inboundTrip);
-        tripsByGroup[groupIndex].push(outboundTrip, inboundTrip);
+      for (let vIdx = 0; vIdx < totalVehicles; vIdx++) {
+        for (const t of tripsByVehicle[vIdx]) {
+          allGeneratedTrips.push({
+            direction_id:        t.side === 'A' ? outbound.direction_id : inbound.direction_id,
+            scheduled_departure: buildTimestamp(dateStr, t.departureMin),
+            scheduled_arrival:   buildTimestamp(dateStr, t.arrivalMin),
+            group_index:         vIdx
+          });
+        }
       }
 
       // Gán trip_order toàn cục theo giờ xuất bến
       allGeneratedTrips
         .sort((a, b) => new Date(a.scheduled_departure) - new Date(b.scheduled_departure))
-        .forEach((trip, index) => {
-          trip.trip_order = index + 1;
-        });
+        .forEach((trip, index) => { trip.trip_order = index + 1; });
 
-      // Tạo trip_groups và ghi trips vào DB
-      for (let groupIndex = 0; groupIndex < confirmedOperatingBuses; groupIndex++) {
-        const tripsInGroup = tripsByGroup[groupIndex].sort(
-          (a, b) => new Date(a.scheduled_departure) - new Date(b.scheduled_departure)
-        );
+      // ─── Tính số xe và tài xế cần thiết ───────────────────────────────────────
+      // - Số xe vận doanh tối thiểu = totalVehicles (số xe mới sinh trong FIFO)
+      // - Mỗi xe = 1 tài xế chính suốt ngày → số tài xế = totalVehicles
+      // - Thêm tài xế dự phòng (standby) = ceil(totalVehicles * standby_ratio)
+      const standbyRatio   = Number(route.standby_ratio) || 0.15;
+      const requiredDrivers        = totalVehicles;
+      const requiredStandbyDrivers = Math.ceil(totalVehicles * standbyRatio);
+      const requiredTotalDrivers   = requiredDrivers + requiredStandbyDrivers;
+      const backupBusRatio = Number(route.backup_bus_ratio) || 0.20;
+      const requiredBackupBuses    = Math.ceil(totalVehicles * backupBusRatio);
+      const requiredTotalBuses     = totalVehicles + requiredBackupBuses;
+
+      // Tạo trip_groups và ghi trips vào DB (mỗi xe = 1 group)
+      for (let vIdx = 0; vIdx < totalVehicles; vIdx++) {
+        const tripsInGroup = allGeneratedTrips
+          .filter(t => t.group_index === vIdx)
+          .sort((a, b) => new Date(a.scheduled_departure) - new Date(b.scheduled_departure));
         if (tripsInGroup.length === 0) continue;
 
         const groupStart = tripsInGroup[0].scheduled_departure;
-        const groupEnd = tripsInGroup.reduce((latest, trip) => (
+        const groupEnd = tripsInGroup.reduce((latest, trip) =>
           new Date(trip.scheduled_arrival) > new Date(latest) ? trip.scheduled_arrival : latest
-        ), tripsInGroup[0].scheduled_arrival);
+        , tripsInGroup[0].scheduled_arrival);
+
+        // Xác định xe xuất phát từ đâu (chuyến đầu tiên)
+        const firstTrip = tripsInGroup[0];
+        const startsAtA = firstTrip.direction_id === outbound.direction_id;
+        const groupLabel = startsAtA
+          ? `Xe ${vIdx + 1} (xuất phát A)`
+          : `Xe ${vIdx + 1} (xuất phát B)`;
 
         const groupRes = await client.query(
           `INSERT INTO trip_groups (plan_id, group_name, start_time, end_time, status)
            VALUES ($1, $2, $3, $4, 'unassigned')
            RETURNING group_id`,
-          [planId, `Nhóm xe ${groupIndex + 1}`, groupStart, groupEnd]
+          [planId, groupLabel, groupStart, groupEnd]
         );
         const groupId = groupRes.rows[0].group_id;
 
@@ -413,27 +508,29 @@ const planController = {
                plan_id, direction_id, group_id, trip_order,
                scheduled_departure, scheduled_arrival, status
              ) VALUES ($1, $2, $3, $4, $5, $6, 'scheduled')`,
-            [
-              planId, trip.direction_id, groupId, trip.trip_order,
-              trip.scheduled_departure, trip.scheduled_arrival
-            ]
+            [planId, trip.direction_id, groupId, trip.trip_order,
+             trip.scheduled_departure, trip.scheduled_arrival]
           );
         }
       }
 
       await client.query('COMMIT');
       return success(res, {
-        trips_generated: allGeneratedTrips.length,
-        groups_generated: confirmedOperatingBuses,
-        expected_trips_per_direction: metrics.expectedTripsPerDirection,
+        trips_generated:               allGeneratedTrips.length,
+        groups_generated:              totalVehicles,
+        expected_trips_per_direction:  metrics.expectedTripsPerDirection,
         generated_trips_per_direction: metrics.generatedTripsPerDirection,
-        calculated_headway_minutes: Number(metrics.calculatedHeadwayMinutes.toFixed(2)),
-        average_headway_minutes: Number(metrics.headwayMinutes.toFixed(2)),
-        headway_minutes: Number(metrics.headwayMinutes.toFixed(2)),
-        round_trip_time_minutes: metrics.roundTripTimeMinutes,
-        suggested_operating_buses: metrics.suggestedOperatingBuses,
-        confirmed_operating_buses: confirmedOperatingBuses
-      }, 'Sinh chuyến và nhóm xoay vòng thành công');
+        calculated_headway_minutes:    Number(metrics.calculatedHeadwayMinutes.toFixed(2)),
+        headway_minutes:               Number(metrics.headwayMinutes.toFixed(2)),
+        round_trip_time_minutes:       metrics.roundTripTimeMinutes,
+        // ── Kết quả tính nhân lực / phương tiện ──
+        required_operating_buses:      totalVehicles,
+        required_backup_buses:         requiredBackupBuses,
+        required_total_buses:          requiredTotalBuses,
+        required_operating_drivers:    requiredDrivers,
+        required_standby_drivers:      requiredStandbyDrivers,
+        required_total_drivers:        requiredTotalDrivers
+      }, 'Sinh chuyến theo FIFO thành công — xem required_* để biết số xe/tài cần thiết');
     } catch (err) {
       await client.query('ROLLBACK');
       next(err);
