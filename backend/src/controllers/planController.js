@@ -314,10 +314,10 @@ const planController = {
 
       const routeRes = await client.query('SELECT * FROM routes WHERE route_code = $1', [plan.route_code]);
       const route = routeRes.rows[0];
-      const headway_minutes = route.headway_minutes || 15;
-      const short_layover = route.short_layover_minutes || 10;
-      const long_layover = route.long_layover_minutes || 15;
-      const max_driving_minutes = route.max_driving_minutes || 240;
+      const headway_minutes = parseInt(route.headway_minutes, 10) || 15;
+      const short_layover = parseInt(route.short_layover_minutes, 10) || 10;
+      const long_layover = parseInt(route.long_layover_minutes, 10) || 15;
+      const max_driving_minutes = parseInt(route.max_driving_minutes, 10) || 240;
       const standby_ratio = route.standby_ratio || 0.15;
       
       const { outbound, inbound } = await getRouteDirections(client, plan.route_code);
@@ -377,6 +377,7 @@ const planController = {
 
       const allDrivers = [];
       const allGeneratedTrips = [];
+      const claimedSlots = { 'A': new Set(), 'B': new Set() };
 
       buses.forEach(bus => {
           let currentLoc = bus.startLoc;
@@ -393,9 +394,15 @@ const planController = {
           };
           
           while (currentTime <= endMin) {
+              while (claimedSlots[currentLoc].has(currentTime)) {
+                  currentTime += headway_minutes;
+              }
+
               if (currentLoc === 'A' && currentTime > endMin - 60) {
                   break; 
               }
+              
+              claimedSlots[currentLoc].add(currentTime);
               
               let current_travel_time = currentLoc === 'A' ? outbound_travel_time : inbound_travel_time;
               let arrTime = currentTime + current_travel_time;
@@ -420,7 +427,15 @@ const planController = {
               }
               
               currentLoc = currentLoc === 'A' ? 'B' : 'A';
-              currentTime = arrTime + layover;
+              let nextReadyTime = arrTime + layover;
+              
+              let baseStart = currentLoc === 'A' ? startMin : inboundStartMin;
+              if (nextReadyTime <= baseStart) {
+                  currentTime = baseStart;
+              } else {
+                  let intervals = Math.ceil((nextReadyTime - baseStart) / headway_minutes);
+                  currentTime = baseStart + (intervals * headway_minutes);
+              }
               
               const halfTime = bus.startTime + (endMin - bus.startTime) / 2;
               if (currentLoc === 'A' && currentTime >= halfTime && shiftCount === 1 && currentTime < endMin - 120) {
