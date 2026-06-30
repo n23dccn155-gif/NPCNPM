@@ -755,7 +755,7 @@ const assignmentController = {
           // 1. Find all plans for the route from the relevant date onwards
           const plansRes = await client.query(
               `SELECT plan_id, operation_date FROM operation_plans 
-               WHERE route_code = $1 AND ${dateCondition} AND status = 'approved'
+               WHERE route_code = $1 AND ${dateCondition} AND status IN ('approved', 'draft')
                ORDER BY operation_date ASC`,
               [routeCode, todayStr]
           );
