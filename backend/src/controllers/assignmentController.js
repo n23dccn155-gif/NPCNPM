@@ -887,6 +887,8 @@ const assignmentController = {
           }
           await client.query('COMMIT');
           console.log(`Auto-reallocation completed for broken bus ${brokenBusId} on route ${routeCode}`);
+          const realtime = require('../utils/realtime');
+          realtime.sendRealtimeEvent('SCHEDULE_UPDATED', { route_code: routeCode });
       } catch (err) {
           await client.query('ROLLBACK');
           console.error("Auto-reallocation failed:", err);

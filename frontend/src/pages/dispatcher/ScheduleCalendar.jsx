@@ -109,6 +109,15 @@ export default function ScheduleCalendar() {
             setTimeout(() => setSuccess(''), 4000);
             loadAllData();
           }
+        } else if (payload.type === 'SCHEDULE_UPDATED') {
+          if (payload.data.route_code === currentRoute) {
+            setSuccess('Hệ thống vừa tự động dồn toa xếp lại lịch do có sự cố xe!');
+            setTimeout(() => setSuccess(''), 6000);
+            loadAllData();
+          }
+        } else if (payload.type === 'BUS_STATUS_UPDATED') {
+          // Cập nhật lại pool xe (danh sách xe hoạt động)
+          loadAllData();
         } else if (payload.type === 'LEAVE_REQUEST_REVIEWED') {
           const { status, leave_date } = payload.data;
           if (status === 'approved') {

@@ -84,11 +84,11 @@ export default function AutoSchedulerPage() {
         }
         
         // Handle plan & assignment updates
-        if (['PLAN_SUBMITTED', 'PLAN_REVIEWED', 'PLAN_BATCH_REVIEWED', 'ASSIGNMENT_UPDATED', 'TRIP_STATUS_CHANGED'].includes(payload.type)) {
+        if (['PLAN_SUBMITTED', 'PLAN_REVIEWED', 'PLAN_BATCH_REVIEWED', 'ASSIGNMENT_UPDATED', 'TRIP_STATUS_CHANGED', 'SCHEDULE_UPDATED', 'BUS_STATUS_UPDATED'].includes(payload.type)) {
           loadPlans();
           if (selectedPlanId) {
             const affectedPlanId = payload.data?.plan_id || payload.data?.planId;
-            if (Number(affectedPlanId) === Number(selectedPlanId)) {
+            if (['SCHEDULE_UPDATED', 'BUS_STATUS_UPDATED'].includes(payload.type) || Number(affectedPlanId) === Number(selectedPlanId)) {
               loadPlanDetail(selectedPlanId);
             }
           }

@@ -115,7 +115,18 @@ const busController = {
            // Run asynchronously to calculate for tomorrow onwards (skipToday = true)
            assignmentController.autoReallocateBuses(routeCode, -1, new Date(), true).catch(e => console.error(e));
         }
+      } else if (status === 'broken' || status === 'inactive') {
+        const assignmentController = require('./assignmentController');
+        const rbRes = await pool.query("SELECT route_code FROM route_buses WHERE bus_id = $1", [busId]);
+        if (rbRes.rows.length > 0) {
+           const routeCode = rbRes.rows[0].route_code;
+           assignmentController.autoReallocateBuses(routeCode, busId).catch(e => console.error(e));
+        }
       }
+
+      const realtime = require('../utils/realtime');
+      realtime.sendRealtimeEvent('BUS_STATUS_UPDATED', { busId, status });
+
 
       return success(res, result.rows[0], 'Cập nhật trạng thái xe buýt thành công');
     } catch (err) { next(err); }
