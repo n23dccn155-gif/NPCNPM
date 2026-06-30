@@ -741,10 +741,12 @@ const assignmentController = {
     }
   },
 
-  autoReallocateBuses: async (routeCode, brokenBusId, currentTime = new Date(), skipToday = false) => {
+  autoReallocateBuses: async (routeCode, brokenBusIdInput, currentTime = new Date(), skipToday = false) => {
       const client = await pool.connect();
       try {
           await client.query('BEGIN');
+          
+          const brokenBusId = Number(brokenBusIdInput);
           const todayStr = new Date(currentTime.getTime() - currentTime.getTimezoneOffset() * 60000).toISOString().split('T')[0];
           
           let dateCondition = "operation_date >= $2";
