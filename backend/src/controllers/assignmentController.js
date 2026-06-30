@@ -806,8 +806,47 @@ const assignmentController = {
                       if (a.bus_id === null) {
                           unstartedAssignments.push(a);
                       } else if (new Date(a.start_time) <= currentTime) {
+                          if (a.bus_id === brokenBusId) {
+                              const futureTripsRes = await client.query(
+                                  `SELECT trip_id, scheduled_departure, scheduled_arrival FROM trips 
+                                   WHERE group_id = $1 AND scheduled_departure > $2 ORDER BY scheduled_departure ASC`,
+                                  [a.group_id, currentTime]
+                              );
+                              if (futureTripsRes.rows.length > 0) {
+                                  const first = futureTripsRes.rows[0];
+                                  const last = futureTripsRes.rows[futureTripsRes.rows.length - 1];
+                                  const newGroupRes = await client.query(
+                                      `INSERT INTO trip_groups (plan_id, group_name, start_time, end_time, status)
+                                       VALUES ($1, $2, $3, $4, 'unassigned') RETURNING group_id`,
+                                      [plan.plan_id, 'Nhóm tách (Sự cố)', first.scheduled_departure, last.scheduled_arrival]
+                                  );
+                                  const newGroupId = newGroupRes.rows[0].group_id;
+                                  const tripIds = futureTripsRes.rows.map(t => t.trip_id);
+                                  await client.query(`UPDATE trips SET group_id = $1 WHERE trip_id = ANY($2::int[])`, [newGroupId, tripIds]);
+                                  const newAssignRes = await client.query(
+                                      `INSERT INTO assignments (plan_id, group_id, bus_id, driver_id, assignment_type, assigned_by, status)
+                                       VALUES ($1, $2, NULL, NULL, 'main', 1, 'active') RETURNING assignment_id`,
+                                      [plan.plan_id, newGroupId]
+                                  );
+                                  unstartedAssignments.push({
+                                      assignment_id: newAssignRes.rows[0].assignment_id,
+                                      group_id: newGroupId,
+                                      bus_id: null,
+                                      start_time: first.scheduled_departure,
+                                      end_time: last.scheduled_arrival
+                                  });
+                                  const pastTripsRes = await client.query(`SELECT scheduled_arrival FROM trips WHERE group_id = $1 ORDER BY scheduled_arrival DESC LIMIT 1`, [a.group_id]);
+                                  if (pastTripsRes.rows.length > 0) {
+                                      await client.query(`UPDATE trip_groups SET end_time = $1 WHERE group_id = $2`, [pastTripsRes.rows[0].scheduled_arrival, a.group_id]);
+                                      a.end_time = pastTripsRes.rows[0].scheduled_arrival;
+                                  }
+                              }
+                          }
                           runningAssignments.push(a);
                       } else {
+                          if (a.bus_id === brokenBusId) {
+                              a.bus_id = null; // force reallocation
+                          }
                           unstartedAssignments.push(a);
                       }
                   }
