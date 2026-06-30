@@ -30,7 +30,7 @@ const incidentController = {
 
       // Nếu loại sự cố là hỏng xe (bus_broken), cập nhật trạng thái xe thành 'broken'
       if (incident_type === 'bus_broken' && bus_id) {
-        await client.query("UPDATE buses SET status = 'maintenance' WHERE bus_id = $1", [bus_id]);
+        await client.query("UPDATE buses SET status = 'broken' WHERE bus_id = $1", [bus_id]);
         
         if (trip_id) {
           // Tách nhóm chuyến (trip_group)
