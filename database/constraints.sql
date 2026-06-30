@@ -45,6 +45,13 @@ ALTER TABLE route_buses
     ADD CONSTRAINT chk_route_buses_role CHECK (bus_role IN ('operating', 'standby')),
     ADD CONSTRAINT uq_route_bus UNIQUE (route_code, bus_id);
 
+-- 7b. Bảng route_drivers
+ALTER TABLE route_drivers
+    ADD CONSTRAINT fk_route_drivers_routes FOREIGN KEY (route_code) REFERENCES routes(route_code) ON DELETE CASCADE,
+    ADD CONSTRAINT fk_route_drivers_drivers FOREIGN KEY (driver_id) REFERENCES drivers(driver_id) ON DELETE CASCADE,
+    ADD CONSTRAINT uq_route_driver UNIQUE (route_code, driver_id);
+
+
 -- 8. Bảng operation_plans
 ALTER TABLE operation_plans
     ADD CONSTRAINT fk_plans_routes FOREIGN KEY (route_code) REFERENCES routes(route_code) ON DELETE CASCADE,

@@ -36,7 +36,7 @@ export default function RouteDriverManage() {
 
   useEffect(() => {
     Promise.all([
-      getRoutes(),
+      getRoutes({ status: 'active' }),
       getDrivers({ exclude_assigned: true }),
       getBuses({ exclude_assigned: true })
     ])

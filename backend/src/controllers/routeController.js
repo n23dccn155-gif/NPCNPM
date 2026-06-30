@@ -736,6 +736,14 @@ const routeController = {
         return error(res, 'Vai trò xe không hợp lệ', 400);
       }
 
+      const routeRes = await pool.query('SELECT status FROM routes WHERE route_code = $1', [routeCode]);
+      if (!routeRes.rows.length) {
+        return error(res, 'Tuyến xe không tồn tại', 404);
+      }
+      if (routeRes.rows[0].status !== 'active') {
+        return error(res, 'Tuyến xe đã ngưng sử dụng, không thể bố trí thêm xe', 400);
+      }
+
       const busRes = await pool.query('SELECT * FROM buses WHERE bus_id = $1', [bus_id]);
       if (!busRes.rows.length) {
         return error(res, 'Xe buýt không tồn tại', 404);
@@ -803,6 +811,14 @@ const routeController = {
 
       if (!driver_id) {
         return error(res, 'Vui long cung cap driver_id', 400);
+      }
+
+      const routeRes = await pool.query('SELECT status FROM routes WHERE route_code = $1', [routeCode]);
+      if (!routeRes.rows.length) {
+        return error(res, 'Tuyến xe không tồn tại', 404);
+      }
+      if (routeRes.rows[0].status !== 'active') {
+        return error(res, 'Tuyến xe đã ngưng sử dụng, không thể bố trí thêm tài xế', 400);
       }
 
       const driverRes = await pool.query('SELECT * FROM drivers WHERE driver_id = $1 AND status = $2', [driver_id, 'working']);
