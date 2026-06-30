@@ -47,7 +47,7 @@ export default function PlanApproval() {
           <thead className="bg-slate-100 sticky top-0 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
             <tr>
               <th className="p-3">Giờ xuất bến</th>
-              <th className="p-3">Mã nhóm</th>
+              <th className="p-3">Nhóm</th>
               <th className="p-3">Biển số</th>
               <th className="p-3">Tài xế</th>
             </tr>
@@ -106,6 +106,31 @@ export default function PlanApproval() {
   };
 
   useEffect(() => { loadPlans(); loadRoutes(); }, []);
+
+  useEffect(() => {
+    const eventSource = new EventSource('http://localhost:5000/api/realtime/events');
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'PLAN_SUBMITTED') {
+          setSuccessMsg('Có kế hoạch vận doanh mới vừa được gửi duyệt!');
+          setTimeout(() => setSuccessMsg(''), 4000);
+          loadPlans();
+        }
+      } catch (err) {
+        console.error('[Realtime] Error processing event:', err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('[Realtime] EventSource error:', err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, []);
 
   const loadPlanDetail = (planId) => {
     setDetailLoading(true);

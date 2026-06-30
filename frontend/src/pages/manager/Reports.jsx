@@ -72,6 +72,36 @@ export default function Reports() {
     load(tab);
   }, [tab]);
 
+  useEffect(() => {
+    const eventSource = new EventSource('http://localhost:5000/api/realtime/events');
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        const relevantEvents = [
+          'TRIP_STATUS_CHANGED',
+          'ASSIGNMENT_UPDATED',
+          'LEAVE_REQUEST_REVIEWED',
+          'INCIDENT_REPORTED',
+          'INCIDENT_STATUS_UPDATED'
+        ];
+        if (relevantEvents.includes(payload.type)) {
+          load(tab);
+        }
+      } catch (err) {
+        console.error('[Realtime] Error processing event:', err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('[Realtime] EventSource error:', err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [tab]);
+
   const handleTabChange = (key) => {
     setTab(key);
   };
@@ -130,12 +160,10 @@ export default function Reports() {
           <span className="text-sm font-medium text-slate-500">
             Báo cáo tổng hợp số liệu thực tế từ dữ liệu vận hành chuyến
           </span>
-          <button
-            onClick={load}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-md shadow-blue-500/10 transition flex items-center gap-2"
-          >
-            Xuất báo cáo
-          </button>
+          <div className="flex items-center gap-2 text-xs font-semibold text-green-600 bg-green-50 px-3 py-1.5 rounded-full border border-green-100 shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+            <span>Tự động cập nhật (Real-time)</span>
+          </div>
         </div>
 
         {/* Table View */}
@@ -194,12 +222,8 @@ export default function Reports() {
               </tbody>
             </table>
           </div>
-        ) : hasLoaded ? (
-          <div className="text-center py-20 text-slate-400 font-semibold">Không tìm thấy dữ liệu vận hành nào phù hợp</div>
         ) : (
-          <div className="text-center py-20 text-slate-400 font-semibold">
-            Nhấn nút <strong className="text-blue-600">"Xuất báo cáo"</strong> ở trên để tổng hợp dữ liệu thống kê mới nhất
-          </div>
+          <div className="text-center py-20 text-slate-400 font-semibold">Không tìm thấy dữ liệu vận hành nào phù hợp</div>
         )}
       </div>
     </Layout>

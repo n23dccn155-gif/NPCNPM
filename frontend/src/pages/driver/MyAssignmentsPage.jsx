@@ -48,6 +48,52 @@ export default function MyAssignmentsPage() {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+
+    const eventSource = new EventSource('http://localhost:5000/api/realtime/events');
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'ASSIGNMENT_UPDATED') {
+          const isAffected = 
+            payload.data.new_driver_user_id === user.id ||
+            payload.data.old_driver_user_id === user.id ||
+            payload.data.driver_user_id === user.id ||
+            payload.data.action === 'auto_assign';
+          
+          if (isAffected) {
+            setSuccessMsg('Có thay đổi phân công ca chạy của bạn. Đang cập nhật lịch trình...');
+            setTimeout(() => setSuccessMsg(''), 5000);
+            loadMyTrips();
+          }
+        } else if (payload.type === 'TRIP_STATUS_CHANGED') {
+          if (payload.data.driver_user_id === user.id || !payload.data.driver_user_id) {
+            if (payload.data.status === 'cancelled') {
+              setErrorMsg(`⚠️ Chuyến xe #${payload.data.trip_order || ''} của bạn đã bị hủy.`);
+              setTimeout(() => setErrorMsg(''), 6000);
+            } else {
+              setSuccessMsg(`Cập nhật trạng thái chuyến xe: ${payload.data.status === 'running' ? 'Đang chạy' : 'Hoàn thành'}.`);
+              setTimeout(() => setSuccessMsg(''), 4000);
+            }
+            loadMyTrips();
+          }
+        }
+      } catch (err) {
+        console.error('[Realtime] Error processing event:', err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('[Realtime] EventSource error:', err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [user]);
+
   const handleStartTrip = async (tripId) => {
     try {
       const res = await startTrip(tripId);

@@ -3,6 +3,7 @@ import Layout from '../../components/Layout';
 import { formatDate } from '../../utils/format';
 import { PageHeader, AlertBox, Modal } from '../../components/UI';
 import { getMyLeaves, createLeave } from '../../services/leaveService';
+import { useAuth } from '../../context/AuthContext';
 
 export default function LeaveRequest() {
   const [leaves, setLeaves] = useState([]);
@@ -13,6 +14,8 @@ export default function LeaveRequest() {
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const { user } = useAuth();
+
   const loadLeaves = () => {
     setLoading(true);
     getMyLeaves()
@@ -21,7 +24,40 @@ export default function LeaveRequest() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { loadLeaves(); }, []);
+  useEffect(() => {
+    loadLeaves();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const eventSource = new EventSource('http://localhost:5000/api/realtime/events');
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'LEAVE_REQUEST_REVIEWED') {
+          if (payload.data.driverUserId === user.id) {
+            const dateStr = payload.data.leave_date.split('T')[0];
+            const actionText = payload.data.status === 'approved' ? 'duyệt chấp nhận' : 'từ chối';
+            setSuccess(`Đơn xin nghỉ phép ngày ${dateStr} của bạn đã được ${actionText}!`);
+            setTimeout(() => setSuccess(''), 6000);
+            loadLeaves();
+          }
+        }
+      } catch (err) {
+        console.error('[Realtime] Error processing event:', err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('[Realtime] EventSource error:', err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [user]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

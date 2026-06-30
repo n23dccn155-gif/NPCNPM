@@ -1,6 +1,7 @@
 // tripController.js: Nghiệp vụ ghi nhận hành trình chuyến xe (XL10, XL11) theo thiết kế mới
 const pool = require('../config/database');
 const { success, error } = require('../utils/responseHelper');
+const realtime = require('../utils/realtime');
 
 const tripController = {
   // Lấy danh sách chuyến xe (có thể lọc theo plan_id, group_id, date, status, v.v.)
@@ -181,6 +182,15 @@ const tripController = {
         }
       }
 
+      // Broadcast real-time event
+      realtime.sendRealtimeEvent('TRIP_STATUS_CHANGED', {
+        trip_id: tripId,
+        status: newStatus,
+        delay_minutes: delayMinutes,
+        trip_order: trip.trip_order,
+        plan_id: trip.plan_id
+      });
+
       return success(res, updateRes.rows[0], 'Bắt đầu chuyến xe thành công');
     } catch (err) { next(err); }
   },
@@ -220,6 +230,13 @@ const tripController = {
          RETURNING *`,
         [now, newStatus, tripId]
       );
+
+      // Broadcast real-time event
+      realtime.sendRealtimeEvent('TRIP_STATUS_CHANGED', {
+        trip_id: tripId,
+        status: newStatus,
+        plan_id: trip.plan_id
+      });
 
       return success(res, updateRes.rows[0], 'Hoàn thành chuyến xe thành công');
     } catch (err) { next(err); }
@@ -267,6 +284,14 @@ const tripController = {
           [assignmentRes.rows[0].user_id, `Chuyến thứ ${trip.trip_order} trong ca chạy của bạn đã bị hủy. Lý do: ${reason}`]
         );
       }
+
+      // Broadcast real-time event
+      realtime.sendRealtimeEvent('TRIP_STATUS_CHANGED', {
+        trip_id: tripId,
+        status: 'cancelled',
+        plan_id: trip.plan_id,
+        driver_user_id: assignmentRes.rows.length ? assignmentRes.rows[0].user_id : null
+      });
 
       return success(res, result.rows[0], 'Hủy chuyến xe thành công');
     } catch (err) { next(err); }

@@ -1,6 +1,7 @@
 // assignmentController.js: Nghiệp vụ phân công xe và tài xế theo thiết kế mới
 const pool = require('../config/database');
 const { success, error } = require('../utils/responseHelper');
+const realtime = require('../utils/realtime');
 
 // Hàm kiểm tra các điều kiện phân công cho nhóm chuyến (XL07)
 async function checkGroupAssignmentConditions(group_id, bus_id, driver_id, excluded_assignment_id = null, is_replacement = false) {
@@ -190,6 +191,14 @@ const assignmentController = {
       await client.query("UPDATE trips SET status = 'assigned' WHERE group_id = $1", [group_id]);
 
       await client.query('COMMIT');
+
+      // Send real-time event
+      realtime.sendRealtimeEvent('ASSIGNMENT_UPDATED', {
+        group_id,
+        bus_id,
+        driver_id
+      });
+
       return success(res, result.rows[0], 'Phân công xe và tài xế thành công', 201);
     } catch (err) {
       await client.query('ROLLBACK');
@@ -226,6 +235,13 @@ const assignmentController = {
       await client.query("UPDATE trips SET status = 'scheduled' WHERE group_id = $1", [groupId]);
 
       await client.query('COMMIT');
+
+      // Send real-time event
+      realtime.sendRealtimeEvent('ASSIGNMENT_UPDATED', {
+        group_id: groupId,
+        action: 'clear'
+      });
+
       return success(res, null, 'Đã gỡ tài xế khỏi nhóm chuyến thành công');
     } catch (err) {
       await client.query('ROLLBACK');
@@ -290,9 +306,10 @@ const assignmentController = {
       await client.query("UPDATE trips SET status = 'assigned' WHERE group_id = $1", [group_id]);
       
       // Gửi thông báo cho tài xế mới được kéo vào
+      let newDriverUserId = null;
       const newDriverUserRes = await client.query('SELECT user_id FROM drivers WHERE driver_id = $1', [new_driver_id]);
       if (newDriverUserRes.rows.length > 0) {
-        const newDriverUserId = newDriverUserRes.rows[0].user_id;
+        newDriverUserId = newDriverUserRes.rows[0].user_id;
         const groupRes = await client.query('SELECT group_name FROM trip_groups WHERE group_id = $1', [group_id]);
         const groupName = groupRes.rows.length ? groupRes.rows[0].group_name : '';
         
@@ -302,7 +319,34 @@ const assignmentController = {
         );
       }
 
+      // Lấy thông báo cho tài xế cũ bị gỡ ra
+      let oldDriverUserId = null;
+      if (oldAssignment) {
+        const oldDriverUserRes = await client.query('SELECT user_id FROM drivers WHERE driver_id = $1', [oldAssignment.driver_id]);
+        if (oldDriverUserRes.rows.length > 0) {
+          oldDriverUserId = oldDriverUserRes.rows[0].user_id;
+          const groupRes = await client.query('SELECT group_name FROM trip_groups WHERE group_id = $1', [group_id]);
+          const groupName = groupRes.rows.length ? groupRes.rows[0].group_name : '';
+          
+          await client.query(
+            `INSERT INTO notifications (user_id, title, content, redirect_url) VALUES ($1, $2, $3, '/driver/schedule')`,
+            [oldDriverUserId, 'Gỡ phân công ca chạy', `Bạn đã được gỡ khỏi vị trí chạy chính thức cho Nhóm chuyến ${groupName}.`]
+          );
+        }
+      }
+
       await client.query('COMMIT');
+
+      // Send real-time event
+      realtime.sendRealtimeEvent('ASSIGNMENT_UPDATED', {
+        group_id,
+        action: 'replace_driver',
+        new_driver_id,
+        new_driver_user_id: newDriverUserId,
+        old_driver_id: oldAssignment ? oldAssignment.driver_id : null,
+        old_driver_user_id: oldDriverUserId
+      });
+
       return res.status(200).json({ success: true, data: result.rows[0], message: 'Thay thế tài xế thành công' });
     } catch (err) {
       await client.query('ROLLBACK');
@@ -338,10 +382,35 @@ const assignmentController = {
         return res.status(400).json({ success: false, message: 'Xe thay thế không hợp lệ', issues: check.issues });
       }
 
+      // Gửi thông báo cho tài xế của phân công này
+      let driverUserId = null;
+      const driverUserRes = await client.query('SELECT user_id FROM drivers WHERE driver_id = $1', [oldAssignment.driver_id]);
+      if (driverUserRes.rows.length > 0) {
+        driverUserId = driverUserRes.rows[0].user_id;
+        const groupRes = await client.query('SELECT group_name FROM trip_groups WHERE group_id = $1', [group_id]);
+        const groupName = groupRes.rows.length ? groupRes.rows[0].group_name : '';
+        const busRes = await client.query('SELECT license_plate FROM buses WHERE bus_id = $1', [new_bus_id]);
+        const licensePlate = busRes.rows.length ? busRes.rows[0].license_plate : '';
+        
+        await client.query(
+          `INSERT INTO notifications (user_id, title, content, redirect_url) VALUES ($1, $2, $3, '/driver/schedule')`,
+          [driverUserId, 'Thay đổi xe phân công', `Xe chạy của bạn cho Nhóm chuyến ${groupName} đã được đổi thành xe ${licensePlate}.`]
+        );
+      }
+
       await client.query("UPDATE assignments SET status = 'replaced' WHERE assignment_id = $1", [oldAssignment.assignment_id]);
       const result = await client.query("INSERT INTO assignments (plan_id, group_id, bus_id, driver_id, assignment_type, assigned_by, status) VALUES ($1, $2, $3, $4, 'main', $5, 'active') RETURNING *", [oldAssignment.plan_id, group_id, new_bus_id, oldAssignment.driver_id, dispatcher_id]);
       
       await client.query('COMMIT');
+
+      // Send real-time event
+      realtime.sendRealtimeEvent('ASSIGNMENT_UPDATED', {
+        group_id,
+        action: 'replace_bus',
+        new_bus_id,
+        driver_id: oldAssignment.driver_id,
+        driver_user_id: driverUserId
+      });
       return res.status(200).json({ success: true, data: result.rows[0], message: 'Thay thế xe thành công' });
     } catch (err) {
       await client.query('ROLLBACK');
@@ -656,6 +725,13 @@ const assignmentController = {
       }
 
       await client.query('COMMIT');
+
+      // Send real-time event
+      realtime.sendRealtimeEvent('ASSIGNMENT_UPDATED', {
+        plan_id: planId,
+        action: 'auto_assign'
+      });
+
       return success(res, null, 'Phân công tự động thành công (Thuật toán Công Bằng & Dự bị)!');
     } catch (err) {
       await client.query('ROLLBACK');

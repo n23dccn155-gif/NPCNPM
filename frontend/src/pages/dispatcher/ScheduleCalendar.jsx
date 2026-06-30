@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import { formatDate } from '../../utils/format';
@@ -43,22 +43,21 @@ export default function ScheduleCalendar() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Fetch plan for selected route and date
-  useEffect(() => {
-    if (!selectedRoute || !selectedDate) return;
+  const stateRef = useRef();
+  stateRef.current = { selectedRoute, selectedDate, planDetail, viewMode };
 
-    setPlanDetail(null);
-    setBusPool([]);
-    setError('');
+  const loadAllData = () => {
+    const { selectedRoute: route, selectedDate: date, viewMode: mode } = stateRef.current;
+    if (!route || !date) return;
 
     // Fetch buses for this route
-    getBuses({ route_code: selectedRoute })
+    getBuses({ route_code: route })
       .then(res => setBusPool(res.data?.data || res.data || []))
       .catch(console.error);
 
-    const statusFilter = viewMode === 'approved' ? 'approved' : 'draft,pending_approval,rejected';
+    const statusFilter = mode === 'approved' ? 'approved' : 'draft,pending_approval,rejected';
 
-    getPlans({ route_code: selectedRoute, date: selectedDate, status: statusFilter })
+    getPlans({ route_code: route, date: date, status: statusFilter })
       .then((res) => {
         const plans = res.data?.data || res.data || [];
         if (plans.length > 0) {
@@ -70,12 +69,81 @@ export default function ScheduleCalendar() {
       .then((res) => {
         if (res) {
           setPlanDetail(res.data?.data || res.data);
+        } else {
+          setPlanDetail(null);
         }
       })
       .catch(() => {
-        // If it fails, maybe there's no plan or network error. Just ignore for now.
+        setPlanDetail(null);
       });
+  };
+
+  // Fetch plan for selected route and date
+  useEffect(() => {
+    setPlanDetail(null);
+    setBusPool([]);
+    setError('');
+    loadAllData();
   }, [selectedRoute, selectedDate, viewMode]);
+
+  // Listen to real-time events from manager
+  useEffect(() => {
+    const eventSource = new EventSource('http://localhost:5000/api/realtime/events');
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        const { selectedRoute: currentRoute, selectedDate: currentDate, planDetail: currentPlan } = stateRef.current;
+
+        if (payload.type === 'PLAN_REVIEWED') {
+          const { route_code, operation_date, status } = payload.data;
+          const formattedOpDate = operation_date.split('T')[0];
+          if (route_code === currentRoute && formattedOpDate === currentDate) {
+            setSuccess(`Kế hoạch ngày ${formattedOpDate} đã được ${status === 'approved' ? 'duyệt' : 'từ chối'}!`);
+            setTimeout(() => setSuccess(''), 4000);
+            loadAllData();
+          }
+        } else if (payload.type === 'PLAN_BATCH_REVIEWED') {
+          if (currentPlan && payload.data.planIds.includes(currentPlan.plan_id)) {
+            setSuccess(`Kế hoạch của bạn đã được ${payload.data.status === 'approved' ? 'duyệt' : 'từ chối'} hàng loạt!`);
+            setTimeout(() => setSuccess(''), 4000);
+            loadAllData();
+          }
+        } else if (payload.type === 'LEAVE_REQUEST_REVIEWED') {
+          const { status, leave_date } = payload.data;
+          if (status === 'approved') {
+            setSuccess(`Có yêu cầu nghỉ phép ngày ${leave_date.split('T')[0]} vừa được duyệt. Lịch biểu có thể bị ảnh hưởng!`);
+            setTimeout(() => setSuccess(''), 6000);
+            loadAllData();
+          }
+        } else if (payload.type === 'TRIP_STATUS_CHANGED') {
+          const { plan_id } = payload.data;
+          if (currentPlan && plan_id === currentPlan.plan_id) {
+            loadAllData();
+          }
+        } else if (payload.type === 'INCIDENT_REPORTED') {
+          const { incident, driver_name } = payload.data;
+          setSuccess(`⚠️ CẢNH BÁO SỰ CỐ: Tài xế ${driver_name} báo cáo sự cố "${incident.incident_type}"!`);
+          setTimeout(() => setSuccess(''), 6000);
+          loadAllData();
+        } else if (payload.type === 'ASSIGNMENT_UPDATED') {
+          loadAllData();
+        } else if (payload.type === 'ROUTE_UPDATED' || payload.type === 'ROUTE_CREATED' || payload.type === 'ROUTE_DELETED') {
+          loadAllData();
+        }
+      } catch (err) {
+        console.error('[Realtime] Error processing event:', err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('[Realtime] EventSource error:', err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, []);
 
 
   const openSubmitModal = () => {
@@ -356,7 +424,7 @@ export default function ScheduleCalendar() {
             <thead className="bg-gray-100 sticky top-0">
               <tr>
                 <th className="p-3">Giờ xuất bến</th>
-                <th className="p-3">Mã nhóm</th>
+                <th className="p-3">Nhóm</th>
                 <th className="p-3">Biển số</th>
                 <th className="p-3">Tài xế</th>
                 <th className="p-3 text-center">Trạng thái</th>

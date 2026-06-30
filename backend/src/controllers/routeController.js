@@ -1,5 +1,6 @@
 const pool = require('../config/database');
 const { success, error } = require('../utils/responseHelper');
+const realtime = require('../utils/realtime');
 
 function timeToMinutes(value) {
   if (!value) return null;
@@ -324,6 +325,7 @@ const routeController = {
         }
 
         await client.query('COMMIT');
+        realtime.sendRealtimeEvent('ROUTE_CREATED', { routeCode: route_code });
         return success(res, result.rows[0], 'Them tuyen xe thanh cong', 201);
       } catch (err) {
         await client.query('ROLLBACK');
@@ -444,6 +446,7 @@ const routeController = {
         }
 
         await client.query('COMMIT');
+        realtime.sendRealtimeEvent('ROUTE_UPDATED', { routeCode });
         return success(res, result.rows[0], 'Cap nhat tuyen xe thanh cong');
       } catch (err) {
         await client.query('ROLLBACK');
@@ -502,6 +505,7 @@ const routeController = {
         return error(res, 'Không tìm thấy tuyến xe', 404);
       }
       await client.query('COMMIT');
+      realtime.sendRealtimeEvent('ROUTE_DELETED', { routeCode });
       return success(res, null, 'Xóa tuyến xe vĩnh viễn thành công');
     } catch (err) {
       await client.query('ROLLBACK');
@@ -749,6 +753,7 @@ const routeController = {
         [routeCode, bus_id, bus_role]
       );
 
+      realtime.sendRealtimeEvent('ROUTE_UPDATED', { routeCode });
       return success(res, result.rows[0], 'Bo tri xe vao tuyen thanh cong', 201);
     } catch (err) {
       next(err);
@@ -784,6 +789,7 @@ const routeController = {
         return error(res, 'Khong tim thay bo tri xe nay tren tuyen', 404);
       }
 
+      realtime.sendRealtimeEvent('ROUTE_UPDATED', { routeCode });
       return success(res, null, 'Go xe khoi tuyen thanh cong');
     } catch (err) {
       next(err);
@@ -815,6 +821,7 @@ const routeController = {
         [routeCode, driver_id]
       );
 
+      realtime.sendRealtimeEvent('ROUTE_UPDATED', { routeCode });
       return success(res, result.rows[0], 'Them tai xe vao tuyen thanh cong', 201);
     } catch (err) {
       next(err);
@@ -850,6 +857,7 @@ const routeController = {
         return error(res, 'Khong tim thay tai xe trong tuyen nay', 404);
       }
 
+      realtime.sendRealtimeEvent('ROUTE_UPDATED', { routeCode });
       return success(res, null, 'Go tai xe khoi tuyen thanh cong');
     } catch (err) {
       next(err);

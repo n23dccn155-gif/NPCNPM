@@ -1,5 +1,6 @@
 const pool = require('../config/database');
 const { success, error } = require('../utils/responseHelper');
+const realtime = require('../utils/realtime');
 
 function timeToMinutes(value) {
   const [hours, minutes] = String(value).split(':').map(Number);
@@ -483,7 +484,7 @@ const planController = {
         });
 
       for (const d of allDrivers) {
-          const groupName = `Xe ${d.busId} - ${d.shiftName}`;
+          const groupName = `Nhóm ${d.busId} - ${d.shiftName}`;
           const groupStart = buildTimestamp(dateStr, d.startTime);
           const groupEnd = buildTimestamp(dateStr, d.endTime);
 
@@ -613,8 +614,11 @@ const planController = {
         }
       }
 
-      await client.query('COMMIT');
+       await client.query('COMMIT');
       
+      // Trigger real-time event
+      realtime.sendRealtimeEvent('PLAN_SUBMITTED', { planIds, route_code: plan.route_code });
+
       // Return the primary updated plan
       const updatedPlanRes = await pool.query('SELECT * FROM operation_plans WHERE plan_id = $1', [planId]);
       return success(res, updatedPlanRes.rows[0], 'Gửi duyệt kế hoạch thành công');
@@ -682,6 +686,14 @@ const planController = {
           );
         }
 
+        // Trigger real-time event for approval
+        realtime.sendRealtimeEvent('PLAN_REVIEWED', { 
+          planId, 
+          status: 'approved', 
+          route_code: plan.route_code, 
+          operation_date: dateStr 
+        });
+
         return success(res, null, 'Duyệt kế hoạch vận doanh thành công');
       }
 
@@ -701,6 +713,14 @@ const planController = {
          VALUES ($1, 'Kế hoạch bị từ chối', $2, '/dispatcher/calendar')`,
         [plan.created_by, `Kế hoạch vận doanh tuyến ${plan.route_code} ngày ${dateStr} bị từ chối. Lý do: ${reject_reason}`]
       );
+
+      // Trigger real-time event for rejection
+      realtime.sendRealtimeEvent('PLAN_REVIEWED', { 
+        planId, 
+        status: 'rejected', 
+        route_code: plan.route_code, 
+        operation_date: dateStr 
+      });
 
       return success(res, null, 'Từ chối kế hoạch vận doanh thành công');
     } catch (err) {
@@ -784,6 +804,13 @@ const planController = {
       }
 
       await client.query('COMMIT');
+
+      // Trigger real-time event for batch review
+      realtime.sendRealtimeEvent('PLAN_BATCH_REVIEWED', { 
+        planIds, 
+        status: decision === 'approve' ? 'approved' : 'rejected' 
+      });
+
       return success(res, { processed: successCount }, 'Phê duyệt hàng loạt thành công');
     } catch (err) {
       await client.query('ROLLBACK');

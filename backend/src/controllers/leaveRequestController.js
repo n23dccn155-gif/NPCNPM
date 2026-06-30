@@ -1,6 +1,7 @@
 // leaveRequestController.js: Quản lý yêu cầu nghỉ phép của tài xế theo thiết kế mới
 const pool = require('../config/database');
 const { success, error } = require('../utils/responseHelper');
+const realtime = require('../utils/realtime');
 
 const leaveRequestController = {
   // Tài xế xem danh sách đơn xin nghỉ của mình
@@ -68,6 +69,13 @@ const leaveRequestController = {
           [mgr.user_id, `Tài xế ${driverName} xin nghỉ phép ngày ${leave_date}.`]
         );
       }
+
+      // Broadcast real-time event
+      realtime.sendRealtimeEvent('LEAVE_REQUEST_SUBMITTED', { 
+        driverId, 
+        driverName, 
+        leave_date 
+      });
 
       return success(res, result.rows[0], 'Gửi yêu cầu nghỉ phép thành công', 201);
     } catch (err) { next(err); }
@@ -160,6 +168,16 @@ const leaveRequestController = {
       }
 
       await client.query('COMMIT');
+
+      // Send real-time event
+      realtime.sendRealtimeEvent('LEAVE_REQUEST_REVIEWED', {
+        requestId,
+        driverId: leave.driver_id,
+        driverUserId: driverUser.user_id,
+        status,
+        leave_date: leave.leave_date
+      });
+
       return success(res, updatedRes.rows[0], `Đã ${status === 'approved' ? 'duyệt' : 'từ chối'} đơn nghỉ phép.`);
     } catch (err) {
       await client.query('ROLLBACK');

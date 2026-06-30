@@ -78,6 +78,41 @@ export default function RouteList() {
 
   useEffect(() => { load(); }, []);
 
+  useEffect(() => {
+    const eventSource = new EventSource('http://localhost:5000/api/realtime/events');
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (['ROUTE_CREATED', 'ROUTE_UPDATED', 'ROUTE_DELETED'].includes(payload.type)) {
+          load();
+        }
+      } catch (err) {
+        console.error('[Realtime] Error processing event in RouteList:', err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('[Realtime] EventSource error in RouteList:', err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleWheel = (e) => {
+      if (document.activeElement && document.activeElement.type === 'number') {
+        document.activeElement.blur();
+      }
+    };
+    document.addEventListener('wheel', handleWheel);
+    return () => {
+      document.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
+
   const openAdd = () => {
     setEditing(null);
     setForm(emptyForm);
@@ -149,10 +184,22 @@ export default function RouteList() {
   };
 
   const buildPayload = () => {
-    const rtt = Number(form.outbound_travel_time_minutes) + Number(form.inbound_travel_time_minutes) + (Number(form.short_layover_minutes) * 2);
-    const hWay = Number(form.headway_minutes);
-    const baseBuses = (hWay > 0 && rtt > 0) ? Math.ceil(rtt / hWay) : 0;
-    const recoveryBuses = Math.ceil(baseBuses * (Number(form.standby_ratio) || 0));
+    const startMin = timeToMinutes(form.start_time);
+    const inboundStartMin = timeToMinutes(form.inbound_start_time || form.start_time);
+    const outboundTravel = Number(form.outbound_travel_time_minutes || 0);
+    const inboundTravel = Number(form.inbound_travel_time_minutes || 0);
+    const shortLayover = Number(form.short_layover_minutes || 0);
+    const headway = Number(form.headway_minutes || 1);
+    const minRest = Number(form.min_rest_time_minutes) || 0;
+
+    const firstArrivalAtB = startMin + outboundTravel + shortLayover;
+    const requiredBusesB = Math.max(0, Math.ceil((firstArrivalAtB - inboundStartMin) / headway));
+
+    const firstArrivalAtA = inboundStartMin + inboundTravel + shortLayover;
+    const requiredBusesA = Math.max(0, Math.ceil((firstArrivalAtA - startMin) / headway));
+
+    const baseBuses = (headway > 0) ? (requiredBusesA + requiredBusesB) : 0;
+    const recoveryBuses = headway > 0 ? Math.ceil(minRest / headway) : 0;
     const autoConfirmedBuses = baseBuses + recoveryBuses;
 
     const outbound_stops = [
@@ -199,7 +246,14 @@ export default function RouteList() {
       outbound_travel_time_minutes: Number(form.outbound_travel_time_minutes),
       inbound_travel_time_minutes: Number(form.inbound_travel_time_minutes),
       outbound_stops,
-      inbound_stops
+      inbound_stops,
+      short_layover_minutes: Number(form.short_layover_minutes),
+      long_layover_minutes: Number(form.long_layover_minutes),
+      max_driving_minutes: Number(form.max_driving_minutes),
+      standby_ratio: Number(form.standby_ratio),
+      inbound_start_time: form.inbound_start_time,
+      backup_bus_ratio: Number(form.backup_bus_ratio),
+      min_rest_time_minutes: Number(form.min_rest_time_minutes)
     };
   };
 
@@ -254,12 +308,22 @@ export default function RouteList() {
     const matchStatus = !filterStatus || r.status === filterStatus;
     return matchSearch && matchStatus;
   });
-  const rtt = Number(form.outbound_travel_time_minutes) + Number(form.inbound_travel_time_minutes) + Number(form.short_layover_minutes) * 2;
-  const hWay = Number(form.headway_minutes);
+  const startMin = timeToMinutes(form.start_time);
+  const inboundStartMin = timeToMinutes(form.inbound_start_time || form.start_time);
+  const outboundTravel = Number(form.outbound_travel_time_minutes || 0);
+  const inboundTravel = Number(form.inbound_travel_time_minutes || 0);
+  const shortLayover = Number(form.short_layover_minutes || 0);
+  const headway = Number(form.headway_minutes || 1);
   const minRest = Number(form.min_rest_time_minutes) || 0;
-  
-  const editingBaseBuses = (hWay > 0 && rtt > 0) ? Math.ceil(rtt / hWay) : 0;
-  const editingRecoveryBuses = (hWay > 0) ? Math.ceil(minRest / hWay) : 0;
+
+  const firstArrivalAtB = startMin + outboundTravel + shortLayover;
+  const requiredBusesB = Math.max(0, Math.ceil((firstArrivalAtB - inboundStartMin) / headway));
+
+  const firstArrivalAtA = inboundStartMin + inboundTravel + shortLayover;
+  const requiredBusesA = Math.max(0, Math.ceil((firstArrivalAtA - startMin) / headway));
+
+  const editingBaseBuses = (headway > 0) ? (requiredBusesA + requiredBusesB) : 0;
+  const editingRecoveryBuses = (headway > 0) ? Math.ceil(minRest / headway) : 0;
   const editingSuggestedBuses = editingBaseBuses + editingRecoveryBuses;
   const editingBackupBuses = Math.ceil(editingSuggestedBuses * (Number(form.backup_bus_ratio) || 0));
   const editingTotalBuses = editingSuggestedBuses + editingBackupBuses;

@@ -17,6 +17,8 @@ const reportRoutes = require('./routes/reportRoutes');
 
 const errorMiddleware = require('./middlewares/errorMiddleware');
 
+const realtime = require('./utils/realtime');
+
 const app = express();
 
 app.use(cors());
@@ -25,6 +27,9 @@ app.use((req, res, next) => {
   console.log(`[API] ${req.method} ${req.url}`);
   next();
 });
+
+// Realtime SSE endpoint
+app.get('/api/realtime/events', realtime.registerClient);
 
 // Health check
 app.get('/', (req, res) => res.json({ message: 'Bus Trip Assignment API - Running', version: '2.0.0' }));

@@ -1,6 +1,7 @@
 // incidentController.js: Quản lý báo cáo sự cố từ tài xế theo thiết kế mới
 const pool = require('../config/database');
 const { success, error } = require('../utils/responseHelper');
+const realtime = require('../utils/realtime');
 
 const incidentController = {
   // Tài xế gửi báo cáo sự cố (XL14)
@@ -113,6 +114,12 @@ const incidentController = {
            await assignmentController.autoReallocateBuses(routeCode, bus_id).catch(e => console.error(e));
         }
 
+        // Broadcast real-time event
+        realtime.sendRealtimeEvent('INCIDENT_REPORTED', {
+          incident: result.rows[0],
+          driver_name: driver.full_name
+        });
+
         return success(res, result.rows[0], 'Gửi báo cáo sự cố thành công', 201);
     } catch (err) {
       await client.query('ROLLBACK');
@@ -194,6 +201,13 @@ const incidentController = {
           [reporterId, `Báo cáo sự cố của bạn đã được chuyển sang trạng thái: ${status}.`]
         );
       }
+
+      // Send real-time event
+      realtime.sendRealtimeEvent('INCIDENT_STATUS_UPDATED', {
+        incidentId,
+        status,
+        reporterId
+      });
 
       return success(res, result.rows[0], 'Cập nhật trạng thái sự cố thành công');
     } catch (err) { next(err); }

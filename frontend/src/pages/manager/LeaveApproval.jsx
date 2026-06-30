@@ -23,6 +23,31 @@ export default function LeaveApproval() {
 
   useEffect(() => { setLoading(true); load(); }, [filter]);
 
+  useEffect(() => {
+    const eventSource = new EventSource('http://localhost:5000/api/realtime/events');
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'LEAVE_REQUEST_SUBMITTED') {
+          setSuccess(`Tài xế ${payload.data.driverName} vừa gửi đơn xin nghỉ phép mới!`);
+          setTimeout(() => setSuccess(''), 5000);
+          load();
+        }
+      } catch (err) {
+        console.error('[Realtime] Error processing event:', err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('[Realtime] EventSource error:', err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [filter]);
+
   const handleReview = async () => {
     try {
       await reviewLeave(confirm.id, confirm.action);

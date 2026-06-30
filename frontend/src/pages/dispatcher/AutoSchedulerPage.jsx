@@ -67,6 +67,46 @@ export default function AutoSchedulerPage() {
     loadRoutes();
   }, []);
 
+  useEffect(() => {
+    const eventSource = new EventSource('http://localhost:5000/api/realtime/events');
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        
+        // Handle route updates
+        if (['ROUTE_CREATED', 'ROUTE_UPDATED', 'ROUTE_DELETED'].includes(payload.type)) {
+          loadRoutes();
+          loadPlans();
+          if (selectedPlanId && planDetail && planDetail.route_code === payload.data?.routeCode) {
+            loadPlanDetail(selectedPlanId);
+          }
+        }
+        
+        // Handle plan & assignment updates
+        if (['PLAN_SUBMITTED', 'PLAN_REVIEWED', 'PLAN_BATCH_REVIEWED', 'ASSIGNMENT_UPDATED', 'TRIP_STATUS_CHANGED'].includes(payload.type)) {
+          loadPlans();
+          if (selectedPlanId) {
+            const affectedPlanId = payload.data?.plan_id || payload.data?.planId;
+            if (Number(affectedPlanId) === Number(selectedPlanId)) {
+              loadPlanDetail(selectedPlanId);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[Realtime] Error processing event in AutoSchedulerPage:', err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('[Realtime] EventSource error in AutoSchedulerPage:', err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [selectedPlanId, planDetail]);
+
   const loadPlanDetail = (planId) => {
     setDetailLoading(true);
     getPlan(planId)

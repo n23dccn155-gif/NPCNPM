@@ -3,6 +3,7 @@ import Layout from '../../components/Layout';
 import { PageHeader, AlertBox, Modal } from '../../components/UI';
 import { createIncident, getMyIncidents } from '../../services/incidentService';
 import { getMyTrips } from '../../services/tripService';
+import { useAuth } from '../../context/AuthContext';
 
 export default function IncidentReport() {
   const [incidents, setIncidents] = useState([]);
@@ -31,9 +32,41 @@ export default function IncidentReport() {
     }
   };
 
+  const { user } = useAuth();
+
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const eventSource = new EventSource('http://localhost:5000/api/realtime/events');
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'INCIDENT_STATUS_UPDATED') {
+          if (Number(payload.data.reporterId) === Number(user.id)) {
+            const statusText = payload.data.status === 'resolved' ? 'đã giải quyết' : 'đang xử lý';
+            setSuccess(`Báo cáo sự cố của bạn đã chuyển sang trạng thái: ${statusText}!`);
+            setTimeout(() => setSuccess(''), 5000);
+            loadData();
+          }
+        }
+      } catch (err) {
+        console.error('[Realtime] Error processing event:', err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('[Realtime] EventSource error:', err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [user]);
 
   const handleOpenModal = () => {
     // Auto-detect current active bus from today's assignments
