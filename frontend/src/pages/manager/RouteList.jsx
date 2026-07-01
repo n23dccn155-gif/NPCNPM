@@ -372,11 +372,8 @@ export default function RouteList() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã tuyến</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tên tuyến</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Giờ hoạt động</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lượt/chiều</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Giãn cách</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vòng xe</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Xe vận doanh</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Xe dự phòng</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trạng thái</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Thao tác</th>
               </tr>
@@ -387,7 +384,6 @@ export default function RouteList() {
                   <td className="px-6 py-4 font-mono font-medium text-gray-900">{r.route_code}</td>
                   <td className="px-6 py-4 text-gray-700">{r.route_name}</td>
                   <td className="px-6 py-4 text-gray-600 text-sm">{toTimeInput(r.start_time, '--:--')} - {toTimeInput(r.end_time, '--:--')}</td>
-                  <td className="px-6 py-4 text-gray-600 text-sm">{r.expected_trips_per_day}</td>
                   <td className="px-6 py-4 text-gray-600 text-sm">
                     {formatMinutes(r.headway_minutes)}
                     {r.calculated_headway_minutes && Math.abs(r.calculated_headway_minutes - r.headway_minutes) > 0.01 && (
@@ -395,13 +391,6 @@ export default function RouteList() {
                     )}
                   </td>
                   <td className="px-6 py-4 text-gray-600 text-sm">{r.round_trip_time_minutes ? `${r.round_trip_time_minutes} phút` : 'Chưa đủ dữ liệu'}</td>
-                  <td className="px-6 py-4 text-gray-600 text-sm">
-                    {r.confirmed_operating_buses} xe
-                    {r.suggested_operating_buses && r.suggested_operating_buses !== r.confirmed_operating_buses && (
-                      <span className="text-xs text-gray-400 block">(Gợi ý: {r.suggested_operating_buses} xe)</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-gray-600 text-sm">{r.standby_buses_count ?? 0}</td>
                   <td className="px-6 py-4"><StatusBadge status={r.status} /></td>
                   <td className="px-6 py-4 text-right whitespace-nowrap">
                     <button onClick={() => openEdit(r)} className="text-blue-600 hover:text-blue-800 text-sm mr-3">Sửa</button>
@@ -460,8 +449,8 @@ export default function RouteList() {
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">Điểm đầu - cuối *</label>
                   <div className="flex gap-2">
-                    <input value={form.outbound_start_point} onChange={e => setForm({ ...form, outbound_start_point: e.target.value })} placeholder="Bến A" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" required />
-                    <input value={form.outbound_end_point} onChange={e => setForm({ ...form, outbound_end_point: e.target.value })} placeholder="Bến B" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" required />
+                    <input value={form.outbound_start_point} onChange={e => setForm({ ...form, outbound_start_point: e.target.value, inbound_end_point: e.target.value })} placeholder="Bến A" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" required />
+                    <input value={form.outbound_end_point} onChange={e => setForm({ ...form, outbound_end_point: e.target.value, inbound_start_point: e.target.value })} placeholder="Bến B" className="w-full border rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" required />
                   </div>
                 </div>
                 <div className="space-y-3 mt-3">
